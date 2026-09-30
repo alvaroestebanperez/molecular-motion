@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src"],
+  "compilerOptions": {
+    "paths": {
+      "@molecular-motion/core": ["../core/src/index.ts"],
+      "@molecular-motion/svg": ["../svg/src/index.ts"]
+    }
+  }
+}

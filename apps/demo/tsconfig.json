@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["src", "vite.config.ts"],
+  "compilerOptions": {
+    "declaration": false,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@molecular-motion/core": ["../../packages/core/src/index.ts"],
+      "@molecular-motion/svg": ["../../packages/svg/src/index.ts"],
+      "@molecular-motion/react": ["../../packages/react/src/index.tsx"]
+    }
+  }
+}

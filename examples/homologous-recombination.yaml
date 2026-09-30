@@ -1,0 +1,61 @@
+schemaVersion: 1
+
+mechanism:
+  id: homologous-recombination
+  name: Homologous recombination
+  description: Simplified repair of a DNA double-strand break.
+
+actors:
+  - id: dna
+    type: dna
+    label: Broken chromosome
+    sites:
+      - id: break
+        type: double-strand-break
+  - id: mrn
+    type: complex
+    label: MRN
+    color: "#fb923c"
+  - id: brca1
+    type: protein
+    label: BRCA1
+    color: "#f472b6"
+  - id: rad51
+    type: protein
+    label: RAD51
+    color: "#818cf8"
+
+steps:
+  - id: break
+    title: Double-strand break
+    actions:
+      - type: create-lesion
+        target: dna.break
+        lesion: double-strand-break
+  - id: sensing
+    title: End sensing
+    actions:
+      - type: bind
+        actor: mrn
+        target: dna.break
+  - id: resection
+    title: BRCA1-dependent resection
+    actions:
+      - type: recruit
+        actor: brca1
+        target: mrn
+  - id: filament
+    title: RAD51 filament formation
+    actions:
+      - type: recruit
+        actor: rad51
+        target: dna.break
+      - type: polymerize
+        actor: rad51
+        product: RAD51
+        length: 11
+  - id: completion
+    title: Faithful repair
+    actions:
+      - type: repair-lesion
+        target: dna.break

@@ -1,0 +1,77 @@
+schemaVersion: 1
+
+mechanism:
+  id: parp1-ssb-repair
+  name: PARP1-mediated single-strand break repair
+  description: Recognition and repair of a DNA single-strand break.
+
+actors:
+  - id: dna
+    type: dna
+    label: Damaged DNA
+    sites:
+      - id: lesion
+        type: single-strand-break
+        position: center
+
+  - id: parp1
+    type: protein
+    label: PARP1
+    description: DNA damage sensor and poly(ADP-ribose) polymerase.
+    color: "#22d3ee"
+
+  - id: xrcc1
+    type: protein
+    label: XRCC1
+    description: Scaffold that coordinates single-strand break repair.
+    color: "#a78bfa"
+
+  - id: lig3
+    type: protein
+    label: LIG3
+    description: DNA ligase recruited through XRCC1.
+    color: "#34d399"
+
+steps:
+  - id: damage
+    title: Single-strand break
+    description: A lesion interrupts one strand of the DNA duplex.
+    actions:
+      - type: create-lesion
+        target: dna.lesion
+        lesion: single-strand-break
+
+  - id: recognition
+    title: PARP1 detects the break
+    description: PARP1 binds the exposed DNA discontinuity.
+    actions:
+      - type: bind
+        actor: parp1
+        target: dna.lesion
+
+  - id: parylation
+    title: PAR synthesis
+    description: Activated PARP1 synthesizes a negatively charged PAR chain.
+    actions:
+      - type: polymerize
+        actor: parp1
+        product: PAR
+        length: 9
+
+  - id: scaffold
+    title: XRCC1 recruitment
+    description: XRCC1 recognizes PAR and assembles the repair machinery.
+    actions:
+      - type: recruit
+        actor: xrcc1
+        target: parp1
+
+  - id: ligation
+    title: Repair completion
+    description: LIG3 seals the nick and the lesion is removed.
+    actions:
+      - type: recruit
+        actor: lig3
+        target: xrcc1
+      - type: repair-lesion
+        target: dna.lesion

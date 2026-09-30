@@ -1,0 +1,21 @@
+{
+  "name": "@molecular-motion/react",
+  "version": "0.1.0",
+  "description": "React player for declarative molecular mechanisms.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.tsx --format esm --dts --clean --external react",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@molecular-motion/core": "^0.1.0",
+    "@molecular-motion/svg": "^0.1.0"
+  },
+  "peerDependencies": { "react": ">=18" },
+  "devDependencies": { "@types/react": "^19.0.0", "react": "^19.0.0" },
+  "license": "MIT"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@molecular-motion/core",
+  "version": "0.1.0",
+  "description": "Framework-agnostic compiler and state engine for declarative molecular mechanisms.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "schema.json"],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "yaml": "^2.8.0" },
+  "keywords": ["biology", "molecular-biology", "visualization", "svg", "yaml"],
+  "license": "MIT"
+}
