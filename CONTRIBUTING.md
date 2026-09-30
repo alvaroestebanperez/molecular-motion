@@ -39,5 +39,3 @@ npm run check
 - Update the JSON Schema, TypeScript types, README, and demo together when the public language changes.
 - Add a changeset once the project begins publishing versioned packages.
 - Use clear commit messages; Conventional Commits are welcome but not required.
-
-By participating, you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

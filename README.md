@@ -211,7 +211,7 @@ See an important biological primitive missing? [Open a proposal](https://github.
 
 ## Contributing
 
-Contributions from molecular biologists, educators, designers, accessibility specialists, and developers are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), run `npm run check` before opening a pull request, and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Contributions from molecular biologists, educators, designers, accessibility specialists, and developers are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and run `npm run check` before opening a pull request.
 
 Scientific corrections should include a primary source or authoritative review. Changes to the declarative language should update the TypeScript types, JSON Schema, tests, documentation, and at least one example together.
 
