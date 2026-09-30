@@ -1,0 +1,146 @@
+[
+  {
+    "step": "break",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "mrn": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "brca1": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "rad51": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    }
+  },
+  {
+    "step": "sensing",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "mrn": {
+        "visible": true,
+        "boundTo": "dna.break",
+        "polymer": null
+      },
+      "brca1": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "rad51": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    }
+  },
+  {
+    "step": "resection",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "mrn": {
+        "visible": true,
+        "boundTo": "dna.break",
+        "polymer": null
+      },
+      "brca1": {
+        "visible": true,
+        "boundTo": "mrn",
+        "polymer": null
+      },
+      "rad51": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    }
+  },
+  {
+    "step": "filament",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "mrn": {
+        "visible": true,
+        "boundTo": "dna.break",
+        "polymer": null
+      },
+      "brca1": {
+        "visible": true,
+        "boundTo": "mrn",
+        "polymer": null
+      },
+      "rad51": {
+        "visible": true,
+        "boundTo": "dna.break",
+        "polymer": {
+          "product": "RAD51",
+          "length": 11
+        }
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    }
+  },
+  {
+    "step": "completion",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "mrn": {
+        "visible": true,
+        "boundTo": "dna.break",
+        "polymer": null
+      },
+      "brca1": {
+        "visible": true,
+        "boundTo": "mrn",
+        "polymer": null
+      },
+      "rad51": {
+        "visible": true,
+        "boundTo": "dna.break",
+        "polymer": {
+          "product": "RAD51",
+          "length": 11
+        }
+      }
+    },
+    "lesions": {}
+  }
+]

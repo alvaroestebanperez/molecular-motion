@@ -1,7 +1,13 @@
 export type ActorType = 'dna' | 'rna' | 'protein' | 'molecule' | 'complex';
-export type LesionType = 'single-strand-break' | 'double-strand-break' | 'base-damage' | 'adduct';
+export type LesionType = 'single-strand-break' | 'double-strand-break' | 'base-damage' | 'abasic-site' | 'adduct';
+export type Activity = 'active' | 'inactive' | 'inhibited';
+export type CompartmentKind =
+  | 'extracellular' | 'membrane' | 'cytoplasm' | 'nucleus' | 'er' | 'golgi'
+  | 'mitochondrion' | 'endosome' | 'generic';
 
 export interface Point { x: number; y: number }
+
+// ---- Definition ----
 
 export interface ActorSite {
   id: string;
@@ -18,46 +24,96 @@ export interface ActorDefinition {
   color?: string;
   position?: Point;
   sites?: ActorSite[];
-  initiallyVisible?: boolean;
+  compartment?: string;
+  initial?: { present?: boolean; visible?: boolean; activity?: Activity };
 }
 
-export interface BaseAction { duration?: number }
-export type MechanismAction =
-  | (BaseAction & { type: 'create-lesion'; target: string; lesion?: LesionType })
-  | (BaseAction & { type: 'repair-lesion'; target: string })
-  | (BaseAction & { type: 'bind' | 'recruit'; actor: string; target: string })
-  | (BaseAction & { type: 'unbind'; actor: string })
-  | (BaseAction & { type: 'polymerize'; actor: string; product: string; length?: number })
-  | (BaseAction & { type: 'modify'; actor: string; modification: string; label?: string })
-  | (BaseAction & { type: 'show' | 'hide'; actor: string });
+export interface CompartmentDefinition {
+  id: string;
+  kind: CompartmentKind;
+  label?: string;
+  parent?: string;
+}
+
+/** A single action as authored. Fields beyond the base ones are validated by its registry entry. */
+export interface ActionSpec {
+  type: string;
+  duration?: number;
+  by?: string;
+  [field: string]: unknown;
+}
+
+export type ActionNode = ActionSpec | { sequence: ActionNode[] } | { parallel: ActionNode[] };
 
 export interface MechanismStep {
   id: string;
   title: string;
   description?: string;
   duration?: number;
-  actions: MechanismAction[];
+  actions: ActionNode[];
 }
 
 export interface MechanismDefinition {
-  schemaVersion: 1;
+  schemaVersion: 2;
   mechanism: { id: string; name: string; description?: string };
+  compartments: CompartmentDefinition[];
   actors: ActorDefinition[];
   steps: MechanismStep[];
 }
 
-export interface PolymerState { product: string; length: number }
-export interface ModificationState { id: string; label: string }
-export interface ActorState extends ActorDefinition {
-  visible: boolean;
-  boundTo?: string;
-  polymer?: PolymerState;
-  modifications: ModificationState[];
+/** Authoring form: compartments may use the string shorthand and may be omitted. */
+export interface MechanismInput extends Omit<MechanismDefinition, 'compartments'> {
+  compartments?: (string | CompartmentDefinition)[];
 }
 
-export interface MechanismSnapshot {
+// ---- Resolved state ----
+
+export interface Modification {
+  id: string;
+  kind: string;
+  site?: string;
+  label: string;
+  length?: number;
+}
+
+export interface ActorState {
+  id: string;
+  present: boolean;
+  visible: boolean;
+  compartment?: string;
+  boundTo?: string;
+  activity?: { state: Activity; by?: string };
+  modifications: Modification[];
+}
+
+export interface SiteState { lesion?: LesionType }
+
+export interface MechanismState {
+  actors: Record<string, ActorState>;
+  sites: Record<string, SiteState>;
+}
+
+export interface Presentation { verb: string; tone?: 'activating' | 'inhibitory' | 'neutral' }
+
+export interface StateChange { key: string; from: unknown; to: unknown }
+
+export interface TimedAction {
+  path: string;
+  type: string;
+  primitive: string;
+  presentation: Presentation;
+  subject?: string;
+  agent?: string;
+  start: number;
+  duration: number;
+  changes: StateChange[];
+}
+
+export interface MechanismSnapshot extends MechanismState {
   stepIndex: number;
   step: MechanismStep;
-  actors: Record<string, ActorState>;
-  lesions: Record<string, LesionType>;
+  definition: MechanismDefinition;
+  timeline: TimedAction[];
+  /** Total duration of the step's timeline in ms. */
+  duration: number;
 }

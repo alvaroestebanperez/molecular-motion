@@ -1,13 +1,14 @@
 import { parse } from 'yaml';
 import type { MechanismDefinition } from './types';
-import { MechanismValidationError, validateMechanism } from './validate';
+import { MechanismValidationError, validateMechanism, type ValidateOptions } from './validate';
 
-export function parseMechanism(source: string | unknown): MechanismDefinition {
-  if (typeof source !== 'string') return validateMechanism(source);
+export function parseMechanism(source: string | unknown, options: ValidateOptions = {}): MechanismDefinition {
+  if (typeof source !== 'string') return validateMechanism(source, options);
+  let document: unknown;
   try {
-    return validateMechanism(parse(source));
+    document = parse(source);
   } catch (error) {
-    if (error instanceof MechanismValidationError) throw error;
     throw new MechanismValidationError([error instanceof Error ? error.message : 'unable to parse definition']);
   }
+  return validateMechanism(document, options);
 }
