@@ -251,3 +251,36 @@ describe('action registry', () => {
     expect(() => builtinRegistry.extend([builtinRegistry.get('bind')!])).toThrow(/already registered/);
   });
 });
+
+describe('references and step metadata', () => {
+  const doc = (extra: Record<string, unknown> = {}, step: Record<string, unknown> = {}) => ({
+    schemaVersion: 2,
+    mechanism: { id: 'x', name: 'X', references: ['review'] },
+    references: [
+      { id: 'review', citation: 'Ray Chaudhuri & Nussenzweig (2017) Nat Rev Mol Cell Biol', pmid: '28676700', doi: '10.1038/nrm.2017.53' },
+      { id: 'pathway', reactome: 'R-HSA-73884' },
+    ],
+    actors: [{ id: 'a', type: 'protein' }],
+    steps: [{ id: 's', title: 'S', summary: 'Short', keyEvents: ['One', 'Two'], references: ['review', 'pathway'], actions: [], ...step }],
+    ...extra,
+  });
+
+  it('keeps summary, key events, and references on the step', () => {
+    const { definition } = compileMechanism(doc());
+    expect(definition.steps[0]).toMatchObject({ summary: 'Short', keyEvents: ['One', 'Two'], references: ['review', 'pathway'] });
+    expect(definition.references.map(reference => reference.id)).toEqual(['review', 'pathway']);
+  });
+
+  it('defaults references to an empty list', () => {
+    const { references: _, ...rest } = doc({ mechanism: { id: 'x', name: 'X' } }, { references: undefined });
+    expect(compileMechanism(rest).definition.references).toEqual([]);
+  });
+
+  it('rejects unknown ids, malformed identifiers, and references without an identifier', () => {
+    expect(() => compileMechanism(doc({}, { references: ['missing'] }))).toThrow(/steps\[0\]\.references\[0\] references unknown reference "missing"/);
+    expect(() => compileMechanism(doc({ references: [{ id: 'r', pmid: 'PMC123' }] }, { references: [] }))).toThrow(/pmid is not a valid pmid/);
+    expect(() => compileMechanism(doc({ references: [{ id: 'r', citation: 'Someone (2020)' }], mechanism: { id: 'x', name: 'X' } }, { references: [] })))
+      .toThrow(/needs at least one of: pmid, doi, reactome, url/);
+    expect(() => compileMechanism(doc({}, { keyEvents: ['ok', ''] }))).toThrow(/keyEvents must be an array of non-empty strings/);
+  });
+});

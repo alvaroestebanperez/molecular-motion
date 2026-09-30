@@ -2,8 +2,8 @@ import { ActionRegistry, defineAlias, definePrimitive, field } from './registry'
 import type { ActionSpec, Activity, LesionType } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
-export const LESIONS: readonly LesionType[] = ['single-strand-break', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
-const BREAKS: readonly LesionType[] = ['single-strand-break', 'double-strand-break'];
+export const LESIONS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
+const BREAKS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break'];
 
 const actorOf = (reference: string) => reference.split('.')[0]!;
 const timing = ({ by, duration }: ActionSpec) => ({ by, duration });
@@ -257,6 +257,7 @@ export const builtinActions = [
   polymerize,
   siteLesion('damage', 'base-damage', 'damages', ['base-damage', 'adduct']),
   siteLesion('excise', 'abasic-site', 'excises the base at'),
+  siteLesion('fill-gap', 'nick', 'fills the gap at'),
   siteLesion('repair', 'none', 'repairs'),
 ];
 

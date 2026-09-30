@@ -2,83 +2,271 @@ schemaVersion: 2
 
 mechanism:
   id: parp1-ssb-repair
-  name: PARP1-mediated single-strand break repair
-  description: Recognition and repair of a DNA single-strand break.
+  name: PARP1-mediated SSB repair
+  description: >
+    An oxidized base is processed by base excision repair into a single-strand break,
+    which PARP1 detects and signals to the XRCC1-scaffolded repair machinery.
+  references: [ray-chaudhuri-2017, caldecott-2008, reactome-ber]
+
+references:
+  - id: ray-chaudhuri-2017
+    citation: Ray Chaudhuri & Nussenzweig (2017) Nat Rev Mol Cell Biol
+    pmid: "28676700"
+    doi: 10.1038/nrm.2017.53
+  - id: langelier-2012
+    citation: Langelier et al. (2012) Science
+    pmid: "22582261"
+    doi: 10.1126/science.1216338
+  - id: gibson-kraus-2012
+    citation: Gibson & Kraus (2012) Nat Rev Mol Cell Biol
+    pmid: "22713970"
+    doi: 10.1038/nrm3376
+  - id: caldecott-2008
+    citation: Caldecott (2008) Nat Rev Genet
+    pmid: "18626472"
+    doi: 10.1038/nrg2380
+  - id: caldecott-2022
+    citation: Caldecott (2022) Trends Cell Biol
+    pmid: "35643889"
+    doi: 10.1016/j.tcb.2022.04.010
+  - id: krokan-2013
+    citation: Krokan & Bjørås (2013) Cold Spring Harb Perspect Biol
+    pmid: "23545420"
+    doi: 10.1101/cshperspect.a012583
+  - id: mcneill-2020
+    citation: McNeill et al. (2020) Mutagenesis
+    pmid: "31816044"
+    doi: 10.1093/mutage/gez046
+  - id: beard-wilson-2019
+    citation: Beard & Wilson (2019) Enzymes
+    pmid: "31627875"
+    doi: 10.1016/bs.enz.2019.08.002
+  - id: reactome-ber
+    citation: Base Excision Repair
+    reactome: R-HSA-73884
+  - id: reactome-ap-sites
+    citation: Resolution of Abasic Sites (AP sites)
+    reactome: R-HSA-73933
+  - id: reactome-snr
+    citation: Resolution of AP sites via the single-nucleotide replacement pathway
+    reactome: R-HSA-110381
 
 compartments: [nucleus]
 
 actors:
   - id: dna
     type: dna
-    label: Damaged DNA
+    label: DNA
     compartment: nucleus
     sites:
       - id: lesion
-        type: single-strand-break
+        type: guanine
         position: center
+
+  - id: ogg1
+    type: protein
+    label: OGG1
+    description: DNA glycosylase that removes 8-oxoguanine.
+    color: "#7c9cc4"
+    compartment: nucleus
+
+  - id: ape1
+    type: protein
+    label: APE1
+    description: AP endonuclease that incises the backbone at abasic sites.
+    color: "#8fae86"
+    compartment: nucleus
 
   - id: parp1
     type: protein
     label: PARP1
     description: DNA damage sensor and poly(ADP-ribose) polymerase.
-    color: "#22d3ee"
+    color: "#8b78d0"
     compartment: nucleus
     initial: { activity: inactive }
+
+  - id: nad
+    type: molecule
+    label: NAD+
+    description: Substrate from which PARP1 builds poly(ADP-ribose).
+    color: "#4f8fd6"
+    compartment: nucleus
 
   - id: xrcc1
     type: protein
     label: XRCC1
-    description: Scaffold that coordinates single-strand break repair.
-    color: "#a78bfa"
+    description: Scaffold that binds PAR and coordinates POLβ and LIG3.
+    color: "#5aa9a0"
+    compartment: nucleus
+
+  - id: polb
+    type: protein
+    label: POLβ
+    description: DNA polymerase β, fills the single-nucleotide gap.
+    color: "#d5839a"
     compartment: nucleus
 
   - id: lig3
     type: protein
     label: LIG3
-    description: DNA ligase recruited through XRCC1.
-    color: "#34d399"
+    description: DNA ligase IIIα, seals the nick in complex with XRCC1.
+    color: "#dca064"
     compartment: nucleus
 
 steps:
-  - id: damage
-    title: Single-strand break
-    description: A lesion interrupts one strand of the DNA duplex.
+  - id: intact
+    title: Intact DNA
+    summary: Normal DNA structure
+    description: The double helix is intact; no repair factors are engaged.
+    actions: []
+
+  - id: lesion
+    title: DNA lesion
+    summary: Base damage by ROS
+    description: Reactive oxygen species oxidize a guanine to 8-oxoguanine, a mutagenic base lesion.
+    keyEvents:
+      - ROS oxidize guanine to 8-oxoguanine (8-oxoG)
+      - The damaged base remains paired in the duplex
+    references: [krokan-2013, reactome-ber]
     actions:
+      - type: damage
+        target: dna.lesion
+
+  - id: excision
+    title: BER processing
+    summary: Base excision and AP site
+    description: The glycosylase OGG1 flips out and removes the damaged base, leaving an abasic (AP) site.
+    keyEvents:
+      - OGG1 recognizes and binds 8-oxoG
+      - The N-glycosidic bond is cleaved
+      - An abasic (AP) site remains
+    references: [krokan-2013, reactome-ap-sites]
+    actions:
+      - type: recruit
+        actor: ogg1
+        target: dna.lesion
+      - type: excise
+        target: dna.lesion
+        by: ogg1
+
+  - id: incision
+    title: Single-strand break
+    summary: SSB intermediate
+    description: APE1 replaces OGG1 and incises the backbone at the AP site, generating a single-strand break.
+    keyEvents:
+      - OGG1 is released from the AP site
+      - APE1 incises the backbone 5′ to the AP site
+      - A single-strand break is formed
+    references: [mcneill-2020, caldecott-2008]
+    actions:
+      - parallel:
+          - sequence:
+              - type: unbind
+                actor: ogg1
+              - type: hide
+                actor: ogg1
+          - type: recruit
+            actor: ape1
+            target: dna.lesion
       - type: cleave
         target: dna.lesion
-        lesion: single-strand-break
+        by: ape1
 
-  - id: recognition
-    title: PARP1 detects the break
-    description: PARP1 binds the exposed DNA discontinuity, which switches on its catalytic activity.
+  - id: binding
+    title: PARP1 binding
+    summary: PARP1 detects and binds SSB
+    description: PARP1 rapidly recognizes the single-strand break and binds to the damaged DNA.
+    keyEvents:
+      - APE1 hands over the break
+      - PARP1 zinc fingers bind the DNA at the SSB
+    references: [ray-chaudhuri-2017, langelier-2012]
     actions:
-      - type: bind
-        actor: parp1
-        target: dna.lesion
+      - parallel:
+          - sequence:
+              - type: unbind
+                actor: ape1
+              - type: hide
+                actor: ape1
+          - type: bind
+            actor: parp1
+            target: dna.lesion
+
+  - id: activation
+    title: PARP1 activation
+    summary: Catalytic activation
+    description: >
+      Binding to the break induces a conformational change that activates the PARP1
+      catalytic domain, and NAD+ enters the active site.
+    keyEvents:
+      - DNA binding reorganizes the PARP1 domains
+      - The catalytic domain is activated
+      - NAD+ is positioned in the catalytic site
+    references: [langelier-2012, ray-chaudhuri-2017]
+    actions:
       - type: activate
         actor: parp1
         by: dna
+      - type: bind
+        actor: nad
+        target: parp1
 
   - id: parylation
-    title: PAR synthesis
-    description: Activated PARP1 auto-modifies itself with a negatively charged poly(ADP-ribose) chain.
+    title: PARylation
+    summary: Synthesis of PAR chains
+    description: Activated PARP1 consumes NAD+ to build negatively charged poly(ADP-ribose) chains on itself.
+    keyEvents:
+      - PARP1 transfers ADP-ribose units from NAD+
+      - Branched PAR chains grow on PARP1 (auto-modification)
+    references: [gibson-kraus-2012, ray-chaudhuri-2017]
     actions:
       - type: parylate
         actor: parp1
-        length: 9
+        length: 12
         by: parp1
+      - sequence:
+          - type: unbind
+            actor: nad
+          - type: hide
+            actor: nad
 
   - id: scaffold
     title: XRCC1 recruitment
-    description: XRCC1 recognizes PAR and assembles the repair machinery.
+    summary: XRCC1 binds to PAR
+    description: The scaffold protein XRCC1 recognizes PAR and is recruited to the break.
+    keyEvents:
+      - XRCC1 binds PAR on PARP1
+      - XRCC1 assembles the downstream repair machinery
+    references: [caldecott-2008, caldecott-2022]
     actions:
       - type: recruit
         actor: xrcc1
         target: parp1
 
+  - id: gap-filling
+    title: POLβ activity
+    summary: Gap filling by DNA polymerase β
+    description: POLβ, coordinated by XRCC1, inserts the missing nucleotide and leaves a ligatable nick.
+    keyEvents:
+      - POLβ engages the single-nucleotide gap
+      - The missing nucleotide is inserted
+      - A ligatable nick remains
+    references: [beard-wilson-2019, reactome-snr]
+    actions:
+      - type: recruit
+        actor: polb
+        target: dna.lesion
+      - type: fill-gap
+        target: dna.lesion
+        by: polb
+
   - id: ligation
-    title: Repair completion
-    description: LIG3 is recruited through XRCC1 and seals the nick.
+    title: LIG3 sealing
+    summary: Nick ligation
+    description: LIG3, in complex with XRCC1, seals the nick and restores the phosphodiester backbone.
+    keyEvents:
+      - LIG3 is recruited through XRCC1
+      - The nick is sealed
+    references: [caldecott-2022, reactome-snr]
     actions:
       - type: recruit
         actor: lig3
@@ -86,3 +274,39 @@ steps:
       - type: ligate
         target: dna.lesion
         by: lig3
+
+  - id: repaired
+    title: Repaired DNA
+    summary: Restored DNA integrity
+    description: The repair factors dissociate and PAR is removed, leaving intact DNA.
+    keyEvents:
+      - PAR chains are degraded
+      - Repair factors dissociate
+      - DNA integrity is restored
+    references: [caldecott-2022, reactome-ber]
+    actions:
+      - parallel:
+          - sequence:
+              - type: modify
+                actor: parp1
+                kind: parylation
+                remove: true
+              - type: unbind
+                actor: parp1
+              - type: hide
+                actor: parp1
+          - sequence:
+              - type: unbind
+                actor: xrcc1
+              - type: hide
+                actor: xrcc1
+          - sequence:
+              - type: unbind
+                actor: polb
+              - type: hide
+                actor: polb
+          - sequence:
+              - type: unbind
+                actor: lig3
+              - type: hide
+                actor: lig3

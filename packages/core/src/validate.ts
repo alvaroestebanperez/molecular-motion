@@ -42,6 +42,17 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
   if (!Array.isArray(value.steps) || value.steps.length === 0) issues.push('steps must be a non-empty array');
 
   const compartments = normalizeCompartments(Array.isArray(value.compartments) ? value.compartments : [], issues);
+  if (value.references !== undefined && !Array.isArray(value.references)) issues.push('references must be an array');
+  const references = Array.isArray(value.references) ? value.references : [];
+  const referenceIds = validateReferences(references, issues);
+  const checkReferenceIds = (ids: unknown, path: string) => {
+    if (ids === undefined) return;
+    if (!Array.isArray(ids)) return issues.push(`${path} must be an array of reference ids`);
+    ids.forEach((id, index) => {
+      if (typeof id !== 'string' || !referenceIds.has(id)) issues.push(`${path}[${index}] references unknown reference "${String(id)}"`);
+    });
+  };
+  if (isObject(value.mechanism)) checkReferenceIds(value.mechanism.references, 'mechanism.references');
   const refs: References = { actors: new Map(), compartments: new Set(compartments.map(compartment => compartment.id)) };
 
   if (Array.isArray(value.actors)) value.actors.forEach((actor, index) => {
@@ -63,13 +74,18 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     });
   });
 
-  const definition = { ...value, compartments } as unknown as MechanismDefinition;
+  const definition = { ...value, references, compartments } as unknown as MechanismDefinition;
   const stepIds = new Set<string>();
   if (Array.isArray(value.steps)) value.steps.forEach((step, stepIndex) => {
     const path = `steps[${stepIndex}]`;
     if (!isObject(step)) return issues.push(`${path} must be an object`);
     requiredString(step.id, `${path}.id`, issues);
     requiredString(step.title, `${path}.title`, issues);
+    if (step.summary !== undefined) requiredString(step.summary, `${path}.summary`, issues);
+    if (step.keyEvents !== undefined && (!Array.isArray(step.keyEvents) || step.keyEvents.some(event => typeof event !== 'string' || !event.trim()))) {
+      issues.push(`${path}.keyEvents must be an array of non-empty strings`);
+    }
+    checkReferenceIds(step.references, `${path}.references`);
     if (typeof step.id === 'string') {
       if (stepIds.has(step.id)) issues.push(`${path}.id duplicates "${step.id}"`);
       stepIds.add(step.id);
@@ -158,6 +174,35 @@ function validateInitial(initial: unknown, path: string, issues: string[]) {
     else if (key === 'activity') { if (!ACTIVITIES.has(initial.activity as string)) issues.push(`${path}.activity must be one of: active, inactive, inhibited`); }
     else issues.push(`${path}.${key} is not supported`);
   }
+}
+
+const IDENTIFIERS = {
+  pmid: /^\d{1,9}$/,
+  doi: /^10\.\d{4,9}\/\S+$/,
+  reactome: /^R-[A-Z]{3}-\d+(\.\d+)?$/,
+  url: /^https?:\/\/\S+$/,
+} as const;
+
+function validateReferences(references: unknown[], issues: string[]): Set<string> {
+  const ids = new Set<string>();
+  references.forEach((reference, index) => {
+    const path = `references[${index}]`;
+    if (!isObject(reference)) return issues.push(`${path} must be an object`);
+    requiredString(reference.id, `${path}.id`, issues);
+    if (typeof reference.id === 'string') {
+      if (ids.has(reference.id)) issues.push(`${path}.id duplicates "${reference.id}"`);
+      ids.add(reference.id);
+    }
+    for (const key of Object.keys(reference)) {
+      if (key === 'id') continue;
+      if (key === 'citation') { requiredString(reference.citation, `${path}.citation`, issues); continue; }
+      const pattern = IDENTIFIERS[key as keyof typeof IDENTIFIERS];
+      if (!pattern) issues.push(`${path}.${key} is not supported`);
+      else if (typeof reference[key] !== 'string' || !pattern.test(reference[key] as string)) issues.push(`${path}.${key} is not a valid ${key}`);
+    }
+    if (!Object.keys(IDENTIFIERS).some(key => key in reference)) issues.push(`${path} needs at least one of: pmid, doi, reactome, url`);
+  });
+  return ids;
 }
 
 function requiredString(value: unknown, path: string, issues: string[]) {

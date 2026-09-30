@@ -154,7 +154,7 @@ export interface Modification {
 
 export interface SiteState { lesion?: LesionType }
 export type LesionType =
-  'single-strand-break' | 'double-strand-break' | 'base-damage' | 'abasic-site' | 'adduct';
+  'single-strand-break' | 'nick' | 'double-strand-break' | 'base-damage' | 'abasic-site' | 'adduct';
 ```
 
 Example: EGFR after ligand binding and autophosphorylation.
@@ -301,7 +301,7 @@ Aliases are expanded at compile time. The engine runs primitives only. Each `Tim
 | `ubiquitinate` | `modify { kind: ubiquitination }` |
 | `parylate` | `modify { kind: parylation, length }` |
 | `polymerize` | `modify { kind: polymer, label: product, length }` |
-| `damage` / `excise` / `repair` | `set-state { lesion: base-damage \| abasic-site \| none }` |
+| `damage` / `excise` / `fill-gap` / `repair` | `set-state { lesion: base-damage \| abasic-site \| nick \| none }` (`nick` and `fill-gap` added in [RFC 0002](0002-step-references-and-viewer.md)) |
 
 ### Coverage check against the five target mechanisms
 
