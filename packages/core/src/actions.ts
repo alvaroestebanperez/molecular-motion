@@ -2,8 +2,8 @@ import { ActionRegistry, defineAlias, definePrimitive, field } from './registry'
 import type { ActionSpec, Activity, LesionType } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
-export const LESIONS: readonly LesionType[] = ['single-strand-break', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
-const BREAKS: readonly LesionType[] = ['single-strand-break', 'double-strand-break'];
+export const LESIONS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
+const BREAKS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break'];
 
 const actorOf = (reference: string) => reference.split('.')[0]!;
 const timing = ({ by, duration }: ActionSpec) => ({ by, duration });
@@ -98,18 +98,21 @@ export const modify = definePrimitive<ModifyAction>({
   },
 });
 
-interface TranslocateAction extends ActionSpec { actor: string; to: string }
+interface TranslocateAction extends ActionSpec { actor: string; to: string; includeBound?: boolean }
 export const translocate = definePrimitive<TranslocateAction>({
   type: 'translocate',
-  description: 'Move an actor, and everything bound to it, to another compartment.',
-  fields: { actor: field.actor({ required: true }), to: field.compartment({ required: true }) },
+  description: 'Move an actor to another compartment. Bindings are never changed.',
+  fields: {
+    actor: field.actor({ required: true }),
+    to: field.compartment({ required: true }),
+    includeBound: field.boolean({ description: 'Also move every actor bound to this one, directly or transitively, keeping their bindings.' }),
+  },
   presentation: { verb: 'translocates to' },
   apply(state, action, ctx) {
     const actor = ctx.requirePresent(action.actor);
     if (actor.compartment === action.to) ctx.fail(`"${action.actor}" is already in "${action.to}"`);
-    delete actor.boundTo;
     const moving = new Set([actor.id]);
-    for (let grew = true; grew;) {
+    for (let grew = Boolean(action.includeBound); grew;) {
       grew = false;
       for (const other of Object.values(state.actors)) {
         if (!moving.has(other.id) && other.boundTo && moving.has(actorOf(other.boundTo))) { moving.add(other.id); grew = true; }
@@ -254,6 +257,7 @@ export const builtinActions = [
   polymerize,
   siteLesion('damage', 'base-damage', 'damages', ['base-damage', 'adduct']),
   siteLesion('excise', 'abasic-site', 'excises the base at'),
+  siteLesion('fill-gap', 'nick', 'fills the gap at'),
   siteLesion('repair', 'none', 'repairs'),
 ];
 

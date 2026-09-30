@@ -9,7 +9,9 @@ describe('v1 → v2 migration', () => {
     expect(projectToV1(compileMechanism(definition))).toEqual(readGolden(name));
   });
 
-  it.each(MECHANISMS)('%s: hand-written v2 example keeps the same scenes as v1', name => {
+  // PARP1 was expanded to the full 11-step BER → SSBR story, so only HR still mirrors its v1 original.
+  it('homologous-recombination: hand-written v2 example keeps the same scenes as v1', () => {
+    const name = 'homologous-recombination';
     expect(projectToV1(compileMechanism(parseMechanism(readExample(name))))).toEqual(readGolden(name));
   });
 

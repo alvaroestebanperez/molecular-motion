@@ -95,14 +95,14 @@ describe('built-in actions across target mechanisms', () => {
       steps: [
         { id: 'sense', title: 'cGAS activation', actions: [{ type: 'activate', actor: 'cgas' }] },
         { id: 'cgamp', title: 'cGAMP synthesis', actions: [{ type: 'synthesize', product: 'cgamp', by: 'cgas' }] },
-        { id: 'sting', title: 'STING activation', actions: [{ type: 'bind', actor: 'cgamp', target: 'sting' }, { type: 'recruit', actor: 'tbk1', target: 'sting' }, { type: 'translocate', actor: 'sting', to: 'golgi' }] },
+        { id: 'sting', title: 'STING activation', actions: [{ type: 'bind', actor: 'cgamp', target: 'sting' }, { type: 'recruit', actor: 'tbk1', target: 'sting' }, { type: 'translocate', actor: 'sting', to: 'golgi', includeBound: true }] },
         { id: 'irf3', title: 'IRF3', actions: [{ type: 'phosphorylate', actor: 'irf3', site: 'S386', by: 'tbk1' }, { type: 'translocate', actor: 'irf3', to: 'nucleus' }] },
       ],
     });
     expect(mechanism.at('cgamp').actors.cgamp).toMatchObject({ present: true, visible: true, compartment: 'cytoplasm' });
     const sting = mechanism.at('sting');
     expect(sting.actors.sting!.compartment).toBe('golgi');
-    expect(sting.actors.cgamp!.compartment).toBe('golgi');     // carried: bound to STING
+    expect(sting.actors.cgamp!.compartment).toBe('golgi');     // includeBound: bound to STING
     expect(sting.actors.tbk1!.compartment).toBe('golgi');
     const irf3 = mechanism.at('irf3').actors.irf3!;
     expect(irf3.compartment).toBe('nucleus');
@@ -140,6 +140,61 @@ describe('built-in actions across target mechanisms', () => {
       actors: [{ id: 'a', type: 'protein' }, { id: 'b', type: 'protein', initial: { present: false } }],
       steps: [{ id: 's', title: 'S', actions: [{ type: 'bind', actor: 'a', target: 'b' }] }],
     })).toThrow(/"b" is not present/);
+  });
+});
+
+describe('translocate', () => {
+  // mek ← erk ← dusp6 (erk bound to mek, dusp6 bound to erk); nothing bound to dusp6
+  const doc = (translocation: Record<string, unknown>) => ({
+    schemaVersion: 2,
+    mechanism: { id: 'mapk', name: 'MAPK' },
+    compartments: ['cytoplasm', 'nucleus'],
+    actors: [
+      { id: 'mek', type: 'protein', compartment: 'cytoplasm', initial: { visible: true } },
+      { id: 'erk', type: 'protein', compartment: 'cytoplasm' },
+      { id: 'dusp6', type: 'protein', compartment: 'cytoplasm' },
+    ],
+    steps: [
+      { id: 'assemble', title: 'Assemble', actions: [{ type: 'bind', actor: 'erk', target: 'mek' }, { type: 'bind', actor: 'dusp6', target: 'erk' }] },
+      { id: 'move', title: 'Move', actions: [{ type: 'translocate', to: 'nucleus', ...translocation }] },
+    ],
+  });
+  const compartments = (snapshot: ReturnType<ReturnType<typeof compileMechanism>['at']>) =>
+    Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, actor.compartment]));
+  const bindings = (snapshot: ReturnType<ReturnType<typeof compileMechanism>['at']>) =>
+    Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, actor.boundTo]));
+
+  it('moves only the named actor by default and changes no bindings', () => {
+    const mechanism = compileMechanism(doc({ actor: 'erk' }));
+    const move = mechanism.at('move');
+    expect(compartments(move)).toEqual({ mek: 'cytoplasm', erk: 'nucleus', dusp6: 'cytoplasm' });
+    expect(bindings(move)).toEqual(bindings(mechanism.at('assemble')));
+    expect(move.timeline[0]!.changes).toEqual([{ key: 'actors.erk.compartment', from: 'cytoplasm', to: 'nucleus' }]);
+  });
+
+  it('includeBound: false is the default', () => {
+    expect(compileMechanism(doc({ actor: 'erk', includeBound: false })).at('move').actors)
+      .toEqual(compileMechanism(doc({ actor: 'erk' })).at('move').actors);
+  });
+
+  it('includeBound moves actors bound to it, transitively, and keeps every binding', () => {
+    const mechanism = compileMechanism(doc({ actor: 'mek', includeBound: true }));
+    const move = mechanism.at('move');
+    expect(compartments(move)).toEqual({ mek: 'nucleus', erk: 'nucleus', dusp6: 'nucleus' });
+    expect(bindings(move)).toEqual({ mek: undefined, erk: 'mek', dusp6: 'erk' });
+    expect(move.timeline[0]!.changes.map(change => change.key)).toEqual(['actors.mek.compartment', 'actors.erk.compartment', 'actors.dusp6.compartment']);
+  });
+
+  it('includeBound does not move the partner the actor itself is bound to', () => {
+    const move = compileMechanism(doc({ actor: 'erk', includeBound: true })).at('move');
+    expect(compartments(move)).toEqual({ mek: 'cytoplasm', erk: 'nucleus', dusp6: 'nucleus' });
+    expect(move.actors.erk!.boundTo).toBe('mek');
+  });
+
+  it('reports invalid translocations', () => {
+    expect(() => compileMechanism(doc({ actor: 'erk', to: 'cytoplasm' }))).toThrow(/"erk" is already in "cytoplasm"/);
+    expect(() => compileMechanism(doc({ actor: 'erk', to: 'golgi' }))).toThrow(/unknown compartment "golgi"/);
+    expect(() => compileMechanism(doc({ actor: 'erk', includeBound: 'yes' }))).toThrow(/includeBound must be a boolean/);
   });
 });
 
@@ -194,5 +249,38 @@ describe('action registry', () => {
     expect(mechanism.at('ac').actors.h3!.modifications[0]!.id).toBe('acetylation@K27');
     expect(mechanism.at('reset').actors.h3!.modifications).toEqual([]);
     expect(() => builtinRegistry.extend([builtinRegistry.get('bind')!])).toThrow(/already registered/);
+  });
+});
+
+describe('references and step metadata', () => {
+  const doc = (extra: Record<string, unknown> = {}, step: Record<string, unknown> = {}) => ({
+    schemaVersion: 2,
+    mechanism: { id: 'x', name: 'X', references: ['review'] },
+    references: [
+      { id: 'review', citation: 'Ray Chaudhuri & Nussenzweig (2017) Nat Rev Mol Cell Biol', pmid: '28676700', doi: '10.1038/nrm.2017.53' },
+      { id: 'pathway', reactome: 'R-HSA-73884' },
+    ],
+    actors: [{ id: 'a', type: 'protein' }],
+    steps: [{ id: 's', title: 'S', summary: 'Short', keyEvents: ['One', 'Two'], references: ['review', 'pathway'], actions: [], ...step }],
+    ...extra,
+  });
+
+  it('keeps summary, key events, and references on the step', () => {
+    const { definition } = compileMechanism(doc());
+    expect(definition.steps[0]).toMatchObject({ summary: 'Short', keyEvents: ['One', 'Two'], references: ['review', 'pathway'] });
+    expect(definition.references.map(reference => reference.id)).toEqual(['review', 'pathway']);
+  });
+
+  it('defaults references to an empty list', () => {
+    const { references: _, ...rest } = doc({ mechanism: { id: 'x', name: 'X' } }, { references: undefined });
+    expect(compileMechanism(rest).definition.references).toEqual([]);
+  });
+
+  it('rejects unknown ids, malformed identifiers, and references without an identifier', () => {
+    expect(() => compileMechanism(doc({}, { references: ['missing'] }))).toThrow(/steps\[0\]\.references\[0\] references unknown reference "missing"/);
+    expect(() => compileMechanism(doc({ references: [{ id: 'r', pmid: 'PMC123' }] }, { references: [] }))).toThrow(/pmid is not a valid pmid/);
+    expect(() => compileMechanism(doc({ references: [{ id: 'r', citation: 'Someone (2020)' }], mechanism: { id: 'x', name: 'X' } }, { references: [] })))
+      .toThrow(/needs at least one of: pmid, doi, reactome, url/);
+    expect(() => compileMechanism(doc({}, { keyEvents: ['ok', ''] }))).toThrow(/keyEvents must be an array of non-empty strings/);
   });
 });

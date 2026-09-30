@@ -20,7 +20,7 @@ Molecular Motion turns a YAML or JSON description of **actors, molecular sites, 
 
 ## Demo
 
-The [interactive playground](https://alvaroesteban.github.io/molecular-motion/) places an editable YAML document next to the generated mechanism. Change an actor, target, or action and the preview updates immediately.
+The [demo](https://alvaroesteban.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [playground](https://alvaroesteban.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
@@ -54,15 +54,18 @@ The aim is not to reproduce atomistic simulations. Molecular Motion communicates
 ## A mechanism in YAML
 
 ```yaml
-schemaVersion: 1
+schemaVersion: 2
 
 mechanism:
   id: parp1-ssb-repair
   name: PARP1-mediated SSB repair
 
+compartments: [nucleus]
+
 actors:
   - id: dna
     type: dna
+    compartment: nucleus
     sites:
       - id: lesion
         type: single-strand-break
@@ -70,31 +73,36 @@ actors:
   - id: parp1
     type: protein
     label: PARP1
+    compartment: nucleus
+    initial: { activity: inactive }
 
   - id: xrcc1
     type: protein
     label: XRCC1
+    compartment: nucleus
 
 steps:
   - id: damage
     title: Single-strand break
     actions:
-      - type: create-lesion
+      - type: cleave
         target: dna.lesion
 
   - id: recognition
     title: PARP1 detects the break
-    actions:
+    actions:            # a list runs in sequence
       - type: bind
         actor: parp1
         target: dna.lesion
+      - type: activate
+        actor: parp1
+        by: dna
 
   - id: parylation
     title: PAR synthesis
     actions:
-      - type: polymerize
+      - type: parylate
         actor: parp1
-        product: PAR
         length: 9
 
   - id: recruitment
@@ -105,7 +113,9 @@ steps:
         target: parp1
 ```
 
-Targets use `actor.site` references. The validator catches unknown actors, sites, steps, and unsupported actions before the renderer runs.
+Targets use `actor.site` references. The validator catches unknown actors, sites, compartments, and actions, as well as misspelled fields, before the renderer runs. The compiler also rejects biologically impossible sequences, such as ligating a site that has no break or binding an actor that was degraded.
+
+`schemaVersion: 1` documents are still accepted and migrated automatically. The design of schema v2 is described in [RFC 0001](docs/rfcs/0001-schema-v2.md).
 
 ## React
 
@@ -132,6 +142,31 @@ export function RepairFigure() {
   );
 }
 ```
+
+`MolecularMechanism` is a compact, self-contained player. For richer layouts, compose the building blocks the demo dashboard uses:
+
+```tsx
+import {
+  MechanismStage, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, useMechanismPlayer,
+} from '@molecular-motion/react';
+
+function MechanismPage({ definition }) {
+  const player = useMechanismPlayer(definition);
+  return <>
+    <StepTimeline player={player} />
+    <MechanismStage mechanism={player.mechanism} stepIndex={player.stepIndex} ghosts={player.upcoming} />
+    <PlaybackControls player={player} />
+    <StepDetails player={player} />      {/* Explanation · Molecular details · References */}
+    <StepThumbnails player={player} />
+  </>;
+}
+```
+
+Consecutive steps morph instead of re-rendering: actors glide to new positions, upcoming actors wait out of focus and come into focus when they appear. Everything is themed through `--mm-*` CSS custom properties and follows `[data-theme=dark]` or the OS preference.
+
+### Step metadata and references
+
+Each step can carry a `summary`, a `description`, ordered `keyEvents`, and `references` to entries in a top-level `references` list. References are structured identifiers (`pmid`, `doi`, `reactome`, `url`) so they stay resolvable. See [RFC 0002](docs/rfcs/0002-step-references-and-viewer.md) and the [PARP1 example](examples/parp1-ssb-repair.yaml).
 
 JSON definitions can be passed directly. YAML is parsed once into the same typed definition:
 
@@ -170,11 +205,19 @@ framework-neutral scene graph     @molecular-motion/svg
 
 Every visual frame is derived by replaying actions from the initial definition to the selected step. This event-sourced model makes seeking deterministic and keeps scientific state independent from transient animation state.
 
-### MVP vocabulary
+### Vocabulary
 
-Actors: `dna`, `rna`, `protein`, `molecule`, and `complex`.
+Actors: `dna`, `rna`, `protein`, `molecule`, and `complex`, optionally placed in declared **compartments** (`extracellular`, `membrane`, `cytoplasm`, `nucleus`, `er`, `golgi`, `mitochondrion`, `endosome`, or custom ones).
 
-Actions: `create-lesion`, `repair-lesion`, `bind`, `recruit`, `unbind`, `polymerize`, `modify`, `show`, and `hide`.
+Actions come from an extensible **registry**. A small set of primitives defines every state transition:
+
+`bind` · `unbind` · `set-state` · `modify` · `translocate` · `synthesize` · `degrade` · `cleave` · `ligate`
+
+Biological verbs are aliases that expand to those primitives while keeping their own wording in captions:
+
+`recruit` · `activate` · `inactivate` · `inhibit` · `phosphorylate` · `dephosphorylate` · `ubiquitinate` · `parylate` · `polymerize` · `damage` · `excise` · `fill-gap` · `repair` · `show` · `hide`
+
+Actions in a step run in sequence. Wrap them in `parallel:` when they happen at the same time; parallel branches may not change the same state. Custom actions are registered with `builtinRegistry.extend([...])` and passed to `parseMechanism` / `compileMechanism` through `{ registry }`.
 
 Definitions may supply an explicit actor position when the automatic layout is not scientifically or visually appropriate. Coordinates remain an escape hatch, not the primary authoring model.
 
@@ -184,9 +227,9 @@ Definitions may supply an explicit actor position when the automatic layout is n
 packages/
   core/       # language and deterministic state engine
   svg/        # layout, scene graph and SVG serializer
-  react/      # React player
+  react/      # player hook, animated stage, timeline, details, thumbnails
 apps/
-  demo/       # live YAML playground
+  demo/       # mechanism viewer and live YAML playground
 examples/     # complete mechanism definitions
 ```
 
@@ -197,10 +240,14 @@ examples/     # complete mechanism definitions
 - [x] Automatic SVG layout with manual position overrides
 - [x] Keyboard-accessible React player with reduced-motion support
 - [x] Live editor with PARP1 and homologous recombination examples
-- [ ] Sequential and parallel action groups within a step
+- [x] Sequential and parallel action groups within a step
+- [x] Extensible action registry, compartments, and typed actor state
 - [ ] Rich DNA/RNA geometry, strand direction, and site anchors
 - [ ] Complex assembly, stoichiometry, and repeated actor instances
-- [ ] Camera actions, annotations, citations, and deep links
+- [x] Per-step references, key events, and summaries
+- [x] Review-figure SVG language: helix with depth, molecular surfaces, lesion states, PAR chains, callouts
+- [x] Dashboard viewer: timeline, animated stage, step details, thumbnails, light/dark themes
+- [ ] Camera actions, scene-anchored annotations, and deep links
 - [ ] Themes and renderer/action plugin APIs
 - [ ] Framework-agnostic Web Component
 - [ ] Export to standalone SVG, PNG, and video

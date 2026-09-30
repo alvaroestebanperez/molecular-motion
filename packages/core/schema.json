@@ -31,7 +31,16 @@
         },
         "description": {
           "type": "string"
+        },
+        "references": {
+          "$ref": "#/$defs/referenceIds"
         }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reference"
       }
     },
     "compartments": {
@@ -59,6 +68,69 @@
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "referenceIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reference": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "pmid"
+          ]
+        },
+        {
+          "required": [
+            "doi"
+          ]
+        },
+        {
+          "required": [
+            "reactome"
+          ]
+        },
+        {
+          "required": [
+            "url"
+          ]
+        }
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable short citation, e.g. \"Ray Chaudhuri & Nussenzweig (2017) Nat Rev Mol Cell Biol\"."
+        },
+        "pmid": {
+          "type": "string",
+          "pattern": "^\\d{1,9}$"
+        },
+        "doi": {
+          "type": "string",
+          "pattern": "^10\\.\\d{4,9}/\\S+$"
+        },
+        "reactome": {
+          "type": "string",
+          "pattern": "^R-[A-Z]{3}-\\d+(\\.\\d+)?$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
     },
     "point": {
       "type": "object",
@@ -225,8 +297,22 @@
           "type": "string",
           "minLength": 1
         },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
         "description": {
           "type": "string"
+        },
+        "keyEvents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "references": {
+          "$ref": "#/$defs/referenceIds"
         },
         "duration": {
           "type": "number",
@@ -375,6 +461,7 @@
             "lesion": {
               "enum": [
                 "single-strand-break",
+                "nick",
                 "double-strand-break",
                 "base-damage",
                 "abasic-site",
@@ -436,7 +523,7 @@
         },
         {
           "type": "object",
-          "description": "Move an actor, and everything bound to it, to another compartment.",
+          "description": "Move an actor to another compartment. Bindings are never changed.",
           "required": [
             "type",
             "actor",
@@ -460,6 +547,10 @@
             },
             "to": {
               "$ref": "#/$defs/id"
+            },
+            "includeBound": {
+              "type": "boolean",
+              "description": "Also move every actor bound to this one, directly or transitively, keeping their bindings."
             }
           },
           "additionalProperties": false
@@ -546,6 +637,7 @@
             "lesion": {
               "enum": [
                 "single-strand-break",
+                "nick",
                 "double-strand-break"
               ]
             }
@@ -950,6 +1042,33 @@
           "properties": {
             "type": {
               "const": "excise"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Mark a site as nick.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "fill-gap"
             },
             "duration": {
               "type": "integer",

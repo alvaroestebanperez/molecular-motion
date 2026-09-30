@@ -1,5 +1,5 @@
 export type ActorType = 'dna' | 'rna' | 'protein' | 'molecule' | 'complex';
-export type LesionType = 'single-strand-break' | 'double-strand-break' | 'base-damage' | 'abasic-site' | 'adduct';
+export type LesionType = 'single-strand-break' | 'nick' | 'double-strand-break' | 'base-damage' | 'abasic-site' | 'adduct';
 export type Activity = 'active' | 'inactive' | 'inhibited';
 export type CompartmentKind =
   | 'extracellular' | 'membrane' | 'cytoplasm' | 'nucleus' | 'er' | 'golgi'
@@ -45,25 +45,43 @@ export interface ActionSpec {
 
 export type ActionNode = ActionSpec | { sequence: ActionNode[] } | { parallel: ActionNode[] };
 
+/** A citable source. At least one resolvable identifier (pmid, doi, reactome, url) is required. */
+export interface ReferenceDefinition {
+  id: string;
+  citation?: string;
+  pmid?: string;
+  doi?: string;
+  reactome?: string;
+  url?: string;
+}
+
 export interface MechanismStep {
   id: string;
   title: string;
+  /** One-line subtitle for timelines and thumbnails. */
+  summary?: string;
   description?: string;
+  /** Ordered, human-readable events that happen in this step. */
+  keyEvents?: string[];
+  /** Ids from the mechanism's `references` list. */
+  references?: string[];
   duration?: number;
   actions: ActionNode[];
 }
 
 export interface MechanismDefinition {
   schemaVersion: 2;
-  mechanism: { id: string; name: string; description?: string };
+  mechanism: { id: string; name: string; description?: string; references?: string[] };
+  references: ReferenceDefinition[];
   compartments: CompartmentDefinition[];
   actors: ActorDefinition[];
   steps: MechanismStep[];
 }
 
 /** Authoring form: compartments may use the string shorthand and may be omitted. */
-export interface MechanismInput extends Omit<MechanismDefinition, 'compartments'> {
+export interface MechanismInput extends Omit<MechanismDefinition, 'compartments' | 'references'> {
   compartments?: (string | CompartmentDefinition)[];
+  references?: ReferenceDefinition[];
 }
 
 // ---- Resolved state ----

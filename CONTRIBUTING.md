@@ -36,6 +36,6 @@ npm run check
 ## Pull requests
 
 - Keep changes focused and add tests for new behavior.
-- Update the JSON Schema, TypeScript types, README, and demo together when the public language changes.
+- Update the TypeScript types, README, and demo together when the public language changes. `packages/core/schema.json` is generated from the action registry: run `npm run schema` after changing an action, and the test suite fails if it is out of date.
 - Add a changeset once the project begins publishing versioned packages.
 - Use clear commit messages; Conventional Commits are welcome but not required.
