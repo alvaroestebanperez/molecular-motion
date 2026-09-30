@@ -20,7 +20,7 @@ Molecular Motion turns a YAML or JSON description of **actors, molecular sites, 
 
 ## Demo
 
-The [interactive playground](https://alvaroesteban.github.io/molecular-motion/) places an editable YAML document next to the generated mechanism. Change an actor, target, or action and the preview updates immediately.
+The [demo](https://alvaroesteban.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [playground](https://alvaroesteban.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
@@ -143,6 +143,31 @@ export function RepairFigure() {
 }
 ```
 
+`MolecularMechanism` is a compact, self-contained player. For richer layouts, compose the building blocks the demo dashboard uses:
+
+```tsx
+import {
+  MechanismStage, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, useMechanismPlayer,
+} from '@molecular-motion/react';
+
+function MechanismPage({ definition }) {
+  const player = useMechanismPlayer(definition);
+  return <>
+    <StepTimeline player={player} />
+    <MechanismStage mechanism={player.mechanism} stepIndex={player.stepIndex} ghosts={player.upcoming} />
+    <PlaybackControls player={player} />
+    <StepDetails player={player} />      {/* Explanation · Molecular details · References */}
+    <StepThumbnails player={player} />
+  </>;
+}
+```
+
+Consecutive steps morph instead of re-rendering: actors glide to new positions, upcoming actors wait out of focus and come into focus when they appear. Everything is themed through `--mm-*` CSS custom properties and follows `[data-theme=dark]` or the OS preference.
+
+### Step metadata and references
+
+Each step can carry a `summary`, a `description`, ordered `keyEvents`, and `references` to entries in a top-level `references` list. References are structured identifiers (`pmid`, `doi`, `reactome`, `url`) so they stay resolvable. See [RFC 0002](docs/rfcs/0002-step-references-and-viewer.md) and the [PARP1 example](examples/parp1-ssb-repair.yaml).
+
 JSON definitions can be passed directly. YAML is parsed once into the same typed definition:
 
 ```ts
@@ -190,7 +215,7 @@ Actions come from an extensible **registry**. A small set of primitives defines 
 
 Biological verbs are aliases that expand to those primitives while keeping their own wording in captions:
 
-`recruit` · `activate` · `inactivate` · `inhibit` · `phosphorylate` · `dephosphorylate` · `ubiquitinate` · `parylate` · `polymerize` · `damage` · `excise` · `repair` · `show` · `hide`
+`recruit` · `activate` · `inactivate` · `inhibit` · `phosphorylate` · `dephosphorylate` · `ubiquitinate` · `parylate` · `polymerize` · `damage` · `excise` · `fill-gap` · `repair` · `show` · `hide`
 
 Actions in a step run in sequence. Wrap them in `parallel:` when they happen at the same time; parallel branches may not change the same state. Custom actions are registered with `builtinRegistry.extend([...])` and passed to `parseMechanism` / `compileMechanism` through `{ registry }`.
 
@@ -202,9 +227,9 @@ Definitions may supply an explicit actor position when the automatic layout is n
 packages/
   core/       # language and deterministic state engine
   svg/        # layout, scene graph and SVG serializer
-  react/      # React player
+  react/      # player hook, animated stage, timeline, details, thumbnails
 apps/
-  demo/       # live YAML playground
+  demo/       # mechanism viewer and live YAML playground
 examples/     # complete mechanism definitions
 ```
 
@@ -219,7 +244,10 @@ examples/     # complete mechanism definitions
 - [x] Extensible action registry, compartments, and typed actor state
 - [ ] Rich DNA/RNA geometry, strand direction, and site anchors
 - [ ] Complex assembly, stoichiometry, and repeated actor instances
-- [ ] Camera actions, annotations, citations, and deep links
+- [x] Per-step references, key events, and summaries
+- [x] Review-figure SVG language: helix with depth, molecular surfaces, lesion states, PAR chains, callouts
+- [x] Dashboard viewer: timeline, animated stage, step details, thumbnails, light/dark themes
+- [ ] Camera actions, scene-anchored annotations, and deep links
 - [ ] Themes and renderer/action plugin APIs
 - [ ] Framework-agnostic Web Component
 - [ ] Export to standalone SVG, PNG, and video

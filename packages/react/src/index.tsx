@@ -1,2 +1,10 @@
 export { MolecularMechanism } from './MolecularMechanism';
 export type { MolecularMechanismProps } from './MolecularMechanism';
+export { MechanismStage, MechanismThumbnail, useMolecularMotionStyles } from './MechanismStage';
+export type { MechanismStageProps, MechanismThumbnailProps } from './MechanismStage';
+export { firstAppearances, upcomingActors, useMechanismPlayer } from './player';
+export type { MechanismPlayer, MechanismPlayerOptions } from './player';
+export { PlaybackControls, ReferenceList, StepDetails, StepThumbnails, StepTimeline } from './ui';
+export type { PlaybackControlsProps } from './ui';
+export { patchSvg } from './patch';
+export { uiCss } from './styles';
