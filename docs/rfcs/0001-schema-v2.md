@@ -1,6 +1,6 @@
 # RFC 0001 — Schema v2: action registry, typed state, compartments
 
-- **Status:** proposed — implemented on `feat/schema-v2` for review
+- **Status:** accepted
 - **Target mechanisms:** PARP1 SSB repair, homologous recombination (HR), base excision repair (BER), cGAS–STING, EGFR–MAPK
 
 ## Goals
@@ -13,6 +13,8 @@
 6. The renderer consumes **resolved state plus a generic change list**. It never switches on action types.
 7. **Total determinism**: every step is a pure fold of the initial state over the preceding actions.
 8. **Clean migration** from v1. PARP1 and HR keep producing the same scenes.
+
+**Design rule.** A primitive does exactly what its verb says, with as few implicit side effects as possible. The side effects that remain are listed in §9 and are part of the contract.
 
 Non-goals for v2: stoichiometry and repeated instances, multi-partner complexes, continuous kinetics, per-step citations (tracked separately as the next RFC).
 
@@ -217,7 +219,7 @@ actions:                         # top-level list = sequence
 ```
 
 - **State semantics:** actions are applied in document order. The final state of a step does not depend on timing.
-- **Parallel contract:** branches of a `parallel` block must not change the same state key. The engine diffs each branch and rejects overlaps (`steps[4].actions[1]: parallel branches [0] and [1] both change actors.x.boundTo`). Swapping branch order therefore cannot change the result.
+- **Parallel contract:** `parallel` declares that the author considers its branches independent. The compiler guarantees there are no *write* conflicts: branches must not change the same state key. The engine diffs each branch and rejects overlaps (`steps[4].actions[1]: parallel branches [0] and [1] both change actors.x.boundTo`). It does **not** analyse read-after-write dependencies (see §9.5).
 - **Time semantics:** `sequence` adds up durations; `parallel` takes the longest branch. Every `TimedAction` gets a deterministic `start`/`duration` in integer milliseconds, ready for renderers to interpolate.
 
 ## 6. PARP1 fragment in v2
@@ -284,7 +286,7 @@ Aliases are expanded at compile time. The engine runs primitives only. Each `Tim
 | `bind` / `unbind` | `boundTo`, reveals the actor |
 | `set-state` | `visible`, `activity` (actors); `lesion` (sites) |
 | `modify` | add/remove a `Modification` (unique by `kind@site`) |
-| `translocate` | `compartment`; releases the actor's own binding, carries actors bound to it |
+| `translocate` | `compartment` of the actor only; with `includeBound: true`, also of every actor bound to it (transitively). Bindings are never changed |
 | `synthesize` | `present: true` for a declared product; compartment defaults to the agent's |
 | `degrade` | `present: false`, hides it, releases everything bound to it |
 | `cleave` | site lesion → break (`single-strand-break` default) |
@@ -330,11 +332,17 @@ Aliases are expanded at compile time. The engine runs primitives only. Each `Tim
 ## 9. Trade-offs and decisions to fix now
 
 1. **Closed state, open vocabulary.** Custom primitives may only write the typed fields above. The open extension point is `Modification.kind`. If a mechanism needs a new *kind* of state, that is a schema change (v3), on purpose.
-2. **One binding partner per actor** (`boundTo`). Enough for tree-shaped assemblies (EGF→EGFR←GRB2←SOS; MRN←BRCA1). Real complexes and stoichiometry are deferred to the complex-assembly roadmap item.
-3. **Aliases expand to exactly one action.** Compound presets (e.g. "phosphorylate *and* activate") are left out until a real mechanism needs them. Authors write two actions instead.
+2. **One binding partner per actor** (`boundTo`). *Approved for v2.* Enough for tree-shaped assemblies (EGF→EGFR←GRB2←SOS; MRN←BRCA1). This is a deliberate, explicit limitation: no stoichiometry, complex graphs, or multiple binding interfaces. A richer complex representation stays open for a later schema version and must not be emulated through `boundTo`.
+3. **Aliases expand to exactly one action.** *Approved.* Aliases are semantic sugar, not macros. If compound operations are needed later they will be a separate, explicit concept (e.g. `preset`), not an extension of aliases.
 4. **Validation runs during the fold.** Errors such as "ligate on a site with no break" or "bind a degraded actor" are reported at compile time, because the engine precomputes every step boundary. Cost is O(steps × actors), negligible at this scale, and it makes `at()` O(1).
-5. **Parallel safety is checked on writes only.** Two branches that read what the other writes (e.g. bind to a product synthesised in a sibling branch) are not detected yet. The rule to document: *a branch must not depend on its siblings*.
+5. **Parallel safety is checked on writes only.** *Approved for now.* `parallel` means independence declared by the author. The compiler rejects write conflicts but does not detect read-after-write dependencies (e.g. binding to a product synthesised in a sibling branch). Authors must not make a branch depend on its siblings.
 6. **`present` vs `visible`.** Biology (does it exist?) is kept separate from narrative (is it shown now?). `synthesize` and `degrade` change both. `show` and `hide` change only `visible`.
-7. **Translocation carries dependents.** Moving an actor moves everything bound to it and releases its own binding. This is deterministic and matches the common case (ERK leaving MEK), but differs from "the whole complex moves". Authors translocate the root of the complex for that.
+7. **Translocation moves only the named actor.** *Revised after review.* `translocate` never unbinds anything and, by default, never moves anything else. `includeBound: true` moves the actor plus every actor bound to it, directly or transitively, keeping all their bindings. The partner the actor itself is bound to is not moved: to move a whole complex, translocate its root. Separating an actor from its partner is always an explicit `unbind`.
 8. **v1 stays readable.** `parseMechanism` migrates `schemaVersion: 1` documents automatically, and a golden test locks the migrated PARP1 and HR scenes to the exact output of the v1 engine.
 9. **Durations are presentation only.** They never affect state, so seeking by step stays a pure function of the step index.
+10. **Remaining implicit side effects.** Under the design rule, these are the only ones left, each justified by keeping state consistent or by v1 compatibility:
+    - `bind` makes the bound actor visible, because a binding to an invisible actor cannot be drawn. It is also what v1 did, so the golden tests depend on it.
+    - `synthesize` makes the product visible and, if no compartment is given, places it in the agent's compartment.
+    - `degrade` hides the actor and releases the actor's own binding and every binding *to* it. Otherwise references would point to an actor that no longer exists.
+
+    Candidate for later: make `degrade` fail while other actors are still bound to the degraded one, instead of releasing them, so the author has to write the `unbind`s.

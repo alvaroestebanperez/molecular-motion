@@ -436,7 +436,7 @@
         },
         {
           "type": "object",
-          "description": "Move an actor, and everything bound to it, to another compartment.",
+          "description": "Move an actor to another compartment. Bindings are never changed.",
           "required": [
             "type",
             "actor",
@@ -460,6 +460,10 @@
             },
             "to": {
               "$ref": "#/$defs/id"
+            },
+            "includeBound": {
+              "type": "boolean",
+              "description": "Also move every actor bound to this one, directly or transitively, keeping their bindings."
             }
           },
           "additionalProperties": false
