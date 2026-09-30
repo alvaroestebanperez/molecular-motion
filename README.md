@@ -4,12 +4,12 @@
 
 **A declarative engine for building interactive molecular biology mechanisms on the web.**
 
-[![CI](https://github.com/alvaroesteban/molecular-motion/actions/workflows/ci.yml/badge.svg)](https://github.com/alvaroesteban/molecular-motion/actions/workflows/ci.yml)
+[![CI](https://github.com/alvaroestebanperez/molecular-motion/actions/workflows/ci.yml/badge.svg)](https://github.com/alvaroestebanperez/molecular-motion/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22d3ee.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Status: experimental](https://img.shields.io/badge/status-experimental-f59e0b.svg)](#roadmap)
 
-[Demo](https://alvaroesteban.github.io/molecular-motion/) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
+[Demo](https://alvaroestebanperez.github.io/molecular-motion/) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -20,12 +20,12 @@ Molecular Motion turns a YAML or JSON description of **actors, molecular sites, 
 
 ## Demo
 
-The [demo](https://alvaroesteban.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [playground](https://alvaroesteban.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
+The [interactive playground](https://alvaroestebanperez.github.io/molecular-motion/) places an editable YAML document next to the generated mechanism. Change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
 ```bash
-git clone https://github.com/alvaroesteban/molecular-motion.git
+git clone https://github.com/alvaroestebanperez/molecular-motion.git
 cd molecular-motion
 npm install
 npm run dev
@@ -254,7 +254,7 @@ examples/     # complete mechanism definitions
 - [ ] Visual editor and schema-aware YAML language service
 - [ ] Published npm packages and stable `1.0` schema
 
-See an important biological primitive missing? [Open a proposal](https://github.com/alvaroesteban/molecular-motion/issues/new) describing the concept independently from its desired animation.
+See an important biological primitive missing? [Open a proposal](https://github.com/alvaroestebanperez/molecular-motion/issues/new) describing the concept independently from its desired animation.
 
 ## Contributing
 
