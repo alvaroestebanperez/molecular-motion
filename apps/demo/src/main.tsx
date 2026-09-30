@@ -1,6 +1,6 @@
 import { StrictMode, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MechanismValidationError, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism, MechanismValidationError, parseMechanism } from '@molecular-motion/core';
 import { MolecularMechanism } from '@molecular-motion/react';
 import parpSource from '../../../examples/parp1-ssb-repair.yaml?raw';
 import hrSource from '../../../examples/homologous-recombination.yaml?raw';
@@ -12,7 +12,11 @@ function App() {
   const [source, setSource] = useState(parpSource);
   const [active, setActive] = useState(Object.keys(examples)[0]!);
   const result = useMemo(() => {
-    try { return { definition: parseMechanism(source), error: null }; }
+    try {
+      const definition = parseMechanism(source);
+      compileMechanism(definition); // surfaces state-dependent errors (e.g. ligate before cleave) instead of crashing the player
+      return { definition, error: null };
+    }
     catch (error) {
       const message = error instanceof MechanismValidationError ? error.issues.join('\n') : String(error);
       return { definition: null, error: message };
@@ -49,7 +53,7 @@ function App() {
         </label>
         <div className="preview">
           {result.definition
-            ? <MolecularMechanism definition={result.definition} />
+            ? <MolecularMechanism key={active} definition={result.definition} />
             : <pre className="error" role="alert">{result.error}</pre>}
         </div>
       </div>
