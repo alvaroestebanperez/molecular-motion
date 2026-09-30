@@ -32,7 +32,7 @@ function App() {
         <h1>Describe the biology.<br/><em>Let it move.</em></h1>
         <p>Write actors, steps and actions as YAML. Molecular Motion turns them into an interactive, accessible SVG mechanism.</p>
       </div>
-      <div className="hero__meta"><span>Schema v1</span><span>SVG</span><span>React</span></div>
+      <div className="hero__meta"><span>Schema v2</span><span>SVG</span><span>React</span></div>
     </header>
 
     <section className="workspace" aria-label="Molecular Motion playground">

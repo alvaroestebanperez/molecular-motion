@@ -73,7 +73,7 @@ export function MolecularMechanism({
     const actor = actorFromTarget(event.target);
     if (actor) { event.preventDefault(); selectActor(actor === selectedActor ? null : actor); }
   };
-  const selected = selectedActor ? snapshot.actors[selectedActor] : undefined;
+  const selected = selectedActor ? mechanism.definition.actors.find(actor => actor.id === selectedActor) : undefined;
 
   return <section className={`mm-player ${className}`.trim()} style={style} aria-label={definition.mechanism.name}>
     <style>{molecularMotionCss + playerCss}</style>
