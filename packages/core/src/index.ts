@@ -1,5 +1,12 @@
-export { compileMechanism, snapshotAt } from './engine';
-export type { CompiledMechanism } from './engine';
+export { compileMechanism, diff, initialState, DEFAULT_ACTION_DURATION } from './engine';
+export type { CompiledMechanism, CompileOptions } from './engine';
 export { parseMechanism } from './parse';
 export { MechanismValidationError, validateMechanism } from './validate';
+export type { ValidateOptions } from './validate';
+export { migrateV1 } from './migrate';
+export { ActionFailure, ActionRegistry, BASE_FIELDS, defineAlias, definePrimitive, field } from './registry';
+export type { ActionDefinition, AliasDefinition, ApplyContext, FieldSpec, PrimitiveDefinition, ResolvedAction, ValidationContext } from './registry';
+export { ACTIVITIES, LESIONS, builtinActions, builtinRegistry } from './actions';
+export { COMPARTMENT_KINDS, STANDARD_COMPARTMENTS } from './compartments';
+export { toJsonSchema } from './schema';
 export type * from './types';

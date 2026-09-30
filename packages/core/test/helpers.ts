@@ -1,0 +1,34 @@
+import { readFileSync } from 'node:fs';
+import type { CompiledMechanism } from '../src';
+
+export const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
+
+export const readExample = (name: string) => readFileSync(new URL(`../../../examples/${name}.yaml`, import.meta.url), 'utf8');
+export const readV1Fixture = (name: string) => readFileSync(new URL(`./fixtures/v1/${name}.yaml`, import.meta.url), 'utf8');
+export const readGolden = (name: string) => JSON.parse(readFileSync(new URL(`./fixtures/v1/${name}.golden.json`, import.meta.url), 'utf8'));
+
+/** Project v2 snapshots onto what the v1 engine exposed, to compare against golden output. */
+export function projectToV1(mechanism: CompiledMechanism) {
+  return Array.from({ length: mechanism.length }, (_, index) => {
+    const snapshot = mechanism.at(index);
+    return {
+      step: snapshot.step.id,
+      actors: Object.fromEntries(Object.values(snapshot.actors).map(actor => {
+        const chain = actor.modifications.find(modification => modification.length);
+        return [actor.id, {
+          visible: actor.present && actor.visible,
+          boundTo: actor.boundTo ?? null,
+          polymer: chain ? { product: chain.label, length: chain.length } : null,
+        }];
+      })),
+      lesions: Object.fromEntries(Object.entries(snapshot.sites).flatMap(([reference, site]) => site.lesion ? [[reference, site.lesion]] : [])),
+    };
+  });
+}
+
+/** Every snapshot of a mechanism as plain JSON (drops the shared definition). */
+export const allStates = (mechanism: CompiledMechanism) =>
+  Array.from({ length: mechanism.length }, (_, index) => {
+    const { actors, sites, timeline, duration } = mechanism.at(index);
+    return JSON.parse(JSON.stringify({ actors, sites, timeline, duration }));
+  });

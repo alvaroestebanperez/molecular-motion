@@ -1,143 +1,1000 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.dev/schema/v1.json",
+  "$id": "https://molecular-motion.dev/schema/v2.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
-  "required": ["schemaVersion", "mechanism", "actors", "steps"],
+  "required": [
+    "schemaVersion",
+    "mechanism",
+    "actors",
+    "steps"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": {
+      "const": 2
+    },
     "mechanism": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": [
+        "id",
+        "name"
+      ],
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "compartments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/compartment"
       }
     },
     "actors": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/actor" }
+      "items": {
+        "$ref": "#/$defs/actor"
+      }
     },
     "steps": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/step" }
+      "items": {
+        "$ref": "#/$defs/step"
+      }
     }
   },
   "$defs": {
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
     "point": {
       "type": "object",
-      "required": ["x", "y"],
-      "properties": { "x": { "type": "number" }, "y": { "type": "number" } },
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
       "additionalProperties": false
+    },
+    "compartment": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "A standard compartment id."
+        },
+        {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "kind": {
+              "enum": [
+                "extracellular",
+                "membrane",
+                "cytoplasm",
+                "nucleus",
+                "er",
+                "golgi",
+                "mitochondrion",
+                "endosome",
+                "generic"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "parent": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        }
+      ]
     },
     "site": {
       "type": "object",
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "type": { "type": "string" },
-        "label": { "type": "string" },
-        "position": { "oneOf": [{ "enum": ["start", "center", "end"] }, { "$ref": "#/$defs/point" }] }
-      },
-      "additionalProperties": false
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "position": {
+          "oneOf": [
+            {
+              "enum": [
+                "start",
+                "center",
+                "end"
+              ]
+            },
+            {
+              "$ref": "#/$defs/point"
+            }
+          ]
+        }
+      }
     },
     "actor": {
       "type": "object",
-      "required": ["id", "type"],
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "type": { "enum": ["dna", "rna", "protein", "molecule", "complex"] },
-        "label": { "type": "string" },
-        "description": { "type": "string" },
-        "color": { "type": "string" },
-        "position": { "$ref": "#/$defs/point" },
-        "sites": { "type": "array", "items": { "$ref": "#/$defs/site" } },
-        "initiallyVisible": { "type": "boolean" }
-      },
-      "additionalProperties": false
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "enum": [
+            "dna",
+            "rna",
+            "protein",
+            "molecule",
+            "complex"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/point"
+        },
+        "sites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/site"
+          }
+        },
+        "compartment": {
+          "$ref": "#/$defs/id"
+        },
+        "initial": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "activity": {
+              "enum": [
+                "active",
+                "inactive",
+                "inhibited"
+              ]
+            }
+          }
+        }
+      }
     },
     "step": {
       "type": "object",
-      "required": ["id", "title", "actions"],
+      "required": [
+        "id",
+        "title",
+        "actions"
+      ],
+      "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "title": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "duration": { "type": "number", "minimum": 0 },
-        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } }
-      },
-      "additionalProperties": false
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    },
+    "node": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/action"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sequence"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "sequence": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "parallel"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "parallel": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        }
+      ]
     },
     "action": {
       "oneOf": [
-        { "$ref": "#/$defs/lesionAction" },
-        { "$ref": "#/$defs/actorTargetAction" },
-        { "$ref": "#/$defs/actorAction" },
-        { "$ref": "#/$defs/polymerizeAction" },
-        { "$ref": "#/$defs/modifyAction" }
+        {
+          "type": "object",
+          "description": "Associate an actor with another actor or one of its sites.",
+          "required": [
+            "type",
+            "actor",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "bind"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Release an actor from its binding partner.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "unbind"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Set visibility or activity of an actor, or the lesion state of a site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "set-state"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "activity": {
+              "enum": [
+                "active",
+                "inactive",
+                "inhibited"
+              ]
+            },
+            "lesion": {
+              "enum": [
+                "single-strand-break",
+                "double-strand-break",
+                "base-damage",
+                "abasic-site",
+                "adduct",
+                "none"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Add or remove a covalent modification, chain, or filament on an actor.",
+          "required": [
+            "type",
+            "actor",
+            "kind"
+          ],
+          "properties": {
+            "type": {
+              "const": "modify"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Open vocabulary, e.g. phosphorylation, ubiquitination."
+            },
+            "site": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Residue or region, e.g. Y1068."
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Chain or filament length."
+            },
+            "remove": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Move an actor, and everything bound to it, to another compartment.",
+          "required": [
+            "type",
+            "actor",
+            "to"
+          ],
+          "properties": {
+            "type": {
+              "const": "translocate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "to": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Bring a declared product into existence (initial.present: false).",
+          "required": [
+            "type",
+            "product"
+          ],
+          "properties": {
+            "type": {
+              "const": "synthesize"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "product": {
+              "$ref": "#/$defs/id"
+            },
+            "compartment": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Remove an actor from existence and release everything bound to it.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "degrade"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Break the backbone of a nucleic acid at a site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "cleave"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+            },
+            "lesion": {
+              "enum": [
+                "single-strand-break",
+                "double-strand-break"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Seal a backbone break at a site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "ligate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Bind an actor that is brought in by its target.",
+          "required": [
+            "type",
+            "actor",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "recruit"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Show an actor without changing its biology.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "show"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Hide an actor without changing its biology.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "hide"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Mark an actor as active.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "activate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Mark an actor as inactive.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "inactivate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Mark an actor as inhibited.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "inhibit"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Add phosphorylation, optionally at a named residue.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "phosphorylate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "site": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Remove phosphorylation, optionally at a named residue.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "dephosphorylate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "site": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Add ubiquitination, optionally at a named residue.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "ubiquitinate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "site": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Attach a poly(ADP-ribose) chain.",
+          "required": [
+            "type",
+            "actor"
+          ],
+          "properties": {
+            "type": {
+              "const": "parylate"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Grow a chain or filament on an actor.",
+          "required": [
+            "type",
+            "actor",
+            "product"
+          ],
+          "properties": {
+            "type": {
+              "const": "polymerize"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "actor": {
+              "$ref": "#/$defs/id"
+            },
+            "product": {
+              "type": "string",
+              "minLength": 1
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Mark a site as base-damage.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "damage"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+            },
+            "lesion": {
+              "enum": [
+                "base-damage",
+                "adduct"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Mark a site as abasic-site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "excise"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Restore an intact site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "repair"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+            }
+          },
+          "additionalProperties": false
+        }
       ]
-    },
-    "lesionAction": {
-      "type": "object",
-      "required": ["type", "target"],
-      "properties": {
-        "type": { "enum": ["create-lesion", "repair-lesion"] },
-        "target": { "type": "string" },
-        "lesion": { "enum": ["single-strand-break", "double-strand-break", "base-damage", "adduct"] },
-        "duration": { "type": "number" }
-      },
-      "additionalProperties": false
-    },
-    "actorTargetAction": {
-      "type": "object",
-      "required": ["type", "actor", "target"],
-      "properties": {
-        "type": { "enum": ["bind", "recruit"] },
-        "actor": { "$ref": "#/$defs/id" },
-        "target": { "type": "string" },
-        "duration": { "type": "number" }
-      },
-      "additionalProperties": false
-    },
-    "actorAction": {
-      "type": "object",
-      "required": ["type", "actor"],
-      "properties": {
-        "type": { "enum": ["unbind", "show", "hide"] },
-        "actor": { "$ref": "#/$defs/id" },
-        "duration": { "type": "number" }
-      },
-      "additionalProperties": false
-    },
-    "polymerizeAction": {
-      "type": "object",
-      "required": ["type", "actor", "product"],
-      "properties": {
-        "type": { "const": "polymerize" },
-        "actor": { "$ref": "#/$defs/id" },
-        "product": { "type": "string" },
-        "length": { "type": "integer", "minimum": 1 },
-        "duration": { "type": "number" }
-      },
-      "additionalProperties": false
-    },
-    "modifyAction": {
-      "type": "object",
-      "required": ["type", "actor", "modification"],
-      "properties": {
-        "type": { "const": "modify" },
-        "actor": { "$ref": "#/$defs/id" },
-        "modification": { "type": "string" },
-        "label": { "type": "string" },
-        "duration": { "type": "number" }
-      },
-      "additionalProperties": false
     }
   }
 }

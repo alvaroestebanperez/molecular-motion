@@ -1,0 +1,149 @@
+[
+  {
+    "step": "damage",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "parp1": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "xrcc1": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "lig3": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    }
+  },
+  {
+    "step": "recognition",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "parp1": {
+        "visible": true,
+        "boundTo": "dna.lesion",
+        "polymer": null
+      },
+      "xrcc1": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "lig3": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    }
+  },
+  {
+    "step": "parylation",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "parp1": {
+        "visible": true,
+        "boundTo": "dna.lesion",
+        "polymer": {
+          "product": "PAR",
+          "length": 9
+        }
+      },
+      "xrcc1": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      },
+      "lig3": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    }
+  },
+  {
+    "step": "scaffold",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "parp1": {
+        "visible": true,
+        "boundTo": "dna.lesion",
+        "polymer": {
+          "product": "PAR",
+          "length": 9
+        }
+      },
+      "xrcc1": {
+        "visible": true,
+        "boundTo": "parp1",
+        "polymer": null
+      },
+      "lig3": {
+        "visible": false,
+        "boundTo": null,
+        "polymer": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    }
+  },
+  {
+    "step": "ligation",
+    "actors": {
+      "dna": {
+        "visible": true,
+        "boundTo": null,
+        "polymer": null
+      },
+      "parp1": {
+        "visible": true,
+        "boundTo": "dna.lesion",
+        "polymer": {
+          "product": "PAR",
+          "length": 9
+        }
+      },
+      "xrcc1": {
+        "visible": true,
+        "boundTo": "parp1",
+        "polymer": null
+      },
+      "lig3": {
+        "visible": true,
+        "boundTo": "xrcc1",
+        "polymer": null
+      }
+    },
+    "lesions": {}
+  }
+]

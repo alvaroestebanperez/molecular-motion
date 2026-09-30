@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, MechanismValidationError, parseMechanism } from '../src';
+import {
+  builtinRegistry, compileMechanism, defineAlias, definePrimitive, field, MechanismValidationError, parseMechanism,
+} from '../src';
 
 const yaml = `
-schemaVersion: 1
+schemaVersion: 2
 mechanism:
   id: repair
   name: Repair
@@ -17,7 +19,7 @@ steps:
   - id: damage
     title: Damage
     actions:
-      - type: create-lesion
+      - type: cleave
         target: dna.lesion
   - id: binding
     title: Binding
@@ -32,11 +34,165 @@ describe('mechanism compiler', () => {
     const mechanism = compileMechanism(parseMechanism(yaml));
     expect(mechanism.at('binding').actors.sensor!.boundTo).toBe('dna.lesion');
     expect(mechanism.at('damage').actors.sensor!.boundTo).toBeUndefined();
-    expect(mechanism.at(1).lesions['dna.lesion']).toBe('single-strand-break');
+    expect(mechanism.at(1).sites['dna.lesion']!.lesion).toBe('single-strand-break');
   });
 
   it('reports semantic references with useful paths', () => {
     expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(MechanismValidationError);
-    expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(/unknown site/);
+    expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(/steps\[0\]\.actions\[0\]\.target references unknown site/);
+  });
+
+  it('rejects unknown actions and misspelled fields', () => {
+    expect(() => parseMechanism(yaml.replace('type: cleave', 'type: explode'))).toThrow(/"explode" is not a registered action/);
+    expect(() => parseMechanism(yaml.replace('actor: sensor', 'acter: sensor'))).toThrow(/acter is not a field of "bind"/);
+  });
+
+  it('reports alias errors at the authored path', () => {
+    expect(() => parseMechanism(yaml.replace('type: cleave\n        target: dna.lesion', 'type: phosphorylate\n        actor: ghost')))
+      .toThrow(/steps\[0\]\.actions\[0\]\.actor references unknown actor "ghost"/);
+  });
+
+  it('reports state-dependent errors at compile time', () => {
+    const ligateIntact = yaml.replace('type: cleave', 'type: ligate');
+    expect(() => compileMechanism(parseMechanism(ligateIntact))).toThrow(/steps\[0\]\.actions\[0\]: no strand break to ligate/);
+  });
+
+  it('still accepts schemaVersion 1 documents', () => {
+    const v1 = yaml.replace('schemaVersion: 2', 'schemaVersion: 1').replace('type: cleave', 'type: create-lesion');
+    expect(compileMechanism(parseMechanism(v1)).at(1).sites['dna.lesion']!.lesion).toBe('single-strand-break');
+  });
+});
+
+describe('built-in actions across target mechanisms', () => {
+  it('BER: base damage → abasic site → nick → sealed', () => {
+    const mechanism = compileMechanism({
+      schemaVersion: 2,
+      mechanism: { id: 'ber', name: 'BER' },
+      actors: [{ id: 'dna', type: 'dna', sites: [{ id: 'g' }] }, { id: 'ogg1', type: 'protein' }, { id: 'ape1', type: 'protein' }, { id: 'lig3', type: 'protein' }],
+      steps: [
+        { id: 'ox', title: 'Oxidation', actions: [{ type: 'damage', target: 'dna.g' }] },
+        { id: 'glyc', title: 'Glycosylase', actions: [{ type: 'recruit', actor: 'ogg1', target: 'dna.g' }, { type: 'excise', target: 'dna.g', by: 'ogg1' }] },
+        { id: 'incise', title: 'APE1', actions: [{ type: 'cleave', target: 'dna.g', by: 'ape1' }] },
+        { id: 'seal', title: 'Ligation', actions: [{ type: 'ligate', target: 'dna.g', by: 'lig3' }] },
+      ],
+    });
+    expect(['ox', 'glyc', 'incise', 'seal'].map(step => mechanism.at(step).sites['dna.g']!.lesion))
+      .toEqual(['base-damage', 'abasic-site', 'single-strand-break', undefined]);
+  });
+
+  it('cGAS–STING: synthesis, activation, and translocation between declared compartments', () => {
+    const mechanism = compileMechanism({
+      schemaVersion: 2,
+      mechanism: { id: 'cgas-sting', name: 'cGAS–STING' },
+      compartments: ['cytoplasm', 'er', 'golgi', 'nucleus'],
+      actors: [
+        { id: 'cgas', type: 'protein', compartment: 'cytoplasm', initial: { visible: true, activity: 'inactive' } },
+        { id: 'cgamp', type: 'molecule', initial: { present: false } },
+        { id: 'sting', type: 'protein', compartment: 'er', initial: { visible: true } },
+        { id: 'tbk1', type: 'protein', compartment: 'er' },
+        { id: 'irf3', type: 'protein', compartment: 'cytoplasm', initial: { visible: true } },
+      ],
+      steps: [
+        { id: 'sense', title: 'cGAS activation', actions: [{ type: 'activate', actor: 'cgas' }] },
+        { id: 'cgamp', title: 'cGAMP synthesis', actions: [{ type: 'synthesize', product: 'cgamp', by: 'cgas' }] },
+        { id: 'sting', title: 'STING activation', actions: [{ type: 'bind', actor: 'cgamp', target: 'sting' }, { type: 'recruit', actor: 'tbk1', target: 'sting' }, { type: 'translocate', actor: 'sting', to: 'golgi' }] },
+        { id: 'irf3', title: 'IRF3', actions: [{ type: 'phosphorylate', actor: 'irf3', site: 'S386', by: 'tbk1' }, { type: 'translocate', actor: 'irf3', to: 'nucleus' }] },
+      ],
+    });
+    expect(mechanism.at('cgamp').actors.cgamp).toMatchObject({ present: true, visible: true, compartment: 'cytoplasm' });
+    const sting = mechanism.at('sting');
+    expect(sting.actors.sting!.compartment).toBe('golgi');
+    expect(sting.actors.cgamp!.compartment).toBe('golgi');     // carried: bound to STING
+    expect(sting.actors.tbk1!.compartment).toBe('golgi');
+    const irf3 = mechanism.at('irf3').actors.irf3!;
+    expect(irf3.compartment).toBe('nucleus');
+    expect(irf3.modifications).toEqual([{ id: 'phosphorylation@S386', kind: 'phosphorylation', site: 'S386', label: 'P' }]);
+    expect(mechanism.at('irf3').timeline[0]).toMatchObject({ type: 'phosphorylate', primitive: 'modify', presentation: { verb: 'phosphorylates' }, agent: 'tbk1' });
+  });
+
+  it('EGFR–MAPK: inhibition, dephosphorylation, degradation', () => {
+    const mechanism = compileMechanism({
+      schemaVersion: 2,
+      mechanism: { id: 'egfr', name: 'EGFR' },
+      compartments: ['extracellular', 'membrane', 'cytoplasm'],
+      actors: [
+        { id: 'egf', type: 'molecule', compartment: 'extracellular', initial: { visible: true } },
+        { id: 'egfr', type: 'protein', compartment: 'membrane', initial: { visible: true } },
+        { id: 'erlotinib', type: 'molecule', compartment: 'cytoplasm' },
+      ],
+      steps: [
+        { id: 'on', title: 'On', actions: [{ type: 'bind', actor: 'egf', target: 'egfr' }, { type: 'phosphorylate', actor: 'egfr', site: 'Y1068' }, { type: 'activate', actor: 'egfr', by: 'egf' }] },
+        { id: 'drug', title: 'Drug', actions: [{ type: 'inhibit', actor: 'egfr', by: 'erlotinib' }, { type: 'dephosphorylate', actor: 'egfr', site: 'Y1068' }] },
+        { id: 'down', title: 'Down', actions: [{ type: 'degrade', actor: 'egfr' }] },
+      ],
+    });
+    expect(mechanism.at('on').actors.egfr!.activity).toEqual({ state: 'active', by: 'egf' });
+    expect(mechanism.at('drug').actors.egfr).toMatchObject({ activity: { state: 'inhibited', by: 'erlotinib' }, modifications: [] });
+    const down = mechanism.at('down').actors;
+    expect(down.egfr).toMatchObject({ present: false, visible: false });
+    expect(down.egf!.boundTo).toBeUndefined();
+  });
+
+  it('refuses actions on actors that are not present', () => {
+    expect(() => compileMechanism({
+      schemaVersion: 2,
+      mechanism: { id: 'x', name: 'X' },
+      actors: [{ id: 'a', type: 'protein' }, { id: 'b', type: 'protein', initial: { present: false } }],
+      steps: [{ id: 's', title: 'S', actions: [{ type: 'bind', actor: 'a', target: 'b' }] }],
+    })).toThrow(/"b" is not present/);
+  });
+});
+
+describe('compartments', () => {
+  const doc = (compartments: unknown[]) => ({
+    schemaVersion: 2, mechanism: { id: 'x', name: 'X' }, compartments,
+    actors: [{ id: 'a', type: 'protein', compartment: 'nucleus' }],
+    steps: [{ id: 's', title: 'S', actions: [{ type: 'show', actor: 'a' }] }],
+  });
+
+  it('resolves shorthands from the standard library and drops undeclared library parents', () => {
+    expect(compileMechanism(doc(['nucleus'])).definition.compartments).toEqual([{ id: 'nucleus', kind: 'nucleus', label: 'Nucleus' }]);
+    expect(compileMechanism(doc(['cytoplasm', 'nucleus'])).definition.compartments[1]!.parent).toBe('cytoplasm');
+  });
+
+  it('accepts custom compartments and rejects bad references', () => {
+    expect(compileMechanism(doc([{ id: 'nucleus', kind: 'nucleus' }, { id: 'nucleolus', parent: 'nucleus' }])).definition.compartments[1])
+      .toEqual({ id: 'nucleolus', kind: 'generic', parent: 'nucleus' });
+    expect(() => compileMechanism(doc(['cytoplasm']))).toThrow(/unknown compartment "nucleus"/);
+    expect(() => compileMechanism(doc(['nucleus', 'vacuole']))).toThrow(/"vacuole" is not a standard compartment/);
+    expect(() => compileMechanism(doc([{ id: 'nucleus', parent: 'x' }, { id: 'x', parent: 'nucleus' }]))).toThrow(/cyclic/);
+  });
+});
+
+describe('action registry', () => {
+  it('can be extended with custom primitives and aliases without touching the engine', () => {
+    const registry = builtinRegistry.extend([
+      defineAlias({
+        type: 'acetylate',
+        description: 'Add an acetyl group.',
+        fields: { actor: field.actor({ required: true }), site: field.string() },
+        presentation: { verb: 'acetylates' },
+        expand: action => ({ type: 'modify', actor: action.actor, kind: 'acetylation', site: action.site, label: 'Ac' }),
+      }),
+      definePrimitive<{ type: string; actor: string }>({
+        type: 'reset',
+        description: 'Clear all modifications.',
+        fields: { actor: field.actor({ required: true }) },
+        presentation: { verb: 'resets' },
+        apply: (_state, action, ctx) => { ctx.actor(action.actor).modifications = []; },
+      }),
+    ]);
+    const mechanism = compileMechanism({
+      schemaVersion: 2,
+      mechanism: { id: 'x', name: 'X' },
+      actors: [{ id: 'h3', type: 'protein' }],
+      steps: [
+        { id: 'ac', title: 'Ac', actions: [{ type: 'acetylate', actor: 'h3', site: 'K27' }] },
+        { id: 'reset', title: 'Reset', actions: [{ type: 'reset', actor: 'h3' }] },
+      ],
+    }, { registry });
+    expect(mechanism.at('ac').actors.h3!.modifications[0]!.id).toBe('acetylation@K27');
+    expect(mechanism.at('reset').actors.h3!.modifications).toEqual([]);
+    expect(() => builtinRegistry.extend([builtinRegistry.get('bind')!])).toThrow(/already registered/);
   });
 });
