@@ -54,15 +54,18 @@ The aim is not to reproduce atomistic simulations. Molecular Motion communicates
 ## A mechanism in YAML
 
 ```yaml
-schemaVersion: 1
+schemaVersion: 2
 
 mechanism:
   id: parp1-ssb-repair
   name: PARP1-mediated SSB repair
 
+compartments: [nucleus]
+
 actors:
   - id: dna
     type: dna
+    compartment: nucleus
     sites:
       - id: lesion
         type: single-strand-break
@@ -70,31 +73,36 @@ actors:
   - id: parp1
     type: protein
     label: PARP1
+    compartment: nucleus
+    initial: { activity: inactive }
 
   - id: xrcc1
     type: protein
     label: XRCC1
+    compartment: nucleus
 
 steps:
   - id: damage
     title: Single-strand break
     actions:
-      - type: create-lesion
+      - type: cleave
         target: dna.lesion
 
   - id: recognition
     title: PARP1 detects the break
-    actions:
+    actions:            # a list runs in sequence
       - type: bind
         actor: parp1
         target: dna.lesion
+      - type: activate
+        actor: parp1
+        by: dna
 
   - id: parylation
     title: PAR synthesis
     actions:
-      - type: polymerize
+      - type: parylate
         actor: parp1
-        product: PAR
         length: 9
 
   - id: recruitment
@@ -105,7 +113,9 @@ steps:
         target: parp1
 ```
 
-Targets use `actor.site` references. The validator catches unknown actors, sites, steps, and unsupported actions before the renderer runs.
+Targets use `actor.site` references. The validator catches unknown actors, sites, compartments, and actions, as well as misspelled fields, before the renderer runs. The compiler also rejects biologically impossible sequences, such as ligating a site that has no break or binding an actor that was degraded.
+
+`schemaVersion: 1` documents are still accepted and migrated automatically. The design of schema v2 is described in [RFC 0001](docs/rfcs/0001-schema-v2.md).
 
 ## React
 
@@ -170,11 +180,19 @@ framework-neutral scene graph     @molecular-motion/svg
 
 Every visual frame is derived by replaying actions from the initial definition to the selected step. This event-sourced model makes seeking deterministic and keeps scientific state independent from transient animation state.
 
-### MVP vocabulary
+### Vocabulary
 
-Actors: `dna`, `rna`, `protein`, `molecule`, and `complex`.
+Actors: `dna`, `rna`, `protein`, `molecule`, and `complex`, optionally placed in declared **compartments** (`extracellular`, `membrane`, `cytoplasm`, `nucleus`, `er`, `golgi`, `mitochondrion`, `endosome`, or custom ones).
 
-Actions: `create-lesion`, `repair-lesion`, `bind`, `recruit`, `unbind`, `polymerize`, `modify`, `show`, and `hide`.
+Actions come from an extensible **registry**. A small set of primitives defines every state transition:
+
+`bind` · `unbind` · `set-state` · `modify` · `translocate` · `synthesize` · `degrade` · `cleave` · `ligate`
+
+Biological verbs are aliases that expand to those primitives while keeping their own wording in captions:
+
+`recruit` · `activate` · `inactivate` · `inhibit` · `phosphorylate` · `dephosphorylate` · `ubiquitinate` · `parylate` · `polymerize` · `damage` · `excise` · `repair` · `show` · `hide`
+
+Actions in a step run in sequence. Wrap them in `parallel:` when they happen at the same time; parallel branches may not change the same state. Custom actions are registered with `builtinRegistry.extend([...])` and passed to `parseMechanism` / `compileMechanism` through `{ registry }`.
 
 Definitions may supply an explicit actor position when the automatic layout is not scientifically or visually appropriate. Coordinates remain an escape hatch, not the primary authoring model.
 
@@ -197,7 +215,8 @@ examples/     # complete mechanism definitions
 - [x] Automatic SVG layout with manual position overrides
 - [x] Keyboard-accessible React player with reduced-motion support
 - [x] Live editor with PARP1 and homologous recombination examples
-- [ ] Sequential and parallel action groups within a step
+- [x] Sequential and parallel action groups within a step
+- [x] Extensible action registry, compartments, and typed actor state
 - [ ] Rich DNA/RNA geometry, strand direction, and site anchors
 - [ ] Complex assembly, stoichiometry, and repeated actor instances
 - [ ] Camera actions, annotations, citations, and deep links
