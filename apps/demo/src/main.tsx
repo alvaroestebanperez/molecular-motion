@@ -18,12 +18,12 @@ const EXAMPLES: Example[] = [parpSource, hrSource].map(source => {
 
 // ---- Routing (hash based so it works on GitHub Pages) ----
 
-type Route = { page: 'mechanism'; id: string } | { page: 'playground' } | { page: 'vocabulary' };
+type Route = { page: 'mechanism'; id: string } | { page: 'playground' } | { page: 'visual-language' };
 
 function parseRoute(hash: string): Route {
   const [, page, id] = hash.replace(/^#/, '').split('/');
   if (page === 'playground') return { page: 'playground' };
-  if (page === 'vocabulary') return { page: 'vocabulary' };
+  if (page === 'visual-language' || page === 'vocabulary') return { page: 'visual-language' };
   const example = EXAMPLES.find(item => item.id === id) ?? EXAMPLES[0]!;
   return { page: 'mechanism', id: example.id };
 }
@@ -140,7 +140,7 @@ function Header({ route, theme, onTheme }: { route: Route; theme: Theme; onTheme
     <a className="brand" href="#/mechanisms"><Logo /><span>Molecular Motion</span></a>
     <nav aria-label="Main">
       <a href="#/mechanisms" aria-current={route.page === 'mechanism' ? 'page' : undefined}>Mechanisms</a>
-      <a href="#/vocabulary" aria-current={route.page === 'vocabulary' ? 'page' : undefined}>Visual vocabulary</a>
+      <a href="#/visual-language" aria-current={route.page === 'visual-language' ? 'page' : undefined}>Visual language</a>
       <a href="#/playground" aria-current={route.page === 'playground' ? 'page' : undefined}>Playground</a>
       <a href={`${REPOSITORY}#readme`} target="_blank" rel="noreferrer">Documentation</a>
     </nav>
@@ -261,12 +261,12 @@ function PlaygroundPage() {
 
 function VocabularyPage() {
   useMolecularMotionStyles();
-  useEffect(() => { document.title = 'Visual vocabulary · Molecular Motion'; }, []);
+  useEffect(() => { document.title = 'Visual language · Molecular Motion'; }, []);
   return <main className="vocabulary-page">
     <header className="vocabulary-page__heading">
-      <p>Component library</p>
-      <h1>Molecular visual vocabulary</h1>
-      <span>Reusable, semantic SVG building blocks for mechanisms, editors, legends, and documentation.</span>
+      <p>Scientific design system</p>
+      <h1>Molecular Motion · Visual Language</h1>
+      <span>Programmatic, deterministic SVG primitives for proteins, nucleic acids, molecular states and events. Every scene below is composed from reusable renderer primitives.</span>
     </header>
     <VisualVocabulary />
   </main>;
@@ -284,7 +284,7 @@ function App() {
     <div id="content">
       {example
         ? <MechanismPage key={example.id} example={example} />
-        : route.page === 'vocabulary' ? <VocabularyPage /> : <PlaygroundPage />}
+        : route.page === 'visual-language' ? <VocabularyPage /> : <PlaygroundPage />}
     </div>
     <footer className="site-footer">
       <span>Molecular Motion · MIT licensed</span>

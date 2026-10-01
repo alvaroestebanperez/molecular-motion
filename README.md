@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Status: experimental](https://img.shields.io/badge/status-experimental-f59e0b.svg)](#roadmap)
 
-[Demo](https://alvaroestebanperez.github.io/molecular-motion/) · [Visual vocabulary](https://alvaroestebanperez.github.io/molecular-motion/#/vocabulary) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
+[Demo](https://alvaroestebanperez.github.io/molecular-motion/) · [Visual language](https://alvaroestebanperez.github.io/molecular-motion/#/visual-language) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -20,7 +20,7 @@ Molecular Motion turns a YAML or JSON description of **actors, molecular sites, 
 
 ## Demo
 
-The [demo](https://alvaroestebanperez.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [visual vocabulary](https://alvaroestebanperez.github.io/molecular-motion/#/vocabulary) collects the reusable enzymes, proteins, molecules, nucleic acids, lesions, modifications, and compartments. The [playground](https://alvaroestebanperez.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
+The [demo](https://alvaroestebanperez.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [visual language](https://alvaroestebanperez.github.io/molecular-motion/#/visual-language) documents the reusable programmatic primitives for proteins, molecules, nucleic acids, lesions, modifications, membranes, compartments and molecular events. The [playground](https://alvaroestebanperez.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
@@ -172,8 +172,8 @@ The same code-native SVG language is available independently of a complete mecha
 import { MolecularGlyph, VisualVocabulary } from '@molecular-motion/react';
 
 <MolecularGlyph item="kinase" />
-<MolecularGlyph item="parylation" state="active" />
-<VisualVocabulary categories={['lesions', 'modifications']} />
+<MolecularGlyph item="parylation-branched" state="active" />
+<VisualVocabulary categories={['dna-damage', 'modifications']} />
 ```
 
 The built-in catalog covers common catalytic activities, non-catalytic proteins, cofactors, nucleic-acid structures, DNA lesions, PTMs, and compartments. Applications can also pass custom catalog entries. See [RFC 0003](docs/rfcs/0003-visual-vocabulary.md).

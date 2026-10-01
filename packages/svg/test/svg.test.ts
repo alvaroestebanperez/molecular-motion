@@ -46,6 +46,12 @@ describe('SVG renderer', () => {
     expect(renderSvg(buildSvgScene(parp1().at('activation')))).toMatch(/data-actor="parp1" data-activity="active"/);
   });
 
+  it('draws explicit binding relations from resolved SceneState', () => {
+    const svg = renderSvg(buildSvgScene(parp1().at('scaffold')));
+    expect(svg).toContain('data-layer="connections"');
+    expect(svg).toContain('data-key="connection:xrcc1:parp1"');
+  });
+
   it('draws upcoming actors out of focus, hidden from assistive tech and not focusable', () => {
     const svg = renderSvg(buildSvgScene(parp1().at('intact'), { ghosts: ['ogg1', 'ape1'] }));
     expect(svg).toMatch(/class="mm-actor mm-actor--protein mm-actor--ghost" data-key="actor:ogg1" data-actor="ogg1" aria-hidden="true"/);
