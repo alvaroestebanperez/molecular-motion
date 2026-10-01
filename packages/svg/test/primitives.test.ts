@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   primitiveCss, proteinGeometry, renderCompartmentPrimitive, renderInteractionPrimitive,
   nascentStrandGeometry, renderMembranePrimitive, renderModificationPrimitive, renderNucleicAcidPrimitive,
-  renderProteinPrimitive, renderVocabularyGlyph, membraneGeometry, type MembraneGeometry,
+  renderProteinPrimitive, renderVocabularyGlyph, membraneGeometry, type MembraneGeometry, type MembranePoint,
 } from '../src';
 import {
   actionCss, compartmentCss, interactionCss, lesionCss, membraneCss, modificationCss, moleculeCss, motionCss, nucleicCss, proteinCss,
 } from '../src/primitives';
+import { membranes } from './path';
 
 describe('visual primitives', () => {
   it('generates stable but distinct protein surfaces from visualSeed', () => {
@@ -118,8 +119,13 @@ describe('visual primitives', () => {
     for (const orientation of ['horizontal', 'vertical', 'curved'] as const) {
       const svg = renderMembranePrimitive({ orientation });
       expect(svg).toContain(`mm-membrane--${orientation}`);
-      expect(svg.match(/mm-membrane__leaflet--/g)).toHaveLength(2);
-      expect(svg).toContain('mm-membrane__core');
+      // Both leaflets are drawn, each with a row of heads and one tail stroke per lipid, over the core.
+      const [membrane] = membranes(svg);
+      const geometry = membraneGeometry({ orientation });
+      expect(membrane!.heads.outer).toHaveLength(geometry.leaflets[0].lipids.length);
+      expect(membrane!.heads.inner).toHaveLength(geometry.leaflets[1].lipids.length);
+      expect(membrane!.tails).toHaveLength(geometry.leaflets[0].lipids.length + geometry.leaflets[1].lipids.length);
+      expect(membrane!.core.length).toBeGreaterThanOrEqual(2);
     }
     // The legacy call (no orientation) is still a horizontal bilayer.
     expect(renderMembranePrimitive({ x: 20, y: 116, length: 260 })).toContain('mm-membrane--horizontal');
@@ -161,7 +167,7 @@ describe('visual primitives', () => {
       for (const length of [90, 150, 260]) {
         const geometry = membraneGeometry({ length });
         for (const leaflet of geometry.leaflets) expect(leaflet.lipids).toHaveLength(Math.floor(length / 9));
-        expect(renderMembranePrimitive({ length })).toContain(`data-heads="${Math.floor(length / 9)}"`);
+        expect(renderMembranePrimitive({ length })).toContain(`data-heads="${Math.floor(length / 9)} ${Math.floor(length / 9)}"`);
       }
       expect(membraneGeometry({ length: 120, spacing: 12 }).leaflets[0].lipids).toHaveLength(10);
       // On a curve the convex (outer) leaflet holds more lipids than the concave one.
@@ -204,6 +210,38 @@ describe('visual primitives', () => {
       expect(renderVocabularyGlyph('membrane-closed')).toBe(renderVocabularyGlyph('membrane-closed'));
       expect(random).not.toHaveBeenCalled();
       random.mockRestore();
+    });
+
+    it.each([
+      ['horizontal', { x: 25, y: 96, length: 250 }],
+      ['curved', { x: 25, y: 108, length: 250, orientation: 'curved' as const }],
+      ['closed', { shape: { kind: 'ellipse' as const, cx: 150, cy: 96, rx: 105, ry: 58 } }],
+    ])('draws exactly the geometry of membraneGeometry, in compact path data (%s)', (_, options) => {
+      const geometry = membraneGeometry(options); const [membrane] = membranes(renderMembranePrimitive(options));
+      const near = (a: { x: number; y: number }, b: { x: number; y: number }) => expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(.08);
+      const lipids = geometry.leaflets.flatMap(leaflet => leaflet.lipids);
+      // Relative commands do not accumulate rounding: every head and tail lands on its geometric position.
+      [...membrane!.heads.outer, ...membrane!.heads.inner].forEach((head, i) => near(head, lipids[i]!.head));
+      membrane!.tails.forEach((stroke, i) => {
+        const [[a1, b1], [a2, b2]] = lipids[i]!.tails as [[MembranePoint, MembranePoint], [MembranePoint, MembranePoint]];
+        expect(stroke).toHaveLength(4); [b1, a1, a2, b2].forEach((point, k) => near(stroke[k]!, point));
+        // The bend between the two tails stays hidden under the head disc (radius r + rim).
+        for (const point of [a1, a2]) expect(Math.hypot(point.x - lipids[i]!.head.x, point.y - lipids[i]!.head.y)).toBeLessThan(geometry.headRadius);
+      });
+      // Every rim is painted under its head, and the simplified core stays on the midplane.
+      expect(membrane!.rims).toBe(membrane!.headPath);
+      expect(membrane!.closed).toBe(geometry.closed);
+      for (const point of membrane!.core) expect(Math.min(...geometry.centerline.map(q => Math.hypot(q.x - point.x, q.y - point.y)))).toBeLessThan(.2);
+    });
+
+    it('keeps bilayer markup within its size budget', () => {
+      // Before the compact encoding: 5.4 KB for this membrane and 451 KB for the nine compartments.
+      expect(renderMembranePrimitive({ x: 25, y: 96, length: 250 }).length).toBeLessThan(2600);
+      const kinds = ['extracellular', 'cytoplasm', 'nucleus', 'organelle', 'er', 'golgi', 'mitochondrion', 'lysosome', 'endosome'] as const;
+      const compartments = kinds.map(kind => renderCompartmentPrimitive(kind, { x: 20, y: 15 }, { width: 260, height: 150 })).join('');
+      expect(compartments.length).toBeLessThan(160_000);
+      // One group and four paths per bilayer, whatever its length.
+      expect(renderMembranePrimitive({ length: 900 }).match(/<[a-z]/g)).toHaveLength(5);
     });
   });
 
