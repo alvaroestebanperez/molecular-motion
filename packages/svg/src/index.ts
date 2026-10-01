@@ -4,6 +4,8 @@ export { describeScene, LESION_LABELS, mix, molecularMotionCss, renderSvg } from
 export type { RenderOptions } from './render';
 export {
   contactOffset,
+  contactOutline,
+  firstContact,
   nascentStrandGeometry,
   primitiveCss,
   PROTEIN_MORPHOLOGIES,
@@ -22,11 +24,14 @@ export {
   renderProteinPrimitive,
   renderProteinSurface,
   renderSmallMoleculePrimitive,
+  shapesOverlap,
 } from './primitives';
 export type {
   ActionVisualKind,
+  ContactShape,
   ContactSide,
   DnaVisualState,
+  FirstContact,
   InteractionKind,
   InteractionOptions,
   MembraneGeometry,
