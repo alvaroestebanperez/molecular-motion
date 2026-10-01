@@ -6,7 +6,7 @@ import {
 } from './primitives';
 
 export type VocabularyCategory =
-  | 'proteins' | 'nucleic-acids' | 'enzymatic-actions' | 'modifications'
+  | 'proteins' | 'protein-identity' | 'nucleic-acids' | 'enzymatic-actions' | 'modifications'
   | 'dna-damage' | 'small-molecules' | 'gene-expression' | 'interactions'
   | 'membranes' | 'compartments' | 'receptors-complexes' | 'molecular-events' | 'test-scenes';
 export type VocabularyVisual = 'protein' | 'nucleic-acid' | 'enzyme' | 'modification' | 'lesion'
@@ -19,7 +19,7 @@ export interface VocabularyItem {
 export interface VocabularyRenderOptions { idPrefix?: string; width?: number; height?: number; decorative?: boolean }
 
 export const VOCABULARY_CATEGORY_LABELS: Record<VocabularyCategory, string> = {
-  proteins: 'Proteins and states', 'nucleic-acids': 'Nucleic acids',
+  proteins: 'Proteins and states', 'protein-identity': 'Protein identity test', 'nucleic-acids': 'Nucleic acids',
   'enzymatic-actions': 'Enzymatic actions', modifications: 'Post-translational modifications',
   'dna-damage': 'DNA damage and lesions', 'small-molecules': 'Small molecules and cofactors',
   'gene-expression': 'RNA and gene expression', interactions: 'Interactions and binding',
@@ -37,6 +37,11 @@ const expression = make('gene-expression', 'expression'); const interaction = ma
 const membrane = make('membranes', 'membrane'); const compartment = make('compartments', 'compartment');
 const receptor = make('receptors-complexes', 'receptor'); const event = make('molecular-events', 'event');
 const testScene = make('test-scenes', 'test-scene');
+const identity = make('protein-identity', 'protein');
+/** Seeds match the PARP1 mechanism actor ids, so each card shows the silhouette used there. */
+const IDENTITY_PROTEINS = [['parp1', 'PARP1'], ['xrcc1', 'XRCC1'], ['polb', 'POLβ'], ['lig3', 'LIG3'], ['ogg1', 'OGG1'], ['ape1', 'APE1']] as const;
+const IDENTITY_STATES = ['normal', 'active', 'inhibited', 'future'] as const;
+const IDENTITY_COLOR = '#7774d8';
 
 export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   protein('protein-normal','Normal','A stable, conceptual protein surface.','#7774d8'),
@@ -47,6 +52,8 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   protein('protein-selected','Selected','Selection is distinct from biological activity.','#4c91e7'),
   protein('protein-future','Future / preview','Blurred, muted and non-interactive.','#57aa85'),
   protein('protein-morphologies','Morphology families','Six deterministic silhouette families, distinguishable in a single colour.','#7774d8'),
+  ...IDENTITY_PROTEINS.map(([seed, name]) => identity(`identity-${seed}`, name, 'Same colour and size as every identity card: only the silhouette differs.', IDENTITY_COLOR)),
+  ...IDENTITY_STATES.map(state => identity(`identity-parp1-${state}`, `PARP1 · ${state}`, 'Same silhouette as PARP1: only the state presentation changes.', IDENTITY_COLOR)),
   acid('double-stranded-dna','Double-stranded DNA','Front and rear strands create restrained depth.'),
   acid('single-stranded-dna','Single-stranded DNA','An exposed DNA strand.'),
   acid('generic-rna','Generic RNA','A single conceptual RNA strand.'), acid('mrna','mRNA','Messenger RNA.'),
@@ -172,6 +179,7 @@ function eventScene(rawId:string):string {
 
 function art(entry:VocabularyItem):string {
   if(entry.id==='protein-morphologies') return PROTEIN_MORPHOLOGIES.map((family,i)=>{const x=55+(i%3)*95; const y=50+Math.floor(i/3)*78; return `${at(x,y,renderProteinPrimitive({visualSeed:`morphology-${family}`,morphology:family,fill:entry.color,radius:25}))}${label(family,x,y+39)}`;}).join('');
+  if(entry.category==='protein-identity') { const [, seed, state='normal']=entry.id.split('-') as [string,string,ProteinVisualState?]; return proteinAt(seed,150,98,entry.color??IDENTITY_COLOR,state,52); }
   if(entry.category==='proteins') return proteinAt(entry.id,150,98,entry.color??'#7774d8',entry.id.replace('protein-','') as ProteinVisualState,52);
   if(entry.category==='nucleic-acids') {
     const kind=entry.id==='generic-rna'?'rna':entry.id==='mrna'?'mrna':entry.id==='single-stranded-dna'?'ssdna':'dsdna';
