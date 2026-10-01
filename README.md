@@ -223,6 +223,8 @@ Every visual frame is derived by replaying actions from the initial definition t
 
 Actors: `dna`, `rna`, `protein`, `molecule`, and `complex`, optionally placed in declared **compartments** (`extracellular`, `membrane`, `cytoplasm`, `nucleus`, `er`, `golgi`, `mitochondrion`, `endosome`, or custom ones).
 
+A `molecule` actor may name its structure with an optional `molecule` key from the small-molecule vocabulary (`atp`, `adp`, `gtp`, `gdp`, `nad-plus`, `nadh`, `cgamp`, `glucose`, `calcium`, `zinc`), for example `molecule: nad-plus`. The viewer then draws the same topology glyph as the visual language; without a key, or with an unknown one, it draws a generic ball-and-stick glyph. The renderer never infers structure from the label.
+
 Actions come from an extensible **registry**. A small set of primitives defines every state transition:
 
 `bind` · `unbind` · `set-state` · `modify` · `translocate` · `synthesize` · `degrade` · `cleave` · `ligate`

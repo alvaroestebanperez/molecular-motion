@@ -619,6 +619,19 @@ function moleculeDrawing(topology: Exclude<SmallMoleculeTopology, { kind: 'ion' 
   return drawing;
 }
 
+/**
+ * Atoms of a topology glyph as circles in local coordinates, centred exactly as `renderSmallMoleculePrimitive`
+ * centres them at `scale`. Layout code uses it so contact and spacing match what is drawn.
+ */
+export function smallMoleculeAtoms(topology: SmallMoleculeTopology, scale = 1): { x: number; y: number; r: number }[] {
+  if (topology.kind === 'ion') return [{ x: 0, y: 0, r: 12 * (topology.size ?? 1) * scale }];
+  const drawing = moleculeDrawing(topology);
+  const extents = [...drawing.atoms.map(a => [a.p, a.r] as const), ...drawing.charges.map(p => [p, 3.4] as const)];
+  const cx = (Math.min(...extents.map(([p, r]) => p.x - r)) + Math.max(...extents.map(([p, r]) => p.x + r))) / 2;
+  const cy = (Math.min(...extents.map(([p, r]) => p.y - r)) + Math.max(...extents.map(([p, r]) => p.y + r))) / 2;
+  return drawing.atoms.map(a => ({ x: (a.p.x - cx) * scale, y: (a.p.y - cy) * scale, r: a.r * scale }));
+}
+
 function renderMoleculeTopology(options: SmallMoleculeOptions & { topology: SmallMoleculeTopology }): string {
   const x = options.x ?? 0; const y = options.y ?? 0; const scale = options.scale ?? 1; const { topology } = options;
   const open = (attrs: string) => `<g class="mm-primitive mm-primitive--molecule mm-molecule--topology" data-visual-seed="${esc(options.visualSeed)}" ${attrs}>`;
