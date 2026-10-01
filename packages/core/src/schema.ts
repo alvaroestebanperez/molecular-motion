@@ -126,6 +126,12 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           position: { $ref: '#/$defs/point' },
           sites: { type: 'array', items: { $ref: '#/$defs/site' } },
           compartment: { $ref: '#/$defs/id' },
+          visual: {
+            type: 'object',
+            required: ['preset'],
+            additionalProperties: false,
+            properties: { preset: { $ref: '#/$defs/id' } },
+          },
           initial: {
             type: 'object',
             additionalProperties: false,
