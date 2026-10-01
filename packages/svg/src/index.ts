@@ -3,6 +3,7 @@ export type { SceneActor, SceneConnection, SceneLesion, SceneNucleicAcid, SceneO
 export { describeScene, LESION_LABELS, mix, molecularMotionCss, renderSvg } from './render';
 export type { RenderOptions } from './render';
 export {
+  nascentStrandGeometry,
   primitiveCss,
   proteinGeometry,
   renderActionVisual,
@@ -19,6 +20,7 @@ export type {
   ActionVisualKind,
   DnaVisualState,
   MembraneOptions,
+  NascentStrandGeometry,
   ModificationVisualKind,
   NucleicAcidOptions,
   ProteinPrimitiveOptions,
