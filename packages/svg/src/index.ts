@@ -5,7 +5,9 @@ export type { RenderOptions } from './render';
 export {
   nascentStrandGeometry,
   primitiveCss,
+  PROTEIN_MORPHOLOGIES,
   proteinGeometry,
+  proteinMorphology,
   renderActionVisual,
   renderCompartmentPrimitive,
   renderInteractionPrimitive,
@@ -14,6 +16,7 @@ export {
   renderModificationPrimitive,
   renderNucleicAcidPrimitive,
   renderProteinPrimitive,
+  renderProteinSurface,
   renderSmallMoleculePrimitive,
 } from './primitives';
 export type {
@@ -23,6 +26,7 @@ export type {
   NascentStrandGeometry,
   ModificationVisualKind,
   NucleicAcidOptions,
+  ProteinMorphology,
   ProteinPrimitiveOptions,
   ProteinSphere,
   ProteinVisualState,
