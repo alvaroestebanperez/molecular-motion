@@ -3,6 +3,11 @@ export type { SceneActor, SceneConnection, SceneLesion, SceneNucleicAcid, SceneO
 export { describeScene, LESION_LABELS, mix, molecularMotionCss, renderSvg } from './render';
 export type { RenderOptions } from './render';
 export {
+  ACTION_ARROW_STROKE,
+  ACTION_VISUAL_STYLES,
+  actionArrowGeometry,
+  autoArrowCurvature,
+  renderActionArrow,
   contactOffset,
   contactOutline,
   firstContact,
@@ -29,6 +34,11 @@ export {
   transmembraneGeometry,
 } from './primitives';
 export type {
+  ActionArrowEnd,
+  ActionArrowGeometry,
+  ActionArrowMark,
+  ActionArrowOptions,
+  ActionArrowVariant,
   ActionVisualKind,
   CompartmentOptions,
   CompartmentVisualKind,
