@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { compileMechanism, parseMechanism } from '@molecular-motion/core';
 import {
-  MOLECULAR_VOCABULARY, PROTEIN_MORPHOLOGIES, buildSvgScene, proteinGeometry, proteinMorphology,
+  MOLECULAR_VOCABULARY, PROTEIN_MORPHOLOGIES, buildSvgScene, proteinAnchors, proteinGeometry, proteinMorphology, proteinOutlineWidth,
   renderProteinPrimitive, renderProteinSurface, renderSvg, renderVocabularyGlyph,
 } from '../src';
 import { silhouetteSimilarity } from './silhouette';
@@ -135,5 +135,55 @@ describe('protein surfaces', () => {
     const legend = renderVocabularyGlyph('protein-morphologies');
     expect(legend).toBe(renderVocabularyGlyph('protein-morphologies'));
     for (const morphology of PROTEIN_MORPHOLOGIES) expect(legend).toContain(`data-morphology="${morphology}"`);
+  });
+});
+
+describe('protein state catalog', () => {
+  it('shows one protein in every non-destructive state card', () => {
+    const states = ['protein-normal', 'protein-active', 'protein-inactive', 'protein-inhibited', 'protein-selected', 'protein-future'];
+    const surfaces = states.map(id => surface(renderVocabularyGlyph(id, { idPrefix: id })));
+    expect(new Set(surfaces).size).toBe(1);
+    const colors = MOLECULAR_VOCABULARY.filter(item => states.includes(item.id)).map(item => item.color);
+    expect(new Set(colors).size).toBe(1);
+  });
+});
+
+describe('protein contact anchors', () => {
+  const inside = (particles: ReturnType<typeof proteinGeometry>, x: number, y: number, margin: number) => particles.some(particle => {
+    const theta = particle.rotation * Math.PI / 180;
+    const u = (x - particle.x) * Math.cos(theta) + (y - particle.y) * Math.sin(theta);
+    const v = -(x - particle.x) * Math.sin(theta) + (y - particle.y) * Math.cos(theta);
+    return (u / (particle.rx + margin)) ** 2 + (v / (particle.ry + margin)) ** 2 <= 1;
+  });
+
+  it.each(PROTEIN_MORPHOLOGIES)('places %s anchors on the visible surface, outline included', morphology => {
+    const radius = 40;
+    const particles = proteinGeometry(`anchor-${morphology}`, radius, 28, morphology);
+    const margin = proteinOutlineWidth(radius);
+    const anchors = proteinAnchors(particles, radius);
+    const outward = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] } as const;
+    for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+      const point = anchors[side];
+      const [dx, dy] = outward[side];
+      expect(inside(particles, point.x - dx * .3, point.y - dy * .3, margin)).toBe(true);
+      expect(inside(particles, point.x + dx * 1.2, point.y + dy * 1.2, margin)).toBe(false);
+    }
+    expect(anchors.left.x).toBeLessThan(anchors.center.x);
+    expect(anchors.right.x).toBeGreaterThan(anchors.center.x);
+    expect(anchors.top.y).toBeLessThan(anchors.center.y);
+    expect(anchors.bottom.y).toBeGreaterThan(anchors.center.y);
+    expect(anchors.bounds.x).toBeLessThanOrEqual(anchors.left.x);
+    expect(anchors.bounds.x + anchors.bounds.width).toBeGreaterThanOrEqual(anchors.right.x);
+  });
+
+  it('uses the outer surface of a ring, not its hole', () => {
+    const particles = proteinGeometry('anchor-ring', 40, 28, 'ring');
+    const { right, center } = proteinAnchors(particles, 40);
+    expect(right.x - center.x).toBeGreaterThan(20);
+  });
+
+  it('is deterministic', () => {
+    const particles = proteinGeometry('XRCC1', 36);
+    expect(proteinAnchors(particles, 36)).toEqual(proteinAnchors(proteinGeometry('XRCC1', 36), 36));
   });
 });

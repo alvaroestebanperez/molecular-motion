@@ -236,7 +236,7 @@ export function renderProteinSurface(particles: readonly ProteinSphere[], fill: 
   }).join('');
   // Texture: a faint highlight per particle, offset towards the same light.
   const sheen = particles.map(particle => ellipse(particle.x + light.x * particle.r * .32, particle.y + light.y * particle.r * .32, particle.rx * .42, particle.ry * .42, particle.rotation)).join('');
-  const outline = Math.max(1.6, radius * .038);
+  const outline = proteinOutlineWidth(radius);
   return `<g class="mm-surface">`
     + `<g class="mm-surface__outline" fill="${mix(fill, '#17213b', .45)}">${all(outline)}</g>`
     + `<g class="mm-surface__shade" fill="${mix(fill, '#1b2340', .28)}">${all(0)}</g>`
@@ -244,6 +244,62 @@ export function renderProteinSurface(particles: readonly ProteinSphere[], fill: 
     + `<g class="mm-surface__light" fill="${mix(fill, '#ffffff', .45)}" opacity=".45">${lit(.58, .3, .7)}</g>`
     + `<g class="mm-surface__sheen" fill="#ffffff" opacity=".1">${sheen}</g>`
     + `</g>`;
+}
+
+/** Width of the silhouette outline drawn by `renderProteinSurface`; part of the visible surface. */
+export const proteinOutlineWidth = (radius: number) => Math.max(1.6, radius * .038);
+
+export interface ProteinPoint { x: number; y: number }
+/** Visual contact geometry of a protein surface. It carries no biological meaning. */
+export interface ProteinAnchors {
+  center: ProteinPoint;
+  bounds: { x: number; y: number; width: number; height: number };
+  left: ProteinPoint; right: ProteinPoint; top: ProteinPoint; bottom: ProteinPoint;
+}
+
+const insideParticle = (particle: ProteinSphere, x: number, y: number, margin: number) => {
+  const theta = particle.rotation * Math.PI / 180;
+  const dx = x - particle.x; const dy = y - particle.y;
+  const u = dx * Math.cos(theta) + dy * Math.sin(theta);
+  const v = -dx * Math.sin(theta) + dy * Math.cos(theta);
+  return (u / (particle.rx + margin)) ** 2 + (v / (particle.ry + margin)) ** 2 <= 1;
+};
+
+/**
+ * Contact anchors on the visible surface (outline included when `radius` is given), in the
+ * protein's local coordinates. Each anchor is the outermost surface point along a ray from the
+ * centre, so concave and ring-shaped proteins get real contact points, not bounding-circle points.
+ * Compositions place partners anchor-to-anchor, e.g. `A.right ↔ B.left`.
+ */
+export function proteinAnchors(particles: readonly ProteinSphere[], radius?: number): ProteinAnchors {
+  const margin = radius === undefined ? 0 : proteinOutlineWidth(radius);
+  const weight = particles.reduce((sum, particle) => sum + particle.rx * particle.ry, 0);
+  const center = {
+    x: particles.reduce((sum, particle) => sum + particle.x * particle.rx * particle.ry, 0) / weight,
+    y: particles.reduce((sum, particle) => sum + particle.y * particle.rx * particle.ry, 0) / weight,
+  };
+  const boxes = particles.map(particle => {
+    const theta = particle.rotation * Math.PI / 180;
+    const rx = particle.rx + margin; const ry = particle.ry + margin;
+    const hx = Math.hypot(rx * Math.cos(theta), ry * Math.sin(theta));
+    const hy = Math.hypot(rx * Math.sin(theta), ry * Math.cos(theta));
+    return [particle.x - hx, particle.y - hy, particle.x + hx, particle.y + hy] as const;
+  });
+  const x0 = Math.min(...boxes.map(box => box[0])); const y0 = Math.min(...boxes.map(box => box[1]));
+  const x1 = Math.max(...boxes.map(box => box[2])); const y1 = Math.max(...boxes.map(box => box[3]));
+  const reach = Math.hypot(Math.max(Math.abs(x0 - center.x), Math.abs(x1 - center.x)), Math.max(Math.abs(y0 - center.y), Math.abs(y1 - center.y)));
+  const along = (dx: number, dy: number): ProteinPoint => {
+    for (let t = reach; t >= 0; t -= .25) {
+      const x = center.x + dx * t; const y = center.y + dy * t;
+      if (particles.some(particle => insideParticle(particle, x, y, margin))) return { x: round(x), y: round(y) };
+    }
+    return { x: round(center.x), y: round(center.y) };
+  };
+  return {
+    center: { x: round(center.x), y: round(center.y) },
+    bounds: { x: round(x0), y: round(y0), width: round(x1 - x0), height: round(y1 - y0) },
+    left: along(-1, 0), right: along(1, 0), top: along(0, -1), bottom: along(0, 1),
+  };
 }
 
 export function renderProteinPrimitive(options: ProteinPrimitiveOptions): string {
@@ -496,16 +552,48 @@ export function renderActionVisual(kind: ActionVisualKind, from: { x: number; y:
   return `<g class="mm-action mm-action--${kind}"><path d="${path}"/><path d="M${to.x - 8} ${to.y - 5}L${to.x} ${to.y}l-8 5"/></g>`;
 }
 
-export const primitiveCss = `
-.mm-primitive .mm-surface{filter:drop-shadow(0 4px 4px #17213b24)}
+// One CSS constant per primitive, so independent changes to different primitives do not collide.
+
+/** Protein surfaces, states, halo and inhibition. */
+export const proteinCss = `.mm-primitive .mm-surface{filter:drop-shadow(0 4px 4px #17213b24)}
 .mm-primitive--inactive{opacity:.48;filter:saturate(.45)}.mm-primitive--future{opacity:.26;filter:blur(2.2px);pointer-events:none}.mm-primitive--degraded{opacity:.55}.mm-primitive__halo{fill:var(--mm-protein);opacity:.16;animation:mm-primitive-breathe 3s ease-in-out infinite}.mm-primitive--selected .mm-primitive__halo{stroke:var(--mm-accent,#2563eb);stroke-width:2}
-.mm-primitive__inhibition circle{fill:none;stroke:var(--mm-alert,#e5484d);stroke-width:3}.mm-primitive__inhibition path{stroke:var(--mm-alert,#e5484d);stroke-width:4;stroke-linecap:round}
-.mm-modification rect{fill:#fff;stroke:#334155;stroke-width:1}.mm-modification text{text-anchor:middle;fill:#17213b;font:700 9px Inter,system-ui}.mm-modification--phosphorylation rect,.mm-modification--acetylation rect{fill:#f7c85c}.mm-modification--methylation rect{fill:#e9829b}.mm-modification--sumoylation rect{fill:#82b7e8}.mm-modification--glycosylation rect{fill:#ec8bad}.mm-modification--chain path{fill:none;stroke:#c354bd;stroke-width:2}.mm-modification--chain circle{fill:#ce65c6;stroke:#fff;stroke-width:1}
-.mm-molecule__bonds{fill:none;stroke:#718096;stroke-width:3;stroke-linecap:round}.mm-atom{stroke:#fff;stroke-width:1}.mm-atom--c{fill:#9aa7bb}.mm-atom--n{fill:#4f84d4}.mm-atom--o{fill:#e75d67}.mm-atom--p{fill:#eaaa38}.mm-molecule__label{text-anchor:middle;fill:currentColor;font:600 10px Inter,system-ui}
-.mm-primitive--nucleic path{fill:none;stroke-linecap:round;stroke-linejoin:round}.mm-nucleic__strand{stroke:#477fd8;stroke-width:7}.mm-nucleic__strand--back{stroke:#9bb5e3;stroke-width:6}.mm-primitive--nucleic>path:not(.mm-nucleic__strand):not(.mm-nucleic__new){stroke:#819ed7;stroke-width:2.8}.mm-nucleic__new{stroke:#ed6680;stroke-width:5}.mm-nucleic__terminus{stroke:#e04b67;stroke-width:11}.mm-nucleic__bases path{stroke:#819ed7;stroke-width:2.8}.mm-nucleic__bases--new path{stroke:#f09aac}
-.mm-nucleic__polarity{fill:currentColor;font:700 10px Inter,system-ui;text-anchor:middle}.mm-nucleic__grow{animation:mm-nucleic-grow 6s cubic-bezier(.45,0,.35,1) infinite}.mm-nucleic__polarity--grow{animation:mm-nucleic-reveal 6s linear infinite}.mm-nucleic__follow{animation:mm-nucleic-follow 6s cubic-bezier(.45,0,.35,1) infinite}.mm-nucleic__rung--mismatch{stroke:#e5484d!important;stroke-width:4!important}
-.mm-lesion{stroke:#e5484d;stroke-width:3;fill:none}.mm-lesion--ap-site{fill:#fff}.mm-lesion--mismatch circle,.mm-lesion--adduct circle{fill:#e5484d;stroke:#fff;stroke-width:1}.mm-lesion--crosslink{stroke-width:4}
-.mm-primitive--membrane circle{fill:#e89a83;stroke:#bd705f;stroke-width:1}.mm-primitive--membrane path{stroke:#cb7c69;stroke-width:1.5}.mm-compartment{fill:#8aa7d5;opacity:.72}.mm-compartment path{fill:none;stroke:#5d86cc;stroke-width:6;stroke-linecap:round}.mm-compartment--mitochondrion{fill:#e57443}.mm-compartment--mitochondrion path{stroke:#fff}.mm-compartment--lysosome{fill:#8268bd}.mm-compartment--endosome{fill:#5b8fd8}
-.mm-primitive--interaction path{fill:none;stroke:#64748b;stroke-width:2;stroke-dasharray:3 3}.mm-action{color:var(--mm-action,currentColor)}.mm-action path{fill:none;stroke:currentColor;stroke-opacity:.82;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.mm-action--inhibit path{stroke:#e5484d;stroke-opacity:1}.mm-action--cleave path:last-child{stroke-opacity:1;stroke-width:3}
-@keyframes mm-primitive-breathe{50%{transform:scale(1.05);opacity:.23}}@keyframes mm-nucleic-grow{0%,12%{stroke-dashoffset:var(--mm-grow-from)}70%,100%{stroke-dashoffset:var(--mm-grow-to)}}@keyframes mm-nucleic-reveal{0%,68%{opacity:0}74%,100%{opacity:1}}@keyframes mm-nucleic-follow{0%,12%{transform:translateX(var(--mm-follow-from))}70%,100%{transform:none}}@media(prefers-reduced-motion:reduce){.mm-primitive *,.mm-action *,.mm-nucleic__follow{animation:none!important;transition:none!important}}
+.mm-primitive__inhibition circle{fill:none;stroke:var(--mm-alert,#e5484d);stroke-width:3}.mm-primitive__inhibition path{stroke:var(--mm-alert,#e5484d);stroke-width:4;stroke-linecap:round}`;
+
+/** Post-translational modification markers and chains. */
+export const modificationCss = `.mm-modification rect{fill:#fff;stroke:#334155;stroke-width:1}.mm-modification text{text-anchor:middle;fill:#17213b;font:700 9px Inter,system-ui}.mm-modification--phosphorylation rect,.mm-modification--acetylation rect{fill:#f7c85c}.mm-modification--methylation rect{fill:#e9829b}.mm-modification--sumoylation rect{fill:#82b7e8}.mm-modification--glycosylation rect{fill:#ec8bad}.mm-modification--chain path{fill:none;stroke:#c354bd;stroke-width:2}.mm-modification--chain circle{fill:#ce65c6;stroke:#fff;stroke-width:1}`;
+
+/** Small molecules. */
+export const moleculeCss = `.mm-molecule__bonds{fill:none;stroke:#718096;stroke-width:3;stroke-linecap:round}.mm-atom{stroke:#fff;stroke-width:1}.mm-atom--c{fill:#9aa7bb}.mm-atom--n{fill:#4f84d4}.mm-atom--o{fill:#e75d67}.mm-atom--p{fill:#eaaa38}.mm-molecule__label{text-anchor:middle;fill:currentColor;font:600 10px Inter,system-ui}`;
+
+/** Nucleic acids, including the elongating strand. */
+export const nucleicCss = `.mm-primitive--nucleic path{fill:none;stroke-linecap:round;stroke-linejoin:round}.mm-nucleic__strand{stroke:#477fd8;stroke-width:7}.mm-nucleic__strand--back{stroke:#9bb5e3;stroke-width:6}.mm-primitive--nucleic>path:not(.mm-nucleic__strand):not(.mm-nucleic__new){stroke:#819ed7;stroke-width:2.8}.mm-nucleic__new{stroke:#ed6680;stroke-width:5}.mm-nucleic__terminus{stroke:#e04b67;stroke-width:11}.mm-nucleic__bases path{stroke:#819ed7;stroke-width:2.8}.mm-nucleic__bases--new path{stroke:#f09aac}
+.mm-nucleic__polarity{fill:currentColor;font:700 10px Inter,system-ui;text-anchor:middle}.mm-nucleic__grow{animation:mm-nucleic-grow 6s cubic-bezier(.45,0,.35,1) infinite}.mm-nucleic__polarity--grow{animation:mm-nucleic-reveal 6s linear infinite}.mm-nucleic__follow{animation:mm-nucleic-follow 6s cubic-bezier(.45,0,.35,1) infinite}.mm-nucleic__rung--mismatch{stroke:#e5484d!important;stroke-width:4!important}`;
+
+/** DNA lesions. */
+export const lesionCss = `.mm-lesion{stroke:#e5484d;stroke-width:3;fill:none}.mm-lesion--ap-site{fill:#fff}.mm-lesion--mismatch circle,.mm-lesion--adduct circle{fill:#e5484d;stroke:#fff;stroke-width:1}.mm-lesion--crosslink{stroke-width:4}`;
+
+/** Lipid membranes. */
+export const membraneCss = `.mm-primitive--membrane circle{fill:#e89a83;stroke:#bd705f;stroke-width:1}.mm-primitive--membrane path{stroke:#cb7c69;stroke-width:1.5}`;
+
+/** Compartments and organelles. */
+export const compartmentCss = `.mm-compartment{fill:#8aa7d5;opacity:.72}.mm-compartment path{fill:none;stroke:#5d86cc;stroke-width:6;stroke-linecap:round}.mm-compartment--mitochondrion{fill:#e57443}.mm-compartment--mitochondrion path{stroke:#fff}.mm-compartment--lysosome{fill:#8268bd}.mm-compartment--endosome{fill:#5b8fd8}`;
+
+/** Interactions between actors. */
+export const interactionCss = `.mm-primitive--interaction path{fill:none;stroke:#64748b;stroke-width:2;stroke-dasharray:3 3}`;
+
+/** Action arrows. */
+export const actionCss = `.mm-action{color:var(--mm-action,currentColor)}.mm-action path{fill:none;stroke:currentColor;stroke-opacity:.82;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.mm-action--inhibit path{stroke:#e5484d;stroke-opacity:1}.mm-action--cleave path:last-child{stroke-opacity:1;stroke-width:3}`;
+
+/** Shared keyframes and the reduced-motion guard. Primitive-specific keyframes may also live in their own constant. */
+export const motionCss = `@keyframes mm-primitive-breathe{50%{transform:scale(1.05);opacity:.23}}@keyframes mm-nucleic-grow{0%,12%{stroke-dashoffset:var(--mm-grow-from)}70%,100%{stroke-dashoffset:var(--mm-grow-to)}}@keyframes mm-nucleic-reveal{0%,68%{opacity:0}74%,100%{opacity:1}}@keyframes mm-nucleic-follow{0%,12%{transform:translateX(var(--mm-follow-from))}70%,100%{transform:none}}@media(prefers-reduced-motion:reduce){.mm-primitive *,.mm-action *,.mm-nucleic__follow{animation:none!important;transition:none!important}}`;
+
+export const primitiveCss = `
+${proteinCss}
+${modificationCss}
+${moleculeCss}
+${nucleicCss}
+${lesionCss}
+${membraneCss}${compartmentCss}
+${interactionCss}${actionCss}
+${motionCss}
 `;
