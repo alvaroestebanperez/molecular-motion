@@ -145,10 +145,29 @@ describe('action arrow markup', () => {
     const from = { x: 0, y: 0 }; const to = { x: 120, y: 0 };
     expect(renderActionVisual('modify', from, to)).toContain('mm-action--modify');
     expect(renderActionVisual('modify', from, to)).toContain('mm-action__head');
-    expect(renderActionVisual('recruit', from, to)).toContain('mm-action--dashed');
+    expect(renderActionVisual('recruit', from, to)).not.toContain('mm-action--dashed');
     expect(renderActionVisual('inhibit', from, to)).toContain('mm-action__bar');
     expect(renderActionVisual('cleave', from, to)).toContain('mm-action__mark');
     expect(renderActionVisual('bind', from, to, { reverse: true })).toBe(renderActionArrow(from, to, { reverse: true, className: 'mm-action--bind' }));
+  });
+
+  it('recruit: solid motion arrow, the dashed directed relation is the only dashed cue', () => {
+    for (const id of ['recruit', 'event-recruit']) {
+      // Markup only: the inlined <style> block mentions every class name.
+      const svg = renderVocabularyGlyph(id, { idPrefix: id }).replace(/<style>[\s\S]*?<\/style>/, '');
+      const motion = svg.match(/<g class="mm-action [^"]*mm-action--recruit[^"]*"/g) ?? [];
+      expect(motion).toHaveLength(1);
+      expect(motion[0]).not.toContain('mm-action--dashed');
+      expect(svg.match(/mm-interaction--directed/g)).toHaveLength(1);
+      expect(svg).not.toContain('mm-action--dashed');
+    }
+  });
+
+  it('inhibit: a T-bar terminal, never a cross', () => {
+    const svg = renderVocabularyGlyph('event-inhibit', { idPrefix: 'event-inhibit' }).replace(/<style>[\s\S]*?<\/style>/, '');
+    expect(svg).toContain('mm-action__bar');
+    expect(svg).not.toContain('mm-action__mark');
+    expect(svg).not.toContain('mm-action__head');
   });
 
   it('is animable, and reduced motion leaves the finished arrow', () => {
