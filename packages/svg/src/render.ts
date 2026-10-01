@@ -1,6 +1,8 @@
 import type { LesionType } from '@molecular-motion/core';
 import { chainReach, hashString, HELIX, type SceneActor, type SceneNucleicAcid, type SvgScene } from './scene';
-import { primitiveCss, proteinGeometry, renderModificationPrimitive, type ModificationVisualKind } from './primitives';
+import { mix, primitiveCss, proteinGeometry, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
+
+export { mix };
 
 export interface RenderOptions {
   /** Unique per SVG in the document: gradient and filter ids are derived from it. */
@@ -180,32 +182,23 @@ function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string):
 
 interface Sphere { x: number; y: number; r: number }
 
-/** Deterministic cluster of spheres that reads as a molecular surface; shape is seeded by the actor id. */
-function sphereCluster(seed: number, radius: number, type: SceneActor['type']): Sphere[] {
+/** Small ball-and-stick chain for small molecules; jitter is seeded by the actor id. */
+function moleculeAtoms(seed: number, radius: number): Sphere[] {
   let state = seed || 1;
   const random = () => { state = Math.imul(state ^ (state >>> 15), 2246822507) ^ Math.imul(state ^ (state >>> 13), 3266489909); return ((state ^= state >>> 16) >>> 0) / 4294967296; };
-  if (type === 'molecule') {
-    // Small ball-and-stick chain.
-    return Array.from({ length: 6 }, (_, index) => ({ x: (index - 2.5) * radius * .55, y: (index % 2 ? -1 : 1) * radius * .32 + (random() - .5) * 4, r: radius * .36 }));
-  }
-  const count = type === 'complex' ? 30 : 24;
-  const spheres: Sphere[] = [{ x: 0, y: 0, r: radius * .42 }];
-  for (let index = 1; index < count; index++) {
-    const angle = index * 2.399963 + random() * .5;
-    const distance = radius * (.2 + .56 * Math.sqrt(index / count)) * (type === 'complex' ? 1.08 : 1);
-    spheres.push({ x: Math.cos(angle) * distance * 1.06, y: Math.sin(angle) * distance * .94, r: radius * (.2 + random() * .1) });
-  }
-  return spheres;
+  return Array.from({ length: 6 }, (_, index) => ({ x: (index - 2.5) * radius * .55, y: (index % 2 ? -1 : 1) * radius * .32 + (random() - .5) * 4, r: radius * .36 }));
 }
 
 function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, compact: boolean): string {
-  const spheres = actor.type === 'molecule'
-    ? sphereCluster(hashString(actor.id), actor.radius, actor.type)
-    : proteinGeometry(actor.id, actor.radius, actor.type === 'complex' ? 32 : 28);
-  const outline = spheres.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r + 1.6)}"/>`).join('');
-  const body = spheres.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r)}"/>`).join('');
-  const bonds = actor.type === 'molecule'
-    ? `<path class="mm-bonds" d="M${spheres.map(s => `${round(s.x)} ${round(s.y)}`).join('L')}"/>` : '';
+  // Small molecules stay ball-and-stick; proteins and complexes share the catalog's unified surface.
+  let shape: string;
+  if (actor.type === 'molecule') {
+    const atoms = moleculeAtoms(hashString(actor.id), actor.radius);
+    const circles = (grow: number) => atoms.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r + grow)}"/>`).join('');
+    shape = `<path class="mm-bonds" d="M${atoms.map(s => `${round(s.x)} ${round(s.y)}`).join('L')}"/><g class="mm-shape__outline">${circles(1.6)}</g><g class="mm-shape__body" fill="url(#${gradient})">${circles(0)}</g>`;
+  } else {
+    shape = renderProteinSurface(proteinGeometry(actor.id, actor.radius, actor.type === 'complex' ? 32 : 28), actor.color, actor.radius);
+  }
   const glow = actor.activity === 'active' && !actor.ghost ? `<circle class="mm-halo" r="${actor.radius + 18}" fill="url(#${halo})"/>` : '';
   const inhibition = actor.activity === 'inhibited' ? `<g class="mm-inhibition" aria-hidden="true"><circle r="${actor.radius + 7}"/><path d="M${round(-actor.radius * .72)} ${round(actor.radius * .72)}L${round(actor.radius * .72)} ${round(-actor.radius * .72)}"/></g>` : '';
   const chain = actor.chain ? parChain(actor) : '';
@@ -225,7 +218,7 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
     ? 'aria-hidden="true"'
     : `role="button" tabindex="0" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity].filter(Boolean).join(', '))}"`;
   return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
-    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${bonds}<g class="mm-shape__outline">${outline}</g><g class="mm-shape__body" fill="url(#${gradient})">${body}</g>${inhibition}${badges}</g></g>`;
+    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${shape}${inhibition}${badges}</g></g>`;
 }
 
 /** Branched bead chain leaving the actor's surface along `chain.angle`. */
@@ -334,20 +327,6 @@ function haloGradient(id: string, color: string): string {
   return `<radialGradient id="${id}"><stop offset=".55" style="stop-color:${escape(color)}" stop-opacity=".28"/><stop offset="1" style="stop-color:${escape(color)}" stop-opacity="0"/></radialGradient>`;
 }
 
-/** Mix two colours; hex values are mixed exactly, anything else falls back to CSS color-mix(). */
-export function mix(color: string, other: string, amount: number): string {
-  const parse = (hex: string) => {
-    const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
-    if (!match) return undefined;
-    const value = match[1]!.length === 3 ? match[1]!.split('').map(char => char + char).join('') : match[1]!;
-    return [0, 2, 4].map(offset => parseInt(value.slice(offset, offset + 2), 16));
-  };
-  const a = parse(color);
-  const b = parse(other);
-  if (!a || !b) return `color-mix(in srgb, ${escape(color)} ${Math.round((1 - amount) * 100)}%, ${other})`;
-  return `#${a.map((channel, index) => Math.round(channel + (b[index]! - channel) * amount).toString(16).padStart(2, '0')).join('')}`;
-}
-
 export const molecularMotionCss = `
 .mm-svg{--mm-ink:#15213b;--mm-muted:#4f5d75;--mm-surface:#ffffff;--mm-canvas:#f5f7fb;--mm-line:#dfe4ee;--mm-alert:#e5484d;--mm-dna:#3f63c4;--mm-dna-back:#a9b9e4;--mm-dna-rung:#8ea3dc;--mm-chain:#b44fb0;--mm-accent:#2563eb;display:block;width:100%;height:auto;overflow:visible;font-family:var(--mm-font,Inter,system-ui,sans-serif)}
 :where([data-theme=dark],.mm-theme-dark) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}
@@ -362,11 +341,11 @@ export const molecularMotionCss = `
 .mm-lesion__dot{fill:var(--mm-alert);stroke:var(--mm-surface);stroke-width:1.5}.mm-lesion__ring{fill:var(--mm-surface);stroke:var(--mm-alert);stroke-width:2}
 .mm-actor,.mm-label{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}
 .mm-actor{cursor:pointer;outline:none}.mm-actor--ghost,.mm-label--ghost{opacity:.26;cursor:default;pointer-events:none}
-.mm-shape__outline{fill:color-mix(in srgb,var(--mm-actor) 62%,var(--mm-ink))}
-.mm-actor--inactive .mm-actor__inner{opacity:.82}.mm-actor--inhibited .mm-shape__body{filter:grayscale(.75)}.mm-actor--inhibited .mm-shape__outline{fill:var(--mm-muted)}
+.mm-shape__outline,.mm-actor .mm-surface__outline{fill:color-mix(in srgb,var(--mm-actor) 62%,var(--mm-ink))}
+.mm-actor--inactive .mm-actor__inner{opacity:.82}.mm-actor--inhibited .mm-shape__body,.mm-actor--inhibited .mm-surface{filter:grayscale(.75)}.mm-actor--inhibited .mm-shape__outline,.mm-actor--inhibited .mm-surface__outline{fill:var(--mm-muted)}
 .mm-halo{animation:mm-breathe 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-inhibition circle{fill:none;stroke:var(--mm-alert);stroke-width:3}.mm-inhibition path{stroke:var(--mm-alert);stroke-width:4;stroke-linecap:round}
-.mm-actor:focus-visible .mm-shape__outline,.mm-actor[aria-pressed=true] .mm-shape__outline{fill:var(--mm-accent)}
+.mm-actor:focus-visible .mm-shape__outline,.mm-actor[aria-pressed=true] .mm-shape__outline,.mm-actor:focus-visible .mm-surface__outline,.mm-actor[aria-pressed=true] .mm-surface__outline{fill:var(--mm-accent)}
 .mm-bonds{fill:none;stroke:color-mix(in srgb,var(--mm-actor) 70%,var(--mm-ink));stroke-width:3.5;stroke-linecap:round}
 .mm-chain path{fill:none;stroke:var(--mm-chain);stroke-width:2.2;opacity:.7}.mm-chain circle{fill:var(--mm-chain);stroke:var(--mm-surface);stroke-width:1.2;animation:mm-bead .4s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 45ms);transform-box:fill-box;transform-origin:center}
 .mm-badge circle{fill:var(--mm-surface);stroke:var(--mm-ink);stroke-width:1.2}.mm-badge text{fill:var(--mm-ink);font-size:9px;font-weight:700}

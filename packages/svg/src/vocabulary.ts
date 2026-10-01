@@ -1,7 +1,7 @@
 import {
   nascentStrandGeometry, primitiveCss, renderActionVisual, renderCompartmentPrimitive, renderInteractionPrimitive,
   renderMembranePrimitive, renderNucleicAcidPrimitive, renderProteinPrimitive,
-  renderSmallMoleculePrimitive,
+  renderSmallMoleculePrimitive, PROTEIN_MORPHOLOGIES,
   type ActionVisualKind, type ModificationVisualKind, type ProteinVisualState, type VisualLesion,
 } from './primitives';
 
@@ -46,6 +46,7 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   protein('protein-degraded','Degraded','Fragments disperse while identity remains legible.','#7185bd'),
   protein('protein-selected','Selected','Selection is distinct from biological activity.','#4c91e7'),
   protein('protein-future','Future / preview','Blurred, muted and non-interactive.','#57aa85'),
+  protein('protein-morphologies','Morphology families','Six deterministic silhouette families, distinguishable in a single colour.','#7774d8'),
   acid('double-stranded-dna','Double-stranded DNA','Front and rear strands create restrained depth.'),
   acid('single-stranded-dna','Single-stranded DNA','An exposed DNA strand.'),
   acid('generic-rna','Generic RNA','A single conceptual RNA strand.'), acid('mrna','mRNA','Messenger RNA.'),
@@ -170,6 +171,7 @@ function eventScene(rawId:string):string {
 }
 
 function art(entry:VocabularyItem):string {
+  if(entry.id==='protein-morphologies') return PROTEIN_MORPHOLOGIES.map((family,i)=>{const x=55+(i%3)*95; const y=50+Math.floor(i/3)*78; return `${at(x,y,renderProteinPrimitive({visualSeed:`morphology-${family}`,morphology:family,fill:entry.color,radius:25}))}${label(family,x,y+39)}`;}).join('');
   if(entry.category==='proteins') return proteinAt(entry.id,150,98,entry.color??'#7774d8',entry.id.replace('protein-','') as ProteinVisualState,52);
   if(entry.category==='nucleic-acids') {
     const kind=entry.id==='generic-rna'?'rna':entry.id==='mrna'?'mrna':entry.id==='single-stranded-dna'?'ssdna':'dsdna';
