@@ -8,3 +8,5 @@ export { PlaybackControls, ReferenceList, StepDetails, StepThumbnails, StepTimel
 export type { PlaybackControlsProps } from './ui';
 export { patchSvg } from './patch';
 export { uiCss } from './styles';
+export { MolecularGlyph, VisualVocabulary, VocabularyCard } from './VisualVocabulary';
+export type { MolecularGlyphProps, VisualVocabularyProps, VocabularyCardProps } from './VisualVocabulary';

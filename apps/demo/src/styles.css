@@ -122,4 +122,18 @@ h1, h2, h3 { letter-spacing: -.012em; }
 .error { margin: 0; padding: 18px; border-color: color-mix(in srgb, var(--alert) 35%, var(--line)); color: var(--alert); font: 12.5px/1.6 'JetBrains Mono', monospace; white-space: pre-wrap; }
 @media (max-width: 900px) { .playground__grid { grid-template-columns: 1fr; } .editor textarea { min-height: 40vh; } }
 
+/* ---- Visual vocabulary ---- */
+
+.vocabulary-page { max-width: 1680px; margin: 0 auto; padding: 26px clamp(12px, 1.4vw, 20px) 32px; }
+.vocabulary-page__heading { margin: 0 0 22px; }
+.vocabulary-page__heading p { margin: 0 0 5px; color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.vocabulary-page__heading h1 { margin: 0; font-size: clamp(27px, 3vw, 40px); line-height: 1.15; }
+.vocabulary-page__heading span { display: block; max-width: 800px; margin-top: 7px; color: var(--muted); font-size: 16px; }
+.vocabulary-page .mm-vocabulary-grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+@media (max-width: 1080px) {
+  .site-header { gap: 12px; }
+  .site-header nav a { padding-inline: 8px; }
+}
+
 .site-footer { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; max-width: 1680px; margin: 0 auto; padding: 8px clamp(12px, 1.4vw, 20px) 24px; color: var(--muted); font-size: 12.5px; }

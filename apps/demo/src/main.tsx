@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type Key
 import { createRoot } from 'react-dom/client';
 import { compileMechanism, MechanismValidationError, parseMechanism, type MechanismDefinition } from '@molecular-motion/core';
 import {
-  MechanismStage, MolecularMechanism, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, useMechanismPlayer, useMolecularMotionStyles,
+  MechanismStage, MolecularMechanism, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, VisualVocabulary, useMechanismPlayer, useMolecularMotionStyles,
 } from '@molecular-motion/react';
 import parpSource from '../../../examples/parp1-ssb-repair.yaml?raw';
 import hrSource from '../../../examples/homologous-recombination.yaml?raw';
@@ -18,11 +18,12 @@ const EXAMPLES: Example[] = [parpSource, hrSource].map(source => {
 
 // ---- Routing (hash based so it works on GitHub Pages) ----
 
-type Route = { page: 'mechanism'; id: string } | { page: 'playground' };
+type Route = { page: 'mechanism'; id: string } | { page: 'playground' } | { page: 'vocabulary' };
 
 function parseRoute(hash: string): Route {
   const [, page, id] = hash.replace(/^#/, '').split('/');
   if (page === 'playground') return { page: 'playground' };
+  if (page === 'vocabulary') return { page: 'vocabulary' };
   const example = EXAMPLES.find(item => item.id === id) ?? EXAMPLES[0]!;
   return { page: 'mechanism', id: example.id };
 }
@@ -139,6 +140,7 @@ function Header({ route, theme, onTheme }: { route: Route; theme: Theme; onTheme
     <a className="brand" href="#/mechanisms"><Logo /><span>Molecular Motion</span></a>
     <nav aria-label="Main">
       <a href="#/mechanisms" aria-current={route.page === 'mechanism' ? 'page' : undefined}>Mechanisms</a>
+      <a href="#/vocabulary" aria-current={route.page === 'vocabulary' ? 'page' : undefined}>Visual vocabulary</a>
       <a href="#/playground" aria-current={route.page === 'playground' ? 'page' : undefined}>Playground</a>
       <a href={`${REPOSITORY}#readme`} target="_blank" rel="noreferrer">Documentation</a>
     </nav>
@@ -255,6 +257,21 @@ function PlaygroundPage() {
   </main>;
 }
 
+// ---- Visual vocabulary ----
+
+function VocabularyPage() {
+  useMolecularMotionStyles();
+  useEffect(() => { document.title = 'Visual vocabulary · Molecular Motion'; }, []);
+  return <main className="vocabulary-page">
+    <header className="vocabulary-page__heading">
+      <p>Component library</p>
+      <h1>Molecular visual vocabulary</h1>
+      <span>Reusable, semantic SVG building blocks for mechanisms, editors, legends, and documentation.</span>
+    </header>
+    <VisualVocabulary />
+  </main>;
+}
+
 // ---- App ----
 
 function App() {
@@ -265,7 +282,9 @@ function App() {
     <a className="skip-link" href="#content">Skip to content</a>
     <Header route={route} theme={theme} onTheme={setTheme} />
     <div id="content">
-      {example ? <MechanismPage key={example.id} example={example} /> : <PlaygroundPage />}
+      {example
+        ? <MechanismPage key={example.id} example={example} />
+        : route.page === 'vocabulary' ? <VocabularyPage /> : <PlaygroundPage />}
     </div>
     <footer className="site-footer">
       <span>Molecular Motion · MIT licensed</span>
