@@ -17,19 +17,16 @@ actors:
         type: double-strand-break
   - id: mrn
     type: complex
-    visual: { preset: nuclease }
     label: MRN
     color: "#fb923c"
     compartment: nucleus
   - id: brca1
     type: protein
-    visual: { preset: scaffold }
     label: BRCA1
     color: "#f472b6"
     compartment: nucleus
   - id: rad51
     type: protein
-    visual: { preset: structural-protein }
     label: RAD51
     color: "#818cf8"
     compartment: nucleus

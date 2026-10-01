@@ -16,12 +16,6 @@ export interface ActorSite {
   position?: 'start' | 'center' | 'end' | Point;
 }
 
-/** Optional renderer hint. It never changes biological state or action semantics. */
-export interface ActorVisual {
-  /** A visual-vocabulary id such as `glycosylase`, `polymerase`, `scaffold`, or `nad-plus`. */
-  preset: string;
-}
-
 export interface ActorDefinition {
   id: string;
   type: ActorType;
@@ -31,7 +25,6 @@ export interface ActorDefinition {
   position?: Point;
   sites?: ActorSite[];
   compartment?: string;
-  visual?: ActorVisual;
   initial?: { present?: boolean; visible?: boolean; activity?: Activity };
 }
 

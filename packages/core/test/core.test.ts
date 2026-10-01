@@ -47,12 +47,6 @@ describe('mechanism compiler', () => {
     expect(() => parseMechanism(yaml.replace('actor: sensor', 'acter: sensor'))).toThrow(/acter is not a field of "bind"/);
   });
 
-  it('keeps renderer-only visual presets separate from mechanism state', () => {
-    const definition = parseMechanism(yaml.replace('type: protein', 'type: protein\n    visual: { preset: glycosylase }'));
-    expect(definition.actors[1]!.visual).toEqual({ preset: 'glycosylase' });
-    expect(() => parseMechanism(yaml.replace('type: protein', 'type: protein\n    visual: { preset: "Bad preset" }'))).toThrow(/visual\.preset must be a lowercase identifier/);
-  });
-
   it('reports alias errors at the authored path', () => {
     expect(() => parseMechanism(yaml.replace('type: cleave\n        target: dna.lesion', 'type: phosphorylate\n        actor: ghost')))
       .toThrow(/steps\[0\]\.actions\[0\]\.actor references unknown actor "ghost"/);

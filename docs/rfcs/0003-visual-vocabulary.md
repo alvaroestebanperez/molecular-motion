@@ -46,23 +46,16 @@ Framework-neutral consumers use `renderVocabularyGlyph`, `proteinSurface`, `smal
 
 Every standalone glyph has a `<title>` and `<desc>`. Inside a named card it becomes decorative to avoid duplicate announcements. Geometry is deterministic so the same preset can participate in stable transitions.
 
-## 4. Integration with mechanism actors
+## 4. Deliberate boundary with the mechanism schema
 
-The catalog does **not** add dozens of new actor types or action verbs to schema v2. “Kinase” describes a protein's role; it is not a new physical actor type. “Phosphorylation” is a modification state; it is not a renderer instruction.
+The initial catalog does **not** add dozens of new actor types or action verbs to schema v2. “Kinase” describes a protein's role; it is not a new physical actor type. “Phosphorylation” is a modification state; it is not a renderer instruction.
 
-Actors may instead carry an optional, presentation-only hint:
-
-```yaml
-- id: polb
-  type: protein
-  visual: { preset: polymerase }
-```
-
-The scene graph preserves this hint and the renderer uses it for silhouette and catalytic-role cues. It never affects state, validation of biological actions, or the timeline, so documents without it remain fully backward compatible.
+The next schema RFC may add an optional visual hint such as `visual.preset: kinase`. Until then, the vocabulary is independently useful as a component library and the current mechanism renderer remains fully backward compatible.
 
 ## 5. Follow-ups
 
 - Reuse the primitives inside the main scene renderer instead of its older private equivalents.
+- Define an optional, themeable `visual` hint in the mechanism schema.
 - Add domain-level protein shapes and membrane topology.
 - Add strand polarity, base-pair identity, and richer RNA secondary structure.
 - Let applications register catalog extensions without forking the built-ins.

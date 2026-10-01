@@ -66,7 +66,6 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     }
     if (typeof actor.type !== 'string' || !ACTOR_TYPES.has(actor.type)) issues.push(`${path}.type is not supported`);
     if (actor.compartment !== undefined && !refs.compartments.has(actor.compartment as string)) issues.push(`${path}.compartment references unknown compartment "${String(actor.compartment)}"`);
-    if (actor.visual !== undefined) validateVisual(actor.visual, `${path}.visual`, issues);
     if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, issues);
     if (Array.isArray(actor.sites)) actor.sites.forEach((site, siteIndex) => {
       if (!isObject(site) || typeof site.id !== 'string' || !site.id) issues.push(`${path}.sites[${siteIndex}].id must be a non-empty string`);
@@ -129,13 +128,6 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
 
   if (issues.length) throw new MechanismValidationError(issues);
   return structuredClone(definition);
-}
-
-function validateVisual(visual: unknown, path: string, issues: string[]) {
-  if (!isObject(visual)) return issues.push(`${path} must be an object`);
-  for (const key of Object.keys(visual)) if (key !== 'preset') issues.push(`${path}.${key} is not supported`);
-  requiredString(visual.preset, `${path}.preset`, issues);
-  if (typeof visual.preset === 'string' && !/^[a-z][a-z0-9-]*$/.test(visual.preset)) issues.push(`${path}.preset must be a lowercase identifier`);
 }
 
 function validateField(value: unknown, spec: FieldSpec, path: string, refs: References, issues: string[]) {
