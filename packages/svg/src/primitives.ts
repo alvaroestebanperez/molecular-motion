@@ -316,20 +316,110 @@ export function renderProteinPrimitive(options: ProteinPrimitiveOptions): string
     : particles;
   const halo = state === 'active' || state === 'selected' ? `<circle class="mm-primitive__halo" r="${radius + 14}"/>` : '';
   const inhibit = state === 'inhibited' ? `<g class="mm-primitive__inhibition"><circle r="${radius + 8}"/><path d="M${-radius * .72} ${radius * .72}L${radius * .72} ${-radius * .72}"/></g>` : '';
-  const modifications = (options.modifications ?? []).map((modification, index) => renderModificationPrimitive(modification, {
-    x: Math.cos(-2.3 + index * .55) * radius * .92,
-    y: Math.sin(-2.3 + index * .55) * radius * .92,
-  })).join('');
+  // Markers keep their stable fan of angles, but each one sits on the visible outline along its ray,
+  // so concave, crescent and ring silhouettes never leave a marker floating over a gap.
+  const carrier = { particles: shown, margin: proteinOutlineWidth(radius) };
+  const modifications = (options.modifications ?? []).map((modification, index) => {
+    const angle = -2.3 + index * .55;
+    return renderModificationPrimitive(modification, proteinSurfacePoint(shown, angle, radius), { direction: { x: Math.cos(angle), y: Math.sin(angle) }, carrier });
+  }).join('');
   return `<g class="mm-primitive mm-primitive--protein mm-primitive--${state}" data-visual-seed="${esc(options.visualSeed)}" data-morphology="${options.morphology ?? proteinMorphology(options.visualSeed)}" style="--mm-protein:${esc(fill)}">${halo}${renderProteinSurface(shown, fill, radius)}${inhibit}${modifications}</g>`;
+}
+
+/**
+ * Where a ray from `origin` (default: the shape's local origin) along `angle` (radians) leaves the
+ * visible surface (outline included when `radius` is given): the outermost surface point on that
+ * ray. If the ray misses every particle (e.g. it crosses the opening of a crescent), the nearest
+ * outline point to where the ray meets the bounding radius is used instead. Pure visual geometry.
+ */
+export function proteinSurfacePoint(particles: readonly ProteinSphere[], angle: number, radius?: number, origin: ProteinPoint = { x: 0, y: 0 }): ProteinPoint {
+  const margin = radius === undefined ? 0 : proteinOutlineWidth(radius);
+  const dx = Math.cos(angle); const dy = Math.sin(angle);
+  const reach = Math.max(...particles.map(particle => Math.hypot(particle.x - origin.x, particle.y - origin.y) + Math.max(particle.rx, particle.ry) + margin));
+  for (let t = reach; t >= 0; t -= .25) {
+    const x = origin.x + dx * t; const y = origin.y + dy * t;
+    if (particles.some(particle => insideParticle(particle, x, y, margin))) return { x: round(x), y: round(y) };
+  }
+  const target = { x: origin.x + dx * reach, y: origin.y + dy * reach };
+  return roundPoint(nearest(contactOutline({ particles, margin }), target));
 }
 
 const MODIFICATION_LABELS: Record<ModificationVisualKind, string> = {
   phosphorylation: 'P', acetylation: 'Ac', methylation: 'Me', ubiquitination: 'Ub', sumoylation: 'SUMO', glycosylation: 'sugar', parylation: 'PAR',
 };
 
-export function renderModificationPrimitive(modification: { kind: ModificationVisualKind; length?: number; branched?: boolean }, at = { x: 0, y: 0 }): string {
+/** Radius of one ubiquitin unit: a small protein, never another protagonist. */
+export const UBIQUITIN_RADIUS = 10;
+/** Fixed fill of every ubiquitin unit (hex, so the shared surface shading can mix it). */
+const UBIQUITIN_FILL = '#e39467';
+/** Gap bridged by the short link between consecutive ubiquitin units. */
+const UBIQUITIN_LINK = 4.5;
+let ubiquitinShape: ContactShape | undefined;
+
+/**
+ * Geometry of one ubiquitin unit: the shared protein geometry with a fixed seed and a compact,
+ * two-lobed morphology with very few particles, so every ubiquitin looks the same everywhere.
+ */
+export function ubiquitinGeometry(): ProteinSphere[] {
+  return proteinGeometry('ub', UBIQUITIN_RADIUS, 8, 'compact');
+}
+
+function ubiquitin(): ContactShape {
+  ubiquitinShape ??= { particles: ubiquitinGeometry(), margin: proteinOutlineWidth(UBIQUITIN_RADIUS) };
+  return ubiquitinShape;
+}
+
+/**
+ * Mono- or poly-ubiquitin: `count` identical mini-proteins. The first one touches the carrier's
+ * surface at `at`; each next one is fitted by first contact and joined by a short link (Ub—Ub—Ub),
+ * curling gently so the chain stays compact. Reuses the protein surface, never the Protein primitive
+ * (no halo, states or nested modifications).
+ */
+function renderUbiquitin(count: number, at: ProteinPoint, direction: ProteinPoint, carrier?: ContactShape): string {
+  const shape = ubiquitin();
+  const length = Math.hypot(direction.x, direction.y) || 1;
+  const d = { x: direction.x / length, y: direction.y / length };
+  const support = (v: ProteinPoint) => proteinSurfacePoint(shape.particles, Math.atan2(v.y, v.x), UBIQUITIN_RADIUS);
+  const base = support({ x: -d.x, y: -d.y });
+  // Pressed 1.2 px into the carrier, as contact elsewhere, so the outlines merge instead of leaving a
+  // hairline gap. With the carrier's geometry, first contact on the axis through `at` also keeps
+  // an off-axis lobe from being buried in a concave surface.
+  const centres = [carrier
+    ? firstContact(carrier, shape, d, { origin: at, overlap: 1.2 }).offset
+    : { x: at.x - base.x - d.x * 1.2, y: at.y - base.y - d.y * 1.2 }];
+  const links: string[] = [];
+  const curl = d.x <= 0 ? .42 : -.42;
+  for (let index = 1; index < count; index++) {
+    const turn = curl * index;
+    const heading = { x: d.x * Math.cos(turn) - d.y * Math.sin(turn), y: d.x * Math.sin(turn) + d.y * Math.cos(turn) };
+    const previous = centres[index - 1]!;
+    const { offset } = firstContact(shape, shape, heading, { overlap: 0 });
+    const next = { x: previous.x + offset.x + heading.x * UBIQUITIN_LINK, y: previous.y + offset.y + heading.y * UBIQUITIN_LINK };
+    const from = support(heading); const to = support({ x: -heading.x, y: -heading.y });
+    // The link starts and ends just inside each unit's outline, so it reads as one connection through the gap.
+    links.push(`M${round(previous.x + from.x - heading.x * 2)} ${round(previous.y + from.y - heading.y * 2)}L${round(next.x + to.x + heading.x * 2)} ${round(next.y + to.y + heading.y * 2)}`);
+    centres.push(next);
+  }
+  const surface = renderProteinSurface(shape.particles, UBIQUITIN_FILL, UBIQUITIN_RADIUS);
+  const units = centres.map(centre => `<g class="mm-modification__unit" transform="translate(${round(centre.x)} ${round(centre.y)})">${surface}<text y="2.6">Ub</text></g>`).join('');
+  const chain = count > 1 ? ' mm-modification--chain' : '';
+  return `<g class="mm-modification mm-modification--ubiquitination${chain}" data-units="${count}">${links.length ? `<path class="mm-modification__link" d="${links.join('')}"/>` : ''}${units}</g>`;
+}
+
+/**
+ * A post-translational modification marker attached at `at`, a point on the carrier's visible
+ * surface. `direction` points away from the carrier (default: from the local origin towards `at`);
+ * `carrier` is the carrier's particle geometry, when known, for exact contact. Ubiquitin is drawn as
+ * small proteins (mono-Ub, or a Ub—Ub—Ub chain); PAR stays a bead polymer; the other kinds are
+ * labelled tags centred on the surface.
+ */
+export function renderModificationPrimitive(modification: { kind: ModificationVisualKind; length?: number; branched?: boolean }, at = { x: 0, y: 0 }, options: { direction?: ProteinPoint; carrier?: ContactShape } = {}): string {
   const { kind } = modification;
-  if (kind === 'parylation' || (kind === 'ubiquitination' && (modification.length ?? 0) > 1)) {
+  if (kind === 'ubiquitination') {
+    const direction = options.direction ?? (Math.hypot(at.x, at.y) > 1e-6 ? at : { x: 0, y: -1 });
+    return renderUbiquitin(Math.max(1, Math.min(modification.length ?? 1, 8)), at, direction, options.carrier);
+  }
+  if (kind === 'parylation') {
     const count = Math.max(2, Math.min(modification.length ?? 6, 14));
     const links: string[] = [];
     const beads: string[] = [];
@@ -337,7 +427,7 @@ export function renderModificationPrimitive(modification: { kind: ModificationVi
     for (let index = 0; index < count; index++) {
       const point = { x: at.x + 11 + index * 12, y: at.y - index * 7 + Math.sin(index * 1.2) * 6 };
       links.push(`M${round(previous.x)} ${round(previous.y)}L${round(point.x)} ${round(point.y)}`);
-      beads.push(`<circle cx="${round(point.x)}" cy="${round(point.y)}" r="${kind === 'ubiquitination' ? 7 : 5.5}"/>`);
+      beads.push(`<circle cx="${round(point.x)}" cy="${round(point.y)}" r="5.5"/>`);
       if (modification.branched && index > 1 && index % 4 === 2) {
         links.push(`M${round(point.x)} ${round(point.y)}l-3 -15`);
         beads.push(`<circle cx="${round(point.x - 3)}" cy="${round(point.y - 15)}" r="5"/>`);
@@ -1585,7 +1675,7 @@ export const proteinCss = `.mm-primitive .mm-surface{filter:drop-shadow(0 4px 4p
 .mm-primitive__inhibition circle{fill:none;stroke:var(--mm-alert,#e5484d);stroke-width:3}.mm-primitive__inhibition path{stroke:var(--mm-alert,#e5484d);stroke-width:4;stroke-linecap:round}`;
 
 /** Post-translational modification markers and chains. */
-export const modificationCss = `.mm-modification rect{fill:#fff;stroke:#334155;stroke-width:1}.mm-modification text{text-anchor:middle;fill:#17213b;font:700 9px Inter,system-ui}.mm-modification--phosphorylation rect,.mm-modification--acetylation rect{fill:#f7c85c}.mm-modification--methylation rect{fill:#e9829b}.mm-modification--sumoylation rect{fill:#82b7e8}.mm-modification--glycosylation rect{fill:#ec8bad}.mm-modification--chain path{fill:none;stroke:#c354bd;stroke-width:2}.mm-modification--chain circle{fill:#ce65c6;stroke:#fff;stroke-width:1}`;
+export const modificationCss = `.mm-modification rect{fill:#fff;stroke:#334155;stroke-width:1}.mm-modification text{text-anchor:middle;fill:#17213b;font:700 9px Inter,system-ui}.mm-modification--phosphorylation rect,.mm-modification--acetylation rect{fill:#f7c85c}.mm-modification--methylation rect{fill:#e9829b}.mm-modification--sumoylation rect{fill:#82b7e8}.mm-modification--glycosylation rect{fill:#ec8bad}.mm-modification--parylation path{fill:none;stroke:#c354bd;stroke-width:2}.mm-modification--parylation circle{fill:#ce65c6;stroke:#fff;stroke-width:1}.mm-modification__link{fill:none;stroke:#8a5a3f;stroke-width:2.2;stroke-linecap:round}.mm-modification__unit text{font-size:7px}`;
 
 /** Small molecules. */
 export const moleculeCss = `.mm-molecule__bonds{fill:none;stroke:#718096;stroke-width:3;stroke-linecap:round}.mm-atom{stroke:#fff;stroke-width:1}.mm-atom--c{fill:#9aa7bb}.mm-atom--n{fill:#4f84d4}.mm-atom--o{fill:#e75d67}.mm-atom--p{fill:#eaaa38}.mm-molecule__label{text-anchor:middle;fill:currentColor;font:600 10px Inter,system-ui}`;
