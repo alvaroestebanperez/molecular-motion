@@ -100,6 +100,7 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   interaction('complex-abc','A:B:C complex','Three distinct proteins touch as one unit; each remains selectable.'),
   membrane('membrane-horizontal','Horizontal membrane','A reusable lipid bilayer.'),
   membrane('membrane-vertical','Vertical membrane','The same bilayer vertically.'), membrane('membrane-curved','Curved membrane','A gently curved bilayer.'),
+  membrane('membrane-closed','Closed membrane','The same bilayer closed on itself, with inner and outer leaflets.'),
   compartment('extracellular','Extracellular space','Sparse extracellular context.'), compartment('cytoplasm','Cytoplasm','Subtle intracellular context.'),
   compartment('nucleus','Nucleus','A schematic nucleus.'), compartment('generic-organelle','Generic organelle','A neutral membrane-bound compartment.'),
   compartment('er','Endoplasmic reticulum','A schematic membrane network.'), compartment('golgi','Golgi apparatus','A stack of curved cisternae.'),
@@ -265,7 +266,8 @@ function art(entry:VocabularyItem):string {
   if(entry.category==='small-molecules') return renderSmallMoleculePrimitive({visualSeed:entry.id,label:entry.label,x:150,y:100,scale:1.25,ion:entry.id==='calcium'||entry.id==='zinc'});
   if(entry.category==='gene-expression') return expressionScene(entry.id);
   if(entry.category==='interactions') return interactionScene(entry.id,entry.id==='complex-abc'?30:26);
-  if(entry.category==='membranes') return renderMembranePrimitive({x:entry.id.endsWith('vertical')?145:25,y:entry.id.endsWith('vertical')?12:96,length:entry.id.endsWith('vertical')?150:250,orientation:entry.id.replace('membrane-','') as 'horizontal'|'vertical'|'curved'});
+  if(entry.id==='membrane-closed') return renderMembranePrimitive({shape:{kind:'ellipse',cx:150,cy:96,rx:105,ry:58}});
+  if(entry.category==='membranes') return renderMembranePrimitive({x:entry.id.endsWith('vertical')?150:25,y:entry.id.endsWith('vertical')?15:entry.id.endsWith('curved')?108:96,length:entry.id.endsWith('vertical')?150:250,orientation:entry.id.replace('membrane-','') as 'horizontal'|'vertical'|'curved'});
   if(entry.category==='compartments') return renderCompartmentPrimitive(entry.id==='generic-organelle'?'organelle':entry.id as Parameters<typeof renderCompartmentPrimitive>[0],{x:55,y:48});
   if(entry.category==='receptors-complexes') return receptorScene(entry.id);
   if(entry.category==='molecular-events') return eventScene(entry.id);

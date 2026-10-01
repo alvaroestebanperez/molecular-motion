@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   primitiveCss, proteinGeometry, renderCompartmentPrimitive, renderInteractionPrimitive,
   nascentStrandGeometry, renderMembranePrimitive, renderModificationPrimitive, renderNucleicAcidPrimitive,
-  renderProteinPrimitive, renderVocabularyGlyph,
+  renderProteinPrimitive, renderVocabularyGlyph, membraneGeometry, type MembraneGeometry,
 } from '../src';
 import {
   actionCss, compartmentCss, interactionCss, lesionCss, membraneCss, modificationCss, moleculeCss, motionCss, nucleicCss, proteinCss,
@@ -116,8 +116,95 @@ describe('visual primitives', () => {
 
   it('supports horizontal, vertical and curved membranes', () => {
     for (const orientation of ['horizontal', 'vertical', 'curved'] as const) {
-      expect(renderMembranePrimitive({ orientation })).toContain(`mm-membrane--${orientation}`);
+      const svg = renderMembranePrimitive({ orientation });
+      expect(svg).toContain(`mm-membrane--${orientation}`);
+      expect(svg.match(/mm-membrane__leaflet--/g)).toHaveLength(2);
+      expect(svg).toContain('mm-membrane__core');
     }
+    // The legacy call (no orientation) is still a horizontal bilayer.
+    expect(renderMembranePrimitive({ x: 20, y: 116, length: 260 })).toContain('mm-membrane--horizontal');
+  });
+
+  describe('lipid bilayer', () => {
+    // Distance of a point from the (densely sampled) midplane.
+    const offsetFrom = (geometry: MembraneGeometry, p: { x: number; y: number }) =>
+      Math.min(...geometry.centerline.map(q => Math.hypot(q.x - p.x, q.y - p.y)));
+
+    it.each([
+      ['horizontal', { orientation: 'horizontal' as const }],
+      ['vertical', { orientation: 'vertical' as const }],
+      ['curved', { orientation: 'curved' as const }],
+      ['ellipse', { shape: { kind: 'ellipse' as const, cx: 0, cy: 0, rx: 90, ry: 50 } }],
+    ])('puts heads outside and tails inside each leaflet (%s)', (_, options) => {
+      const geometry = membraneGeometry(options);
+      const [outer, inner] = geometry.leaflets;
+      expect(outer.name).toBe('outer'); expect(inner.name).toBe('inner');
+      for (const leaflet of geometry.leaflets) for (const lipid of leaflet.lipids) {
+        // Heads sit on their leaflet's side of the midplane, a half-thickness away.
+        expect(offsetFrom(geometry, lipid.head)).toBeCloseTo(geometry.halfThickness, 0);
+        expect(lipid.tails).toHaveLength(2);
+        for (const [start, end] of lipid.tails) {
+          // Tails run from the head towards the core and stop short of the midplane.
+          expect(offsetFrom(geometry, end)).toBeLessThan(offsetFrom(geometry, start));
+          expect(offsetFrom(geometry, end)).toBeGreaterThan(0);
+          expect(offsetFrom(geometry, start)).toBeLessThan(geometry.halfThickness);
+        }
+      }
+      // Opposite leaflets face opposite ways: the outer normal points away from the inner heads.
+      const o = outer.lipids[Math.floor(outer.lipids.length / 2)]!;
+      const nearestInner = inner.lipids.reduce((a, b) => Math.hypot(a.head.x - o.head.x, a.head.y - o.head.y) < Math.hypot(b.head.x - o.head.x, b.head.y - o.head.y) ? a : b);
+      expect(o.normal.x * nearestInner.normal.x + o.normal.y * nearestInner.normal.y).toBeLessThan(-.9);
+      expect((o.head.x - nearestInner.head.x) * o.normal.x + (o.head.y - nearestInner.head.y) * o.normal.y).toBeGreaterThan(geometry.halfThickness);
+    });
+
+    it('scales the head count per leaflet with membrane length', () => {
+      for (const length of [90, 150, 260]) {
+        const geometry = membraneGeometry({ length });
+        for (const leaflet of geometry.leaflets) expect(leaflet.lipids).toHaveLength(Math.floor(length / 9));
+        expect(renderMembranePrimitive({ length })).toContain(`data-heads="${Math.floor(length / 9)}"`);
+      }
+      expect(membraneGeometry({ length: 120, spacing: 12 }).leaflets[0].lipids).toHaveLength(10);
+      // On a curve the convex (outer) leaflet holds more lipids than the concave one.
+      const curved = membraneGeometry({ orientation: 'curved', length: 250 });
+      expect(curved.leaflets[0].lipids.length).toBeGreaterThan(curved.leaflets[1].lipids.length);
+    });
+
+    it('closes ellipses and paths with an inside and outside leaflet and no seam', () => {
+      const square = [{ x: 0, y: 0 }, { x: 120, y: 0 }, { x: 120, y: 120 }, { x: 0, y: 120 }];
+      for (const shape of [
+        { kind: 'ellipse' as const, cx: 150, cy: 96, rx: 105, ry: 58 },
+        { kind: 'path' as const, points: square, closed: true },
+        { kind: 'path' as const, points: [...square].reverse(), closed: true },
+        { kind: 'path' as const, points: square, closed: true, smooth: false },
+      ]) {
+        const geometry = membraneGeometry({ shape });
+        expect(geometry.closed).toBe(true);
+        expect(renderMembranePrimitive({ shape })).toContain('mm-membrane--closed');
+        const centre = geometry.centerline.reduce((c, p) => ({ x: c.x + p.x / geometry.centerline.length, y: c.y + p.y / geometry.centerline.length }), { x: 0, y: 0 });
+        const [outer, inner] = geometry.leaflets;
+        expect(outer.lipids.length).toBeGreaterThan(inner.lipids.length);
+        for (const leaflet of geometry.leaflets) {
+          const heads = leaflet.lipids.map(lipid => lipid.head);
+          const gaps = heads.map((head, i) => { const next = heads[(i + 1) % heads.length]!; return Math.hypot(next.x - head.x, next.y - head.y); });
+          // The wrap-around gap (last → first) is no larger than any other: there is no seam.
+          expect(gaps.at(-1)!).toBeLessThanOrEqual(Math.max(...gaps.slice(0, -1)) + .5);
+          expect(Math.max(...gaps)).toBeLessThan(12);
+          // Outer heads face away from the lumen, inner heads face into it.
+          const sign = leaflet.name === 'outer' ? 1 : -1;
+          for (const { head, normal } of leaflet.lipids) expect(sign * ((head.x - centre.x) * normal.x + (head.y - centre.y) * normal.y)).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('is deterministic and does not consult Math.random', () => {
+      const random = vi.spyOn(Math, 'random').mockImplementation(() => { throw new Error('global randomness used'); });
+      const options = { shape: { kind: 'path' as const, points: [{ x: 0, y: 0 }, { x: 80, y: 30 }, { x: 140, y: 0 }] } };
+      expect(renderMembranePrimitive(options)).toBe(renderMembranePrimitive(options));
+      expect(membraneGeometry({ orientation: 'curved' })).toEqual(membraneGeometry({ orientation: 'curved' }));
+      expect(renderVocabularyGlyph('membrane-closed')).toBe(renderVocabularyGlyph('membrane-closed'));
+      expect(random).not.toHaveBeenCalled();
+      random.mockRestore();
+    });
   });
 
   it('renders compartments and explicit multi-member complexes', () => {
