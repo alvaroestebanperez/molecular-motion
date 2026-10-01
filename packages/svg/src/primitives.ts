@@ -520,16 +520,165 @@ export function renderLesionPrimitive(lesion: VisualLesion | undefined, at: { x:
   }
 }
 
-export interface MembraneOptions { x?: number; y?: number; length?: number; orientation?: 'horizontal' | 'vertical' | 'curved' }
-export function renderMembranePrimitive(options: MembraneOptions = {}): string {
+export interface MembranePoint { x: number; y: number }
+/**
+ * An arbitrary bilayer centreline. `ellipse` and closed `path`s give the bilayer an inside and an
+ * outside; path `points` are joined in order and smoothed (Catmull-Rom) unless `smooth` is false.
+ */
+export type MembraneShape =
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
+  | { kind: 'path'; points: readonly MembranePoint[]; closed?: boolean; smooth?: boolean };
+export interface MembraneOptions {
+  x?: number; y?: number; length?: number; orientation?: 'horizontal' | 'vertical' | 'curved';
+  /** Draws the bilayer along this centreline instead of `x`/`y`/`length`/`orientation`. */
+  shape?: MembraneShape;
+  /** Distance between neighbouring polar heads along a leaflet. Defaults to 9. */
+  spacing?: number;
+}
+/** One lipid: polar head centre, unit normal pointing away from the hydrophobic core, and its two tails. */
+export interface MembraneLipid { head: MembranePoint; normal: MembranePoint; tails: readonly (readonly [MembranePoint, MembranePoint])[] }
+/**
+ * `outer` faces the outside of a closed shape. On open membranes it is the leaflet on the left of the
+ * direction of travel: the top of a horizontal or curved membrane, the right of a vertical one.
+ */
+export interface MembraneLeaflet { name: 'outer' | 'inner'; lipids: readonly MembraneLipid[] }
+export interface MembraneGeometry {
+  closed: boolean;
+  /** Polyline of the bilayer midplane, the centre of the hydrophobic core. Closed shapes run clockwise. */
+  centerline: readonly MembranePoint[];
+  leaflets: readonly [MembraneLeaflet, MembraneLeaflet];
+  headRadius: number;
+  /** Distance from the midplane to each head centre. */
+  halfThickness: number;
+}
+
+const MEMBRANE_HEAD_RADIUS = 4;
+const MEMBRANE_HALF_THICKNESS = 11.5;
+/** Gap left between the tails of opposite leaflets at the midplane. */
+const MEMBRANE_MIDPLANE_GAP = 1.2;
+
+function membraneCenterline(options: MembraneOptions): { points: MembranePoint[]; closed: boolean } {
+  const densify = (points: readonly MembranePoint[], closed: boolean) => {
+    const out: MembranePoint[] = [];
+    const count = closed ? points.length : points.length - 1;
+    for (let i = 0; i < count; i++) {
+      const a = points[i]!; const b = points[(i + 1) % points.length]!;
+      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 2));
+      for (let s = 0; s < steps; s++) out.push({ x: a.x + (b.x - a.x) * s / steps, y: a.y + (b.y - a.y) * s / steps });
+    }
+    if (!closed) out.push(points[points.length - 1]!);
+    return out;
+  };
+  const shape = options.shape;
+  if (shape?.kind === 'ellipse') {
+    const steps = Math.max(48, Math.ceil(Math.PI * (shape.rx + shape.ry) / 2));
+    return { closed: true, points: Array.from({ length: steps }, (_, i) => { const a = i / steps * Math.PI * 2; return { x: shape.cx + shape.rx * Math.cos(a), y: shape.cy + shape.ry * Math.sin(a) }; }) };
+  }
+  if (shape?.kind === 'path') {
+    const closed = shape.closed ?? false; const source = shape.points;
+    if (source.length < 2) throw new Error('A membrane path needs at least two points');
+    if (shape.smooth === false || source.length < 3) return { closed, points: densify(source, closed) };
+    const at = (i: number) => closed ? source[(i + source.length) % source.length]! : source[Math.min(source.length - 1, Math.max(0, i))]!;
+    const smooth: MembranePoint[] = [];
+    for (let i = 0; i < (closed ? source.length : source.length - 1); i++) {
+      const p0 = at(i - 1); const p1 = at(i); const p2 = at(i + 1); const p3 = at(i + 2);
+      for (let s = 0; s < 8; s++) {
+        const t = s / 8; const t2 = t * t; const t3 = t2 * t;
+        const f = (a: number, b: number, c: number, d: number) => .5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3);
+        smooth.push({ x: f(p0.x, p1.x, p2.x, p3.x), y: f(p0.y, p1.y, p2.y, p3.y) });
+      }
+    }
+    if (!closed) smooth.push(source[source.length - 1]!);
+    return { closed, points: densify(smooth, closed) };
+  }
   const x = options.x ?? 0; const y = options.y ?? 0; const length = options.length ?? 240; const orientation = options.orientation ?? 'horizontal';
-  const lipids = Array.from({ length: Math.floor(length / 14) }, (_, index) => {
-    const along = index * 14 + 7;
-    const curve = orientation === 'curved' ? Math.sin(along / length * Math.PI) * 18 : 0;
-    const transform = orientation === 'vertical' ? `translate(${x + curve} ${y + along}) rotate(90)` : `translate(${x + along} ${y - curve})`;
-    return `<g transform="${transform}"><circle cx="0" cy="-9" r="4"/><path d="M-1-5v10M2-5v10"/><circle cx="0" cy="9" r="4"/></g>`;
+  const steps = Math.max(2, Math.ceil(length / 2));
+  return {
+    closed: false,
+    points: Array.from({ length: steps + 1 }, (_, i) => {
+      const along = length * i / steps;
+      if (orientation === 'vertical') return { x, y: y + along };
+      return { x: x + along, y: orientation === 'curved' ? y - Math.sin(along / length * Math.PI) * 18 : y };
+    }),
+  };
+}
+
+/**
+ * Deterministic lipid-bilayer geometry: two leaflets whose polar heads face away from a shared
+ * hydrophobic core. Each leaflet is spaced along its own offset curve, so the concave side of a curved
+ * or closed membrane packs fewer lipids, and a closed shape wraps with uniform spacing (no seam).
+ */
+export function membraneGeometry(options: MembraneOptions = {}): MembraneGeometry {
+  const spacing = Math.max(4, options.spacing ?? 9);
+  const centerline = membraneCenterline(options); const closed = centerline.closed; let points = centerline.points;
+  if (closed) {
+    // Clockwise on screen (positive shoelace with y down) makes the left-hand normal point outwards.
+    const area = points.reduce((sum, p, i) => { const q = points[(i + 1) % points.length]!; return sum + p.x * q.y - q.x * p.y; }, 0);
+    if (area < 0) points = [...points].reverse();
+  }
+  const n = points.length;
+  const normals = points.map((_, i) => {
+    const prev = points[closed ? (i - 1 + n) % n : Math.max(0, i - 1)]!; const next = points[closed ? (i + 1) % n : Math.min(n - 1, i + 1)]!;
+    const tx = next.x - prev.x; const ty = next.y - prev.y; const len = Math.hypot(tx, ty) || 1;
+    return { x: ty / len, y: -tx / len };
+  });
+  const h = MEMBRANE_HALF_THICKNESS; const r = MEMBRANE_HEAD_RADIUS;
+  const leaflet = (name: 'outer' | 'inner'): MembraneLeaflet => {
+    const side = name === 'outer' ? 1 : -1;
+    const curve = points.map((p, i) => ({ x: p.x + normals[i]!.x * h * side, y: p.y + normals[i]!.y * h * side }));
+    const segments = closed ? n : n - 1;
+    const cumulative = [0];
+    for (let i = 0; i < segments; i++) { const a = curve[i]!; const b = curve[(i + 1) % n]!; cumulative.push(cumulative[i]! + Math.hypot(b.x - a.x, b.y - a.y)); }
+    const length = cumulative[segments]!;
+    const count = closed ? Math.max(3, Math.round(length / spacing)) : Math.max(1, Math.floor(length / spacing));
+    // Closed: spread evenly over the whole loop. Open: keep the nominal spacing and centre the row.
+    const pitch = closed ? length / count : spacing; const start = closed ? pitch / 2 : (length - (count - 1) * spacing) / 2;
+    const lipids: MembraneLipid[] = []; let segment = 0;
+    for (let k = 0; k < count; k++) {
+      const target = start + k * pitch;
+      while (segment < segments - 1 && cumulative[segment + 1]! < target) segment++;
+      const t = (target - cumulative[segment]!) / ((cumulative[segment + 1]! - cumulative[segment]!) || 1);
+      const a = curve[segment]!; const b = curve[(segment + 1) % n]!; const na = normals[segment]!; const nb = normals[(segment + 1) % n]!;
+      const nx = na.x + (nb.x - na.x) * t; const ny = na.y + (nb.y - na.y) * t; const nl = Math.hypot(nx, ny) || 1;
+      const normal = { x: Math.round(nx / nl * side * 1000) / 1000, y: Math.round(ny / nl * side * 1000) / 1000 };
+      const head = { x: round(a.x + (b.x - a.x) * t), y: round(a.y + (b.y - a.y) * t) };
+      // Two acyl chains per lipid, from under the head towards (never across) the midplane.
+      const tails = [-1.5, 1.5].map(offset => [
+        { x: round(head.x - normal.x * (r - .5) - normal.y * offset), y: round(head.y - normal.y * (r - .5) + normal.x * offset) },
+        { x: round(head.x - normal.x * (h - MEMBRANE_MIDPLANE_GAP) - normal.y * offset * .7), y: round(head.y - normal.y * (h - MEMBRANE_MIDPLANE_GAP) + normal.x * offset * .7) },
+      ] as const);
+      lipids.push({ head, normal, tails });
+    }
+    return { name, lipids };
+  };
+  return { closed, centerline: points.map(p => ({ x: round(p.x), y: round(p.y) })), leaflets: [leaflet('outer'), leaflet('inner')], headRadius: r, halfThickness: h };
+}
+
+/** Shortens an open midplane so the hydrophobic core ends flush with the outermost heads. */
+function trimMembraneCore(geometry: MembraneGeometry): MembranePoint[] {
+  const ends = geometry.leaflets.flatMap(leaflet => [leaflet.lipids[0], leaflet.lipids[leaflet.lipids.length - 1]]).filter((lipid): lipid is MembraneLipid => !!lipid);
+  const line = geometry.centerline; const reach = Math.hypot(geometry.halfThickness, geometry.headRadius) + .5;
+  // Keep midplane points that lie within the lipid span: close enough to some head along the line.
+  const nearest = (point: MembranePoint) => Math.min(...ends.map(({ head }) => Math.hypot(head.x - point.x, head.y - point.y)));
+  const first = line.findIndex(point => nearest(point) <= reach);
+  let last = line.length - 1; while (last > first && nearest(line[last]!) > reach) last--;
+  return line.slice(Math.max(0, first), last + 1);
+}
+
+/**
+ * Lipid bilayer: a hydrophobic core band, two rows of tails and two rows of polar heads facing outwards.
+ * Every layer is a single path, so the markup stays small however long the membrane is.
+ */
+export function renderMembranePrimitive(options: MembraneOptions = {}): string {
+  const geometry = membraneGeometry(options); const r = geometry.headRadius;
+  const variant = options.shape ? (geometry.closed ? 'closed' : 'path') : options.orientation ?? 'horizontal';
+  const core = `M${(geometry.closed ? geometry.centerline : trimMembraneCore(geometry)).map(p => `${p.x} ${p.y}`).join('L')}${geometry.closed ? 'Z' : ''}`;
+  const leaflets = geometry.leaflets.map(({ name, lipids }) => {
+    const tails = lipids.flatMap(lipid => lipid.tails.map(([a, b]) => `M${a.x} ${a.y}L${b.x} ${b.y}`)).join('');
+    const heads = lipids.map(({ head }) => `M${round(head.x - r)} ${head.y}a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 ${-r * 2} 0`).join('');
+    return `<g class="mm-membrane__leaflet mm-membrane__leaflet--${name}" data-heads="${lipids.length}"><path class="mm-membrane__tails" d="${tails}"/><path class="mm-membrane__heads" d="${heads}"/></g>`;
   }).join('');
-  return `<g class="mm-primitive mm-primitive--membrane mm-membrane--${orientation}">${lipids}</g>`;
+  return `<g class="mm-primitive mm-primitive--membrane mm-membrane--${variant}"><path class="mm-membrane__core" d="${core}" stroke-width="${round((geometry.halfThickness - r) * 2 + 2)}"/>${leaflets}</g>`;
 }
 
 export function renderCompartmentPrimitive(kind: 'extracellular' | 'cytoplasm' | 'nucleus' | 'organelle' | 'er' | 'golgi' | 'mitochondrion' | 'lysosome' | 'endosome', at = { x: 0, y: 0 }): string {
@@ -573,7 +722,8 @@ export const nucleicCss = `.mm-primitive--nucleic path{fill:none;stroke-linecap:
 export const lesionCss = `.mm-lesion{stroke:#e5484d;stroke-width:3;fill:none}.mm-lesion--ap-site{fill:#fff}.mm-lesion--mismatch circle,.mm-lesion--adduct circle{fill:#e5484d;stroke:#fff;stroke-width:1}.mm-lesion--crosslink{stroke-width:4}`;
 
 /** Lipid membranes. */
-export const membraneCss = `.mm-primitive--membrane circle{fill:#e89a83;stroke:#bd705f;stroke-width:1}.mm-primitive--membrane path{stroke:#cb7c69;stroke-width:1.5}`;
+export const membraneCss = `.mm-primitive--membrane{--mm-membrane-head:#e58f78;--mm-membrane-head-edge:#b4614f;--mm-membrane-tail:#c58c63;--mm-membrane-core:#f6d9a8}.mm-primitive--membrane path{stroke-linecap:round;stroke-linejoin:round}.mm-primitive--membrane .mm-membrane__core{fill:none;stroke-linecap:butt;stroke:var(--mm-membrane-core);stroke-opacity:.6}.mm-membrane__tails{fill:none;stroke:var(--mm-membrane-tail);stroke-width:1.2}.mm-membrane__heads{fill:var(--mm-membrane-head);stroke:var(--mm-membrane-head-edge);stroke-width:.9}
+:root[data-theme=dark] .mm-primitive--membrane,.mm-theme-dark .mm-primitive--membrane{--mm-membrane-head:#e4927c;--mm-membrane-head-edge:#8a4a3d;--mm-membrane-tail:#cfa07a;--mm-membrane-core:#6a5038}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .mm-primitive--membrane{--mm-membrane-head:#e4927c;--mm-membrane-head-edge:#8a4a3d;--mm-membrane-tail:#cfa07a;--mm-membrane-core:#6a5038}}`;
 
 /** Compartments and organelles. */
 export const compartmentCss = `.mm-compartment{fill:#8aa7d5;opacity:.72}.mm-compartment path{fill:none;stroke:#5d86cc;stroke-width:6;stroke-linecap:round}.mm-compartment--mitochondrion{fill:#e57443}.mm-compartment--mitochondrion path{stroke:#fff}.mm-compartment--lysosome{fill:#8268bd}.mm-compartment--endosome{fill:#5b8fd8}`;
