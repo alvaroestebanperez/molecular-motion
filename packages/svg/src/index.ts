@@ -22,6 +22,8 @@ export {
   renderProteinPrimitive,
   renderProteinSurface,
   renderSmallMoleculePrimitive,
+  renderTransmembranePrimitive,
+  transmembraneGeometry,
 } from './primitives';
 export type {
   ActionVisualKind,
@@ -47,6 +49,10 @@ export type {
   ProteinSphere,
   ProteinVisualState,
   SmallMoleculeOptions,
+  TransmembraneDomain,
+  TransmembraneGeometry,
+  TransmembraneOptions,
+  TransmembraneSpan,
   VisualLesion,
 } from './primitives';
 export {

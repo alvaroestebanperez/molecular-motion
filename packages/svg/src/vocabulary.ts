@@ -1,8 +1,8 @@
 import {
   contactOffset, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, renderActionVisual,
   renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
-  renderProteinPrimitive, renderSmallMoleculePrimitive, PROTEIN_MORPHOLOGIES,
-  type ActionVisualKind, type CompartmentVisualKind, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type VisualLesion,
+  renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
+  type ActionVisualKind, type CompartmentVisualKind, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -225,11 +225,61 @@ function expressionScene(id:string):string {
 
 function receptorScene(id:string):string {
   if(id==='proteasome') return `${proteinAt('target',55,67,'#7e83d5','normal',25,[{kind:'ubiquitination',length:3}])}${proteinAt('proteasome',150,110,'#4c91e7','active',48)}${proteinAt('peptides',246,112,'#7e83d5','degraded',20)}${renderActionVisual('degrade',{x:90,y:76},{x:112,y:98})}`;
-  const bilayer=renderMembranePrimitive({x:20,y:116,length:260}); const count=id==='gpcr'?4:id==='rtk'?2:1;
-  const proteins=Array.from({length:count},(_,i)=>proteinAt(`${id}-${i}`,150+(i-(count-1)/2)*34,105,'#4c91e7',id==='rtk'?'active':'normal',24,id==='rtk'?[{kind:'phosphorylation'}]:[])).join('');
-  const ligand=id==='generic-receptor'||id==='rtk'?renderSmallMoleculePrimitive({visualSeed:'ligand',label:'ligand',x:150,y:38,scale:.6}):'';
-  const ions=id==='ion-channel'?[105,150,195].map((x,i)=>renderSmallMoleculePrimitive({visualSeed:`ion-${i}`,x,y:52+i*10,scale:.55,ion:true})).join(''):'';
-  return `${bilayer}${proteins}${ligand}${ions}`;
+  const sides=`${label('EXTRACELLULAR',58,16)}${label('CYTOSOL',40,174)}`;
+  return `${sides}${renderMembranePrimitive(RECEPTOR_MEMBRANE)}${id==='rtk'?dimerReceptorScene():id==='gpcr'?multiPassScene():id==='ion-channel'?channelScene():singlePassScene()}`;
+}
+
+/*
+ * Receptors compose one generic membrane-spanning chain (renderTransmembranePrimitive) over the shared
+ * bilayer. The top leaflet faces the extracellular side; ligands touch the outer domain anchor-to-anchor
+ * (binding = contact, no dotted link) and receptor dimers touch through their domains.
+ */
+const RECEPTOR_MEMBRANE={x:20,y:96,length:260} as const;
+const RECEPTOR_CENTRE=RECEPTOR_MEMBRANE.length/2;
+const LIGAND:BindingActor={id:'ligand',seed:'ligand',color:'#e79ac6'};
+const unit=(id:string,options:TransmembraneOptions)=>`<g data-actor="${esc(id)}">${renderTransmembranePrimitive(options)}</g>`;
+/** A small protein ligand pressed onto the outer domain's top anchor; the contact shadow is returned separately so it can sit underneath. */
+function ligandOn(target:ProteinAnchors,id:string,radius=10){
+  const ligand=place({...LIGAND,id},radius); const offset=contactOffset(target,ligand.anchors,'top');
+  const placed={...ligand,x:offset.x,y:offset.y};
+  return {shadow:renderInteractionPrimitive([{id:'receptor',...target.top},anchorOf(placed,'bottom')],{kind:'contact'}),markup:actor(placed)};
+}
+
+/** Outer domain + one membrane-spanning segment + cytosolic domain, with a ligand bound outside. */
+function singlePassScene():string {
+  const options:TransmembraneOptions={visualSeed:'receptor',membrane:RECEPTOR_MEMBRANE,fill:'#5b95e0',outside:{radius:28},inside:{radius:23}};
+  const ligand=ligandOn(transmembraneGeometry(options).outsideAnchors!,'ligand',11);
+  return `${ligand.shadow}${unit('receptor',options)}${ligand.markup}`;
+}
+
+/** Two copies of the same single-pass receptor, mirror images touching through their domains, each with a ligand and phosphorylated cytosolic domain. */
+function dimerReceptorScene():string {
+  const options=(along:number,mirror:boolean):TransmembraneOptions=>({visualSeed:'rtk',membrane:RECEPTOR_MEMBRANE,along,mirror,fill:'#4f86d6',outside:{radius:23},inside:{radius:19},
+    modifications:[{kind:'phosphorylation',side:'inside',angle:Math.PI/2+.4},{kind:'phosphorylation',side:'inside',angle:Math.PI/2+1.5}]});
+  const probeA=transmembraneGeometry(options(RECEPTOR_CENTRE,false)); const probeB=transmembraneGeometry(options(RECEPTOR_CENTRE,true));
+  // The spacing that makes either pair of facing domains touch, whichever needs more room; spans never closer than 16 px.
+  const spacing=Math.max(16,contactOffset(probeA.outsideAnchors!,probeB.outsideAnchors!,'right').x,contactOffset(probeA.insideAnchors!,probeB.insideAnchors!,'right').x);
+  const left=options(r1(RECEPTOR_CENTRE-spacing/2),false); const right=options(r1(RECEPTOR_CENTRE+spacing/2),true);
+  const a=transmembraneGeometry(left); const b=transmembraneGeometry(right);
+  const touching=(p:ProteinAnchors,q:ProteinAnchors)=>Math.hypot(p.right.x-q.left.x,p.right.y-q.left.y)<=3;
+  const contacts=([[a.outsideAnchors!,b.outsideAnchors!],[a.insideAnchors!,b.insideAnchors!]] as const).filter(([p,q])=>touching(p,q))
+    .map(([p,q])=>renderInteractionPrimitive([{id:'R1',...p.right},{id:'R2',...q.left}],{kind:'contact'})).join('');
+  const la=ligandOn(a.outsideAnchors!,'ligand-1'); const lb=ligandOn(b.outsideAnchors!,'ligand-2');
+  return `${contacts}${la.shadow}${lb.shadow}${unit('R1',left)}${unit('R2',right)}${la.markup}${lb.markup}`;
+}
+
+/** One chain crossing the bilayer seven times: alternating loops on both sides, free ends on opposite sides. */
+function multiPassScene():string {
+  return unit('receptor',{visualSeed:'gpcr',membrane:RECEPTOR_MEMBRANE,passes:7,spacing:17,fill:'#3f9f8a'});
+}
+
+/** Two walls around an open pore; ions queue at the outer mouth, one is inside the pore and one leaves it. */
+function channelScene():string {
+  const options:TransmembraneOptions={visualSeed:'channel',membrane:RECEPTOR_MEMBRANE,passes:6,pore:true,spacing:15,poreWidth:14,fill:'#8a72cf'};
+  const pore=transmembraneGeometry(options).pore!; const x=pore.outside.x;
+  const ions=[[x-9,pore.outside.y-26],[x+8,pore.outside.y-20],[x,pore.outside.y-8],[x,(pore.outside.y+pore.inside.y)/2],[x+2,pore.inside.y+13]]
+    .map(([ix,iy])=>renderSmallMoleculePrimitive({visualSeed:'ion',x:r1(ix!),y:r1(iy!),scale:.5,ion:true})).join('');
+  return `${unit('channel',options)}${ions}`;
 }
 
 function eventScene(rawId:string):string {
