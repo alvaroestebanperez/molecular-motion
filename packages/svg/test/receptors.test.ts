@@ -4,6 +4,7 @@ import {
   transmembraneGeometry, type MembraneOptions,
 } from '../src';
 import { transmembraneCss } from '../src/primitives';
+import { membranes } from './path';
 
 /** Contact threshold in px, as in the binding tests. */
 const TOUCH = 3;
@@ -11,14 +12,11 @@ type Point = { x: number; y: number };
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 const numbers = (value: string) => value.trim().split(/[\s;]+/).map(Number);
 
-/** Head extents of each leaflet, read back from the rendered bilayer (`M{x-r} {y}a…` per head). */
+/** Head extents of each leaflet, read back from the rendered bilayer (one head dot per lipid, outer leaflet first). */
 function leaflets(svg: string) {
-  const extent = (name: string) => {
-    const path = new RegExp(`mm-membrane__leaflet--${name}"[^>]*><path[^>]*/><path class="mm-membrane__heads" d="([^"]+)"`).exec(svg)![1]!;
-    const ys = [...path.matchAll(/M[-\d.]+ ([-\d.]+)a/g)].map(match => Number(match[1]));
-    return { min: Math.min(...ys) - 4, max: Math.max(...ys) + 4 };
-  };
-  return { outer: extent('outer'), inner: extent('inner') };
+  const [membrane] = membranes(svg);
+  const extent = (heads: readonly Point[]) => ({ min: Math.min(...heads.map(head => head.y)) - 4, max: Math.max(...heads.map(head => head.y)) + 4 });
+  return { outer: extent(membrane!.heads.outer), inner: extent(membrane!.heads.inner) };
 }
 /** Every membrane-spanning unit of a card: its seed, spans (outer → inner end), pore and domain anchors. */
 function units(svg: string) {

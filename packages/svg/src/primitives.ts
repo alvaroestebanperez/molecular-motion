@@ -666,19 +666,107 @@ function trimMembraneCore(geometry: MembraneGeometry): MembranePoint[] {
 }
 
 /**
- * Lipid bilayer: a hydrophobic core band, two rows of tails and two rows of polar heads facing outwards.
- * Every layer is a single path, so the markup stays small however long the membrane is.
+ * Writer of compact path data for long runs of repetitive geometry. Points are snapped to a grid of
+ * 1/`grid` units and every command is relative to the snapped previous point, so rounding never
+ * accumulates and a row of evenly spaced lipids repeats the same short deltas. Command letters are
+ * omitted when they repeat (a moveto continues as lineto) and separators wherever the grammar allows.
+ */
+function compactPath(grid: number) {
+  let d = ''; let command = ''; let dotted = false; let x = 0; let y = 0; let startX = 0; let startY = 0;
+  const number = (units: number) => {
+    const text = String(units / grid).replace(/^(-?)0\./, '$1.');
+    if (/[\d.]$/.test(d) && text[0] !== '-' && !(text[0] === '.' && dotted)) d += ' ';
+    d += text; dotted = text.includes('.');
+  };
+  const emit = (letter: string, ...units: number[]) => {
+    if (letter !== command) d += letter;
+    command = letter === 'm' ? 'l' : letter;
+    units.forEach(number);
+  };
+  const snap = (p: MembranePoint) => [Math.round(p.x * grid), Math.round(p.y * grid)] as const;
+  const writer = {
+    move(p: MembranePoint) { const [sx, sy] = snap(p); command = ''; emit('m', sx - x, sy - y); x = startX = sx; y = startY = sy; return writer; },
+    line(p: MembranePoint) {
+      const [sx, sy] = snap(p); const dx = sx - x; const dy = sy - y;
+      if (dy === 0 && dx !== 0) emit('h', dx); else if (dx === 0 && dy !== 0) emit('v', dy); else if (dx !== 0) emit('l', dx, dy);
+      x = sx; y = sy; return writer;
+    },
+    /** A zero-length subpath: with round caps it paints a dot whose diameter is the stroke width. */
+    dot(p: MembranePoint) { writer.move(p); emit('h', 0); return writer; },
+    close() { emit('z'); x = startX; y = startY; return writer; },
+    grid,
+    toString: () => d,
+  };
+  return writer;
+}
+
+/** Douglas-Peucker: drops midplane samples that lie within `tolerance` of the simplified polyline. */
+function simplifyPolyline(points: readonly MembranePoint[], tolerance: number, closed: boolean): MembranePoint[] {
+  if (points.length < 3) return [...points];
+  const keep = new Uint8Array(points.length);
+  const deviation = (p: MembranePoint, a: MembranePoint, b: MembranePoint) => {
+    const dx = b.x - a.x; const dy = b.y - a.y; const length = Math.hypot(dx, dy);
+    return length ? Math.abs((p.x - a.x) * dy - (p.y - a.y) * dx) / length : Math.hypot(p.x - a.x, p.y - a.y);
+  };
+  const split = (from: number, to: number) => {
+    const stack: [number, number][] = [[from, to]];
+    while (stack.length) {
+      const [i, j] = stack.pop()!; let worst = -1; let index = -1;
+      for (let k = i + 1; k < j; k++) { const e = deviation(points[k]!, points[i]!, points[j % points.length]!); if (e > worst) { worst = e; index = k; } }
+      if (worst > tolerance) { keep[index] = 1; stack.push([i, index], [index, j]); }
+    }
+  };
+  keep[0] = 1;
+  if (closed) {
+    // Anchor the loop at its first sample and the sample farthest from it, then simplify both halves.
+    const from = (k: number) => Math.hypot(points[k]!.x - points[0]!.x, points[k]!.y - points[0]!.y);
+    let far = 1; for (let k = 2; k < points.length; k++) if (from(k) > from(far)) far = k;
+    keep[far] = 1; split(0, far); split(far, points.length);
+  } else { keep[points.length - 1] = 1; split(0, points.length - 1); }
+  return points.filter((_, k) => keep[k]);
+}
+
+/** Membrane path data is written on a 0.1 px grid, the precision the bilayer geometry is computed at. */
+const MEMBRANE_GRID = 10;
+
+/**
+ * Lipid bilayer: a hydrophobic core band, the two rows of tails and the two rows of polar heads facing
+ * outwards. Each layer is one path for both leaflets (outer subpaths first), written as compact relative
+ * path data, so the markup stays small however long the membrane is: the core is the simplified midplane,
+ * each lipid's two tails are a single stroke and each head is a zero-length round-capped stroke, painted
+ * twice (rim, then fill) to draw the outlined disc. `data-heads` lists the outer and inner head counts.
  */
 export function renderMembranePrimitive(options: MembraneOptions = {}): string {
+  return membraneMarkup(options, MEMBRANE_GRID);
+}
+
+/** Appends a densely sampled polyline to `path`, simplified to well under one grid step. */
+function polylinePath(points: readonly MembranePoint[], closed: boolean, path: ReturnType<typeof compactPath>) {
+  const [first, ...rest] = simplifyPolyline(points, .3 / path.grid + .05, closed);
+  path.move(first!); rest.forEach(path.line); if (closed) path.close();
+  return path;
+}
+
+/**
+ * `renderMembranePrimitive` on a given grid (coarser for bilayers drawn scaled down, see
+ * `compartmentMembranes`), with an optional extra class on its root group.
+ */
+function membraneMarkup(options: MembraneOptions, grid: number, className?: string): string {
   const geometry = membraneGeometry(options); const r = geometry.headRadius;
   const variant = options.shape ? (geometry.closed ? 'closed' : 'path') : options.orientation ?? 'horizontal';
-  const core = `M${(geometry.closed ? geometry.centerline : trimMembraneCore(geometry)).map(p => `${p.x} ${p.y}`).join('L')}${geometry.closed ? 'Z' : ''}`;
-  const leaflets = geometry.leaflets.map(({ name, lipids }) => {
-    const tails = lipids.flatMap(lipid => lipid.tails.map(([a, b]) => `M${a.x} ${a.y}L${b.x} ${b.y}`)).join('');
-    const heads = lipids.map(({ head }) => `M${round(head.x - r)} ${head.y}a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 ${-r * 2} 0`).join('');
-    return `<g class="mm-membrane__leaflet mm-membrane__leaflet--${name}" data-heads="${lipids.length}"><path class="mm-membrane__tails" d="${tails}"/><path class="mm-membrane__heads" d="${heads}"/></g>`;
-  }).join('');
-  return `<g class="mm-primitive mm-primitive--membrane mm-membrane--${variant}"><path class="mm-membrane__core" d="${core}" stroke-width="${round((geometry.halfThickness - r) * 2 + 2)}"/>${leaflets}</g>`;
+  const core = polylinePath(geometry.closed ? geometry.centerline : trimMembraneCore(geometry), geometry.closed, compactPath(grid));
+  const tails = compactPath(grid); const heads = compactPath(grid);
+  for (const { lipids } of geometry.leaflets) for (const lipid of lipids) {
+    // Tail end → under the head → other tail end: the bend runs beneath the polar head, which is painted
+    // over it (head discs cover radius r + .45 > |a - head|), so only the two acyl chains show.
+    const [a1, b1] = lipid.tails[0]!; const [a2, b2] = lipid.tails[1]!;
+    tails.move(b1).line(a1).line(a2).line(b2);
+    heads.dot(lipid.head);
+  }
+  return `<g class="mm-primitive mm-primitive--membrane mm-membrane--${variant}${className ? ` ${className}` : ''}" data-heads="${geometry.leaflets.map(({ lipids }) => lipids.length).join(' ')}">`
+    + `<path class="mm-membrane__core" d="${core}" stroke-width="${round((geometry.halfThickness - r) * 2 + 2)}"/><path class="mm-membrane__tails" d="${tails}"/>`
+    // Head discs: outer rim = 2r plus the old .9 outline, fill = 2r minus it, both derived from the radius.
+    + `<path class="mm-membrane__head-rims" d="${heads}" stroke-width="${round(r * 2 + .9)}"/><path class="mm-membrane__heads" d="${heads}" stroke-width="${round(r * 2 - .9)}"/></g>`;
 }
 
 export type CompartmentVisualKind = 'extracellular' | 'cytoplasm' | 'nucleus' | 'organelle' | 'er' | 'golgi' | 'mitochondrion' | 'lysosome' | 'endosome';
@@ -703,11 +791,11 @@ function compartmentMembranes(membranes: readonly CompartmentMembrane[], scale: 
   // Keep the on-screen head pitch close to the native membrane's, without packing small membranes densely.
   const spacing = Math.max(9, round(4.2 / scale));
   const shapes = membranes.map(membrane => native(membrane.shape));
-  const lumenPath = lumen.map(index => {
-    const line = membraneGeometry({ shape: shapes[index]! }).centerline;
-    return `M${line.filter((_, k) => k % 4 === 0).map(p => `${p.x} ${p.y}`).join('L')}Z`;
-  }).join('');
-  return `<g class="mm-compartment__membranes" transform="scale(${scale})">${lumenPath ? `<path class="mm-compartment__lumen" fill-rule="evenodd" d="${lumenPath}"/>` : ''}${membranes.map((membrane, i) => `<g class="${membrane.className}">${renderMembranePrimitive({ shape: shapes[i]!, spacing })}</g>`).join('')}</g>`;
+  // Drawn at scale ≤ .5, one native unit is at most half a viewBox unit: whole units are already sub-pixel.
+  const grid = scale <= .5 ? 1 : MEMBRANE_GRID;
+  const lumenPath = compactPath(grid);
+  for (const index of lumen) polylinePath(membraneGeometry({ shape: shapes[index]! }).centerline, true, lumenPath);
+  return `<g class="mm-compartment__membranes" transform="scale(${scale})">${lumen.length ? `<path class="mm-compartment__lumen" fill-rule="evenodd" d="${lumenPath}"/>` : ''}${membranes.map((membrane, i) => membraneMarkup({ shape: shapes[i]!, spacing }, grid, membrane.className)).join('')}</g>`;
 }
 
 const closedPath = (points: readonly MembranePoint[]): MembraneShape => ({ kind: 'path', closed: true, points: points.map(p => ({ x: round(p.x), y: round(p.y) })) });
@@ -1299,7 +1387,7 @@ export const nucleicCss = `.mm-primitive--nucleic path{fill:none;stroke-linecap:
 export const lesionCss = `.mm-lesion{stroke:#e5484d;stroke-width:3;fill:none}.mm-lesion--ap-site{fill:#fff}.mm-lesion--mismatch circle,.mm-lesion--adduct circle{fill:#e5484d;stroke:#fff;stroke-width:1}.mm-lesion--crosslink{stroke-width:4}`;
 
 /** Lipid membranes. */
-export const membraneCss = `.mm-primitive--membrane{--mm-membrane-head:#e58f78;--mm-membrane-head-edge:#b4614f;--mm-membrane-tail:#c58c63;--mm-membrane-core:#f6d9a8}.mm-primitive--membrane path{stroke-linecap:round;stroke-linejoin:round}.mm-primitive--membrane .mm-membrane__core{fill:none;stroke-linecap:butt;stroke:var(--mm-membrane-core);stroke-opacity:.6}.mm-membrane__tails{fill:none;stroke:var(--mm-membrane-tail);stroke-width:1.2}.mm-membrane__heads{fill:var(--mm-membrane-head);stroke:var(--mm-membrane-head-edge);stroke-width:.9}
+export const membraneCss = `.mm-primitive--membrane{--mm-membrane-head:#e58f78;--mm-membrane-head-edge:#b4614f;--mm-membrane-tail:#c58c63;--mm-membrane-core:#f6d9a8}.mm-primitive--membrane path{stroke-linecap:round;stroke-linejoin:round}.mm-primitive--membrane .mm-membrane__core{fill:none;stroke-linecap:butt;stroke:var(--mm-membrane-core);stroke-opacity:.6}.mm-membrane__tails{fill:none;stroke:var(--mm-membrane-tail);stroke-width:1.2}.mm-membrane__head-rims{fill:none;stroke:var(--mm-membrane-head-edge)}.mm-membrane__heads{fill:none;stroke:var(--mm-membrane-head)}
 :root[data-theme=dark] .mm-primitive--membrane,.mm-theme-dark .mm-primitive--membrane{--mm-membrane-head:#e4927c;--mm-membrane-head-edge:#8a4a3d;--mm-membrane-tail:#cfa07a;--mm-membrane-core:#6a5038}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .mm-primitive--membrane{--mm-membrane-head:#e4927c;--mm-membrane-head-edge:#8a4a3d;--mm-membrane-tail:#cfa07a;--mm-membrane-core:#6a5038}}`;
 
 /** Compartments and organelles. */

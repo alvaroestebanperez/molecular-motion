@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderCompartmentPrimitive, renderVocabularyGlyph, type CompartmentVisualKind } from '../src';
+import { densify, membranes } from './path';
 
 const CARD = [{ x: 20, y: 15 }, { width: 260, height: 150 }] as const;
 const render = (kind: CompartmentVisualKind) => renderCompartmentPrimitive(kind, ...CARD);
 const closedMembranes = (svg: string) => svg.match(/mm-membrane--closed/g)?.length ?? 0;
-/** Midplane polylines of the closed bilayers wrapped by a group whose class starts with `className`. */
-const cores = (svg: string, className: string) => [...svg.matchAll(new RegExp(`class="${className}[^"]*"><g [^>]*><path class="mm-membrane__core" d="M([^"Z]+)Z?"`, 'g'))]
-  .map(match => match[1]!.split('L').map(pair => { const [x, y] = pair.split(' ').map(Number); return { x: x!, y: y! }; }));
+/** Midplane polylines (resampled every 2 units) of the closed bilayers whose class list has one starting with `className`. */
+const cores = (svg: string, className: string) => membranes(svg).filter(membrane => ` ${membrane.className} `.includes(` ${className}`)).map(membrane => densify(membrane.core, membrane.closed));
 const meanY = (line: readonly { y: number }[]) => line.reduce((sum, p) => sum + p.y, 0) / line.length;
 const distance = (a: readonly { x: number; y: number }[], b: readonly { x: number; y: number }[]) =>
   Math.min(...a.map(p => Math.min(...b.map(q => Math.hypot(p.x - q.x, p.y - q.y)))));
@@ -90,9 +90,15 @@ describe('compartment identity', () => {
 
   it('reuses the membrane primitive bilayer for every membrane-bounded compartment', () => {
     for (const kind of ['nucleus', 'organelle', 'er', 'golgi', 'mitochondrion', 'lysosome', 'endosome'] as const) {
-      const svg = render(kind);
-      expect(svg).toContain('mm-membrane__leaflet--outer');
-      expect(svg).toContain('mm-membrane__leaflet--inner');
+      // Every bilayer is the primitive's closed bilayer: both leaflets drawn, one tail stroke per lipid.
+      const bilayers = membranes(render(kind));
+      expect(bilayers.length).toBe(closedMembranes(render(kind)));
+      for (const bilayer of bilayers) {
+        expect(bilayer.closed).toBe(true);
+        expect(bilayer.heads.outer.length).toBeGreaterThan(0);
+        expect(bilayer.heads.inner.length).toBeGreaterThan(0);
+        expect(bilayer.tails).toHaveLength(bilayer.heads.outer.length + bilayer.heads.inner.length);
+      }
     }
   });
 
