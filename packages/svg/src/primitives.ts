@@ -1243,7 +1243,9 @@ export function renderActionArrow(from: ArrowPoint, to: ArrowPoint, options: Act
 export const ACTION_VISUAL_STYLES: Readonly<Record<ActionVisualKind, Pick<ActionArrowOptions, 'variant' | 'end' | 'mark'>>> = {
   bind: {}, unbind: {}, dimerize: {}, activate: {}, modify: {}, ligate: {}, synthesize: {}, degrade: {}, translocate: {},
   polymerize: {}, unwind: {}, elongate: {}, 'conformational-change': {},
-  recruit: { variant: 'dashed' }, inhibit: { end: 'bar' }, cleave: { mark: 'cross' },
+  // A recruit action is the partner's motion, a transformation: solid. The recruitment relation itself is
+  // the dashed directed interaction drawn alongside, so motion and relation never share a style.
+  recruit: {}, inhibit: { end: 'bar' }, cleave: { mark: 'cross' },
 };
 
 /** Backwards-compatible: an action arrow styled by kind. Geometry options (gaps, curvature, reverse, draw) pass through. */
