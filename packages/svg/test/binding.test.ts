@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PROTEIN_MORPHOLOGIES, contactOffset, proteinAnchors, proteinGeometry, renderInteractionPrimitive, renderVocabularyGlyph,
-  type ContactSide,
+  PROTEIN_MORPHOLOGIES, contactOffset, proteinAnchors, proteinGeometry, proteinOutlineWidth, renderInteractionPrimitive, renderVocabularyGlyph,
 } from '../src';
+import { outlineDistance, penetration, type Placed } from './contact';
 
 /** Contact threshold in px: facing anchors of bound partners must (nearly) coincide. */
 const TOUCH = 3;
@@ -14,11 +14,11 @@ function actors(svg: string) {
   const pattern = /<g transform="translate\(([-\d.]+) ([-\d.]+)\)" data-actor="([^"]+)" data-radius="([\d.]+)"><g class="mm-primitive mm-primitive--protein[^"]*" data-visual-seed="([^"]+)" data-morphology="([^"]+)"/g;
   return [...svg.matchAll(pattern)].map(([, x, y, id, radius, seed, morphology]): Actor => ({ id: id!, seed: seed!, morphology: morphology!, x: Number(x), y: Number(y), radius: Number(radius) }));
 }
-function anchor(actor: Actor, side: ContactSide) {
-  const local = proteinAnchors(proteinGeometry(actor.seed, actor.radius), actor.radius)[side];
-  return { x: actor.x + local.x, y: actor.y + local.y };
-}
-const gap = (left: Actor, right: Actor) => distance(anchor(left, 'right'), anchor(right, 'left'));
+const shape = (actor: Actor): Placed => ({ particles: proteinGeometry(actor.seed, actor.radius), margin: proteinOutlineWidth(actor.radius), x: actor.x, y: actor.y });
+/** Distance between the visible outlines of two card actors (the cards place partners by first contact). */
+const gap = (a: Actor, b: Actor) => outlineDistance(shape(a), shape(b));
+/** Partners touch without one burying a lobe in the other. */
+const touching = (a: Actor, b: Actor) => gap(a, b) <= TOUCH && penetration(shape(a), shape(b)) <= 3;
 const hasDottedLink = (svg: string) => /<path data-interaction=/.test(svg);
 
 describe('contact placement', () => {
@@ -59,7 +59,7 @@ describe('binding cards', () => {
     const svg = renderVocabularyGlyph(id);
     const [a, b, boundA, boundB] = actors(svg);
     expect(gap(a!, b!)).toBeGreaterThan(8);
-    expect(gap(boundA!, boundB!)).toBeLessThanOrEqual(TOUCH);
+    expect(touching(boundA!, boundB!)).toBe(true);
     expect(svg).toContain('mm-interaction--contact');
     expect(hasDottedLink(svg)).toBe(false);
   });
@@ -67,7 +67,7 @@ describe('binding cards', () => {
   it.each(['unbind', 'event-unbind'])('%s: touching partners end up separate', id => {
     const svg = renderVocabularyGlyph(id);
     const [a, b, freeA, freeB] = actors(svg);
-    expect(gap(a!, b!)).toBeLessThanOrEqual(TOUCH);
+    expect(touching(a!, b!)).toBe(true);
     expect(gap(freeA!, freeB!)).toBeGreaterThan(8);
     expect(hasDottedLink(svg)).toBe(false);
   });
@@ -85,15 +85,20 @@ describe('binding cards', () => {
     expect(svg).not.toContain('mm-interaction--contact');
   });
 
-  it('complex: three distinct actors touch as one unit', () => {
+  it('complex: three distinct actors touch each other as one compact unit, not a row', () => {
     const svg = renderVocabularyGlyph('complex-abc');
     const members = actors(svg);
     expect(members.map(member => member.id).sort()).toEqual(['A', 'B', 'C']);
     expect(new Set(members.map(member => member.seed)).size).toBe(3);
     expect(new Set(members.map(member => member.morphology)).size).toBe(3);
-    const [b, a, c] = members;
-    expect(gap(b!, a!)).toBeLessThanOrEqual(TOUCH);
-    expect(gap(a!, c!)).toBeLessThanOrEqual(TOUCH);
+    const [a, b, c] = members;
+    expect(touching(a!, b!)).toBe(true);
+    expect(touching(a!, c!)).toBe(true);
+    expect(touching(b!, c!)).toBe(true);
+    // Compact: C sits off the A–B line, so the three centres form a real triangle.
+    const cross = Math.abs((b!.x - a!.x) * (c!.y - a!.y) - (b!.y - a!.y) * (c!.x - a!.x)) / distance(a!, b!);
+    expect(cross).toBeGreaterThan(a!.radius);
+    expect(svg.match(/class="mm-interaction__contact"/g)?.length).toBe(3);
     expect(hasDottedLink(svg)).toBe(false);
   });
 });

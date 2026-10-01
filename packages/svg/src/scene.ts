@@ -1,4 +1,5 @@
 import type { Activity, ActorDefinition, ActorType, LesionType, MechanismSnapshot, Modification, Point } from '@molecular-motion/core';
+import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, type ContactShape, type FirstContact, type ProteinSphere } from './primitives';
 
 export interface SceneSite extends Point { reference: string; lesion?: LesionType }
 
@@ -31,7 +32,13 @@ export interface SceneActor extends Point {
   badges: Modification[];
 }
 
-export interface SceneConnection { source: string; target: string; from: Point; to: Point }
+/**
+ * A `boundTo` relation. `contact` (the default layout): the actor touches its partner, or the
+ * backbone at the bound site, and `from`/`to` are the point where the outlines meet; the renderer
+ * draws no line, only a soft contact shadow. `relation`: the layout could not honour contact
+ * (an author-fixed `position`), so `from`/`to` run centre to target and a dotted link is drawn.
+ */
+export interface SceneConnection { source: string; target: string; from: Point; to: Point; kind?: 'contact' | 'relation' }
 export interface SceneLesion extends Point { target: string; type: LesionType }
 
 export interface SvgScene {
@@ -52,8 +59,17 @@ export interface SceneOptions {
   ghosts?: readonly string[];
 }
 
-/** Helix geometry shared with the renderer. */
-export const HELIX = { amplitude: 30, wavelength: 196 } as const;
+/** Helix geometry shared with the renderer: strand amplitude, wavelength and stroke widths. */
+export const HELIX = { amplitude: 30, wavelength: 196, tube: 12, backTube: 10 } as const;
+
+/** Centre line of one strand of a helix at `x` (strand 0 crests at the first site). */
+export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites'>, strand: 0 | 1, x: number, width: number): number {
+  const phaseX = acid.sites[0]?.x ?? width / 2;
+  return acid.y + (strand === 0 ? -HELIX.amplitude : HELIX.amplitude) * Math.cos(2 * Math.PI / HELIX.wavelength * (x - phaseX));
+}
+/** Upper visible surface of the helix at `x`: the top edge of whichever backbone tube is higher. */
+const helixTop = (acid: SceneNucleicAcid, x: number, width: number) =>
+  Math.min(helixY(acid, 0, x, width) - HELIX.tube / 2, helixY(acid, 1, x, width) - HELIX.backTube / 2);
 
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
 const PALETTE = ['#8b78d0', '#5aa9a0', '#d5839a', '#dca064', '#7c9cc4', '#8fae86', '#c58fc9', '#6fa3c9'];
@@ -61,6 +77,8 @@ const CHAIN_ANGLE = -0.45;
 /** Docking directions for actors bound to another actor, in radians (SVG y grows downwards). */
 const SLOTS = [-0.08, -2.2, -0.95, -3.05, 0.75];
 const MOLECULE_SLOTS = [2.95, -2.6, 0.35];
+/** Gap between neighbours resting on the same site: they share the site but do not touch. */
+const SIDE_GAP = 8;
 
 const isNucleic = (type: ActorType) => type === 'dna' || type === 'rna';
 
@@ -72,6 +90,131 @@ export function hashString(value: string): number {
 
 export const defaultColor = (id: string) => PALETTE[hashString(id) % PALETTE.length]!;
 export const chainReach = (length: number) => Math.min(length, 16) * 12;
+
+/** Small ball-and-stick chain for small molecules; jitter is seeded by the actor id. */
+export function moleculeAtoms(seed: number, radius: number): { x: number; y: number; r: number }[] {
+  let state = seed || 1;
+  const random = () => { state = Math.imul(state ^ (state >>> 15), 2246822507) ^ Math.imul(state ^ (state >>> 13), 3266489909); return ((state ^= state >>> 16) >>> 0) / 4294967296; };
+  return Array.from({ length: 6 }, (_, index) => ({ x: (index - 2.5) * radius * .55, y: (index % 2 ? -1 : 1) * radius * .32 + (random() - .5) * 4, r: radius * .36 }));
+}
+
+/** Width of the outline drawn around an actor's body (part of its visible surface). */
+export const actorOutline = (type: ActorType, radius: number) => type === 'molecule' ? 1.6 : proteinOutlineWidth(radius);
+
+/** Particles of an actor's body in local coordinates; the renderer draws exactly these. */
+export function actorParticles(id: string, type: ActorType, radius: number): ProteinSphere[] {
+  if (type !== 'molecule') return proteinGeometry(id, radius, type === 'complex' ? 32 : 28);
+  return moleculeAtoms(hashString(id), radius).map(atom => ({ ...atom, rx: atom.r, ry: atom.r, rotation: 0, depth: 0 }));
+}
+
+/**
+ * Bead chain (PAR, filament) leaving the surface along `angle`: beads and links, in local
+ * coordinates. `base` is where the visible surface ends along that angle (see `chainBase`); the
+ * first bead sits just outside it, so the chain is attached to the body rather than floating.
+ */
+export function chainGeometry(radius: number, angle: number, length: number, base = radius) {
+  const beads: { x: number; y: number; r: number; index: number }[] = [];
+  const links: [Point, Point][] = [];
+  const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+  const normal = { x: -direction.y, y: direction.x };
+  const count = Math.min(length, 16);
+  let previous = { x: direction.x * (base - 4), y: direction.y * (base - 4) };
+  for (let index = 0; index < count; index++) {
+    const along = base + 6 + index * 12;
+    const wave = Math.sin(index * 1.3) * 6;
+    const point = { x: direction.x * along + normal.x * wave, y: direction.y * along + normal.y * wave };
+    links.push([previous, point]);
+    beads.push({ ...point, r: 6, index });
+    if (index % 4 === 2 && index < count - 2) {
+      // Short side branch, as PAR and other polymers branch.
+      let tip = point;
+      for (let branch = 1; branch <= 2; branch++) {
+        const next = { x: point.x + normal.x * 12 * branch - direction.x * 3 * branch, y: point.y + normal.y * 12 * branch - direction.y * 3 * branch };
+        links.push([tip, next]);
+        beads.push({ ...next, r: 5.2, index: index + branch });
+        tip = next;
+      }
+    }
+    previous = point;
+  }
+  return { beads, links };
+}
+
+/** Bead stroke drawn by the renderer, part of the chain's visible surface. */
+const BEAD_OUTLINE = .6;
+const SHAPES = new Map<string, ContactShape>();
+const CONTACTS = new Map<string, FirstContact>();
+type Shaped = Pick<SceneActor, 'id' | 'type' | 'radius' | 'chain'>;
+const shapeKey = (actor: Shaped) => `${actor.id}|${actor.type}|${actor.radius}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}` : ''}`;
+
+/** Everything visible of an actor that a partner can touch: its body plus its chain, outlines included. */
+export function actorContactShape(actor: Shaped): ContactShape {
+  const key = shapeKey(actor);
+  let shape = SHAPES.get(key);
+  if (!shape) {
+    const margin = actorOutline(actor.type, actor.radius);
+    const body = actorParticles(actor.id, actor.type, actor.radius).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
+    const beads = actor.chain ? chainGeometry(actor.radius, actor.chain.angle, actor.chain.length, chainBase(actor)).beads
+      .map(bead => ({ x: bead.x, y: bead.y, r: bead.r + BEAD_OUTLINE, rx: bead.r + BEAD_OUTLINE, ry: bead.r + BEAD_OUTLINE, rotation: 0, depth: 1 })) : [];
+    shape = { particles: [...body, ...beads] };
+    if (SHAPES.size > 512) SHAPES.clear();
+    SHAPES.set(key, shape);
+  }
+  return shape;
+}
+
+const BASES = new Map<string, number>();
+/** Distance from the origin to the visible surface (outline included) along the actor's chain angle. */
+export function chainBase(actor: Shaped): number {
+  if (!actor.chain) return actor.radius;
+  const key = `${shapeKey(actor)}`;
+  let base = BASES.get(key);
+  if (base === undefined) {
+    const body = actorContactShape({ id: actor.id, type: actor.type, radius: actor.radius });
+    const d = { x: Math.cos(actor.chain.angle), y: Math.sin(actor.chain.angle) };
+    const along = contactOutline(body).filter(point => Math.abs(point.x * d.y - point.y * d.x) < 3).map(point => point.x * d.x + point.y * d.y);
+    base = Math.round(Math.max(actor.radius * .3, ...along) * 10) / 10;
+    if (BASES.size > 512) BASES.clear();
+    BASES.set(key, base);
+  }
+  return base;
+}
+
+/** First contact of `partner` against `anchor` along `angle`, memoised (pure, so caching is safe). */
+function contactAlong(anchor: Shaped, partner: Shaped, angle: number): FirstContact {
+  const key = `${shapeKey(anchor)}>${shapeKey(partner)}@${angle}`;
+  let contact = CONTACTS.get(key);
+  if (!contact) {
+    contact = firstContact(actorContactShape(anchor), actorContactShape(partner), { x: Math.cos(angle), y: Math.sin(angle) });
+    if (CONTACTS.size > 512) CONTACTS.clear();
+    CONTACTS.set(key, contact);
+  }
+  return contact;
+}
+
+/** Horizontal extent of an actor's visible shape relative to its origin. */
+function extentX(actor: Shaped): [number, number] {
+  const xs = contactOutline(actorContactShape(actor)).map(point => point.x);
+  return [Math.min(...xs), Math.max(...xs)];
+}
+
+/** Smallest vertical gap between an actor's outline (origin at x, y) and the helix surface below it. */
+function clearance(actor: Shaped, x: number, y: number, acid: SceneNucleicAcid, width: number): number {
+  return Math.min(...contactOutline(actorContactShape(actor)).map(point => helixTop(acid, x + point.x, width) - (y + point.y)));
+}
+
+/**
+ * Lowest y for the actor's origin at `x` such that its outline rests on the helix, pressed `press` px
+ * so the outlines merge; returns the origin and where the outlines meet.
+ */
+function restOnHelix(actor: Shaped, x: number, acid: SceneNucleicAcid, width: number, press = 1.5): { y: number; contact: Point } {
+  let best = Infinity; let contact: Point = { x, y: acid.y };
+  for (const point of contactOutline(actorContactShape(actor))) {
+    const top = helixTop(acid, x + point.x, width);
+    if (top - point.y < best) { best = top - point.y; contact = { x: x + point.x, y: top }; }
+  }
+  return { y: best + press, contact: { x: Math.round(contact.x * 10) / 10, y: Math.round(contact.y * 10) / 10 } };
+}
 
 /**
  * Map resolved state to geometry. Reads only generic state (presence, visibility, bindings,
@@ -135,7 +278,10 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     };
   };
 
-  // 1. Actors bound to a nucleic acid sit on the helix above their site: first centred, then left, right, left…
+  // Where each bound actor touches its partner (or the backbone), when the layout placed it in contact.
+  const contacts = new Map<string, Point>();
+
+  // 1. Actors bound to a nucleic acid rest on the helix at their site: first centred, then left, right, left…
   const onAcid = new Map<string, ActorDefinition[]>();
   for (const definition of proteins) {
     const boundTo = snapshot.actors[definition.id]!.boundTo;
@@ -147,12 +293,19 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     let left = anchor.x;
     let right = anchor.x;
     group.forEach((definition, index) => {
-      const radius = RADIUS[definition.type];
+      // Neighbours on the same site are spaced by their visible outlines, not by bounding circles.
+      const body = { id: definition.id, type: definition.type, radius: RADIUS[definition.type] };
+      const [minX, maxX] = extentX(body);
       let x = anchor.x;
-      if (index === 0) { left = x - radius; right = x + radius; }
-      else if (index % 2 === 1) { x = left - radius - 4; left = x - radius; }
-      else { x = right + radius + 4; right = x + radius; }
-      const point = definition.position ?? { x, y: acid.y - HELIX.amplitude - radius - 2 };
+      if (index === 0) { left = x + minX; right = x + maxX; }
+      else if (index % 2 === 1) { x = left - SIDE_GAP - maxX; left = x + minX; }
+      else { x = right + SIDE_GAP - minX; right = x + maxX; }
+      let point = definition.position;
+      if (!point) {
+        const rest = restOnHelix(body, x, acid, width);
+        point = { x, y: rest.y };
+        contacts.set(definition.id, rest.contact);
+      }
       placed.set(definition.id, make(definition, point, index % 2 === 0 && index > 0 ? 1 : -1));
     });
   }
@@ -173,7 +326,8 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     placed.set(definition.id, make(definition, definition.position ?? { x, y: height * .26 }, -1));
   });
 
-  // 3. Actors bound to other actors dock against their partner; the first one docks at the tip of a chain.
+  // 3. Actors bound to other actors dock against their partner (body or chain) by first contact along a
+  //    slot direction; the first one docks at the tip of a chain.
   const resolving = new Set<string>();
   const place = (definition: ActorDefinition): SceneActor => {
     const existing = placed.get(definition.id);
@@ -188,21 +342,32 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     resolving.add(definition.id);
     const partner = place(partnerDefinition);
     const siblings = children.get(partner.id) ?? [];
-    const radius = RADIUS[definition.type];
-    let point: Point;
+    let angle: number;
     if (definition.type === 'molecule') {
       const index = siblings.filter(item => item.type === 'molecule').indexOf(definition);
-      point = polar(partner, MOLECULE_SLOTS[index % MOLECULE_SLOTS.length]!, partner.radius + radius + 6);
+      angle = MOLECULE_SLOTS[index % MOLECULE_SLOTS.length]!;
     } else {
       let slot = siblings.filter(item => item.type !== 'molecule').indexOf(definition);
-      if (partner.chain && slot === 0) {
-        point = polar(partner, partner.chain.angle, partner.radius + chainReach(partner.chain.length) + radius * .75);
-      } else {
+      if (partner.chain && slot === 0) angle = partner.chain.angle;
+      else {
         if (partner.chain) slot += 1;
-        point = polar(partner, SLOTS[slot % SLOTS.length]!, partner.radius + radius - 8);
+        angle = SLOTS[slot % SLOTS.length]!;
       }
     }
-    const actor = make(definition, definition.position ?? point, point.x >= partner.x ? 1 : -1);
+    const actor = make(definition, { x: partner.x, y: partner.y }, Math.cos(angle) >= 0 ? 1 : -1);
+    if (definition.position) Object.assign(actor, { x: definition.position.x, y: definition.position.y });
+    else {
+      // A docked actor must not sink into a nucleic acid: tilt its slot towards "up" until it clears.
+      const clears = (fit: FirstContact) => nucleicAcids.every(acid => clearance(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, acid, width) >= 0);
+      let fit = contactAlong(partner, actor, angle);
+      for (let step = 0; step < 10 && !clears(fit); step++) {
+        angle += Math.sign(Math.atan2(Math.sin(-Math.PI / 2 - angle), Math.cos(-Math.PI / 2 - angle))) * .15;
+        fit = contactAlong(partner, actor, angle);
+      }
+      actor.x = Math.round((partner.x + fit.offset.x) * 10) / 10;
+      actor.y = Math.round((partner.y + fit.offset.y) * 10) / 10;
+      contacts.set(actor.id, { x: Math.round((partner.x + fit.point.x) * 10) / 10, y: Math.round((partner.y + fit.point.y) * 10) / 10 });
+    }
     placed.set(definition.id, actor);
     resolving.delete(definition.id);
     return actor;
@@ -232,18 +397,31 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       && Math.abs(other.y - (actor.y - actor.radius - 18)) < other.radius + 14
       && (side === 1 ? other.x + other.radius > actor.x + actor.radius + 22 && other.x - other.radius < actor.x + extent
                      : other.x - other.radius < actor.x - actor.radius - 22 && other.x + other.radius > actor.x - extent));
-    const score = (side: -1 | 1) => (fits(side) ? 0 : 2) + (collides(side) ? 1 : 0);
+    // On the chain's side the pill is lifted above the chain; it must still clear the chain's callout.
+    const chained = (side: -1 | 1) => {
+      if (!actor.chain || Math.sign(Math.cos(actor.chain.angle)) !== side) return false;
+      const width = Math.max(48, actor.label.length * 8.4 + 24);
+      const pillX = side * (actor.radius + 22); const pillY = -actor.radius - 62;
+      const pill = [side === 1 ? pillX : pillX - width, pillY - 14, side === 1 ? pillX + width : pillX, pillY + 14];
+      const reach = (chainBase(actor) + chainReach(actor.chain.length)) * .72;
+      const tip = { x: Math.cos(actor.chain.angle) * reach, y: Math.sin(actor.chain.angle) * reach };
+      const text = [tip.x - 64, tip.y - 40, tip.x - 64 + (actor.chain.label.length + 6) * 6.8, tip.y - 22];
+      return pill[0]! < text[2]! && pill[2]! > text[0]! && pill[1]! < text[3]! && pill[3]! > text[1]!;
+    };
+    const score = (side: -1 | 1) => (fits(side) ? 0 : 2) + (collides(side) ? 1 : 0) + (chained(side) ? 1 : 0);
     const other = -actor.labelSide as -1 | 1;
     if (score(other) < score(actor.labelSide)) actor.labelSide = other;
   }
 
   const actors = snapshot.definition.actors.flatMap(definition => placed.get(definition.id) ?? []);
   const actorIndex = new Map(actors.map(actor => [actor.id, actor]));
-  const connections = actors.filter(actor => !actor.ghost && actor.boundTo).flatMap(actor => {
+  const connections = actors.filter(actor => !actor.ghost && actor.boundTo).flatMap((actor): SceneConnection[] => {
     const reference = actor.boundTo!;
+    const contact = contacts.get(actor.id);
+    if (contact) return [{ source: actor.id, target: reference, from: contact, to: contact, kind: 'contact' }];
     const acid = acidIndex.get(reference);
     const to = siteIndex.get(reference) ?? actorIndex.get(reference.split('.')[0]!) ?? (acid && { x: actor.x, y: acid.y - HELIX.amplitude });
-    return to ? [{ source: actor.id, target: reference, from: { x: actor.x, y: actor.y }, to: { x: to.x, y: to.y } }] : [];
+    return to ? [{ source: actor.id, target: reference, from: { x: actor.x, y: actor.y }, to: { x: to.x, y: to.y }, kind: 'relation' }] : [];
   });
   const lesions = nucleicAcids.flatMap(acid => acid.sites.flatMap(site => site.lesion ? [{ target: site.reference, type: site.lesion, x: site.x, y: site.y }] : []));
 
@@ -253,10 +431,6 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     description: snapshot.step.description ?? '',
     nucleicAcids, actors, connections, lesions,
   };
-}
-
-function polar(origin: Point, angle: number, distance: number): Point {
-  return { x: origin.x + Math.cos(angle) * distance, y: origin.y + Math.sin(angle) * distance };
 }
 
 function siteX(position: 'start' | 'center' | 'end' | Point | undefined, width: number): number {

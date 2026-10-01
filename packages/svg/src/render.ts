@@ -1,6 +1,6 @@
 import type { LesionType } from '@molecular-motion/core';
-import { chainReach, hashString, HELIX, type SceneActor, type SceneNucleicAcid, type SvgScene } from './scene';
-import { mix, primitiveCss, proteinGeometry, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
+import { actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, moleculeAtoms, type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene } from './scene';
+import { mix, primitiveCss, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
 
 export { mix };
 
@@ -41,7 +41,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
   const acids = scene.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, scene.width, prefix)}</g>`).join('');
-  const connections = scene.connections.map(connection => `<path class="mm-binding" data-key="connection:${escape(connection.source)}:${escape(connection.target)}" d="M${round(connection.from.x)} ${round(connection.from.y)}L${round(connection.to.x)} ${round(connection.to.y)}" aria-hidden="true"/>`).join('');
+  const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact)).join('');
   const labels = compact ? '' : [
     ...actors.map(actor => actorLabel(actor)),
@@ -61,13 +61,32 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
 }
 
 /**
+ * A `boundTo` relation. Contact (the default) draws no line, because a line must never stand in
+ * for molecular contact: only the shared `contact` interaction (a soft shadow in the crevice, under
+ * the actors) keyed and positioned by transform, so it follows the actors between steps. A dotted
+ * `relation` remains only when the layout could not put the actors in contact.
+ */
+function bindingConnection(connection: SceneConnection): string {
+  const key = `connection:${escape(connection.source)}:${escape(connection.target)}`;
+  const ends = (from: { x: number; y: number }, to: { x: number; y: number }) => [{ id: connection.source, ...from }, { id: connection.target, ...to }];
+  if ((connection.kind ?? 'relation') === 'contact') {
+    const x = (connection.from.x + connection.to.x) / 2; const y = (connection.from.y + connection.to.y) / 2;
+    const half = { x: round((connection.from.x - connection.to.x) / 2), y: round((connection.from.y - connection.to.y) / 2) };
+    return `<g class="mm-binding mm-binding--contact" data-key="${key}" style="transform:translate(${round(x)}px,${round(y)}px)" aria-hidden="true">`
+      + `${renderInteractionPrimitive(ends(half, { x: -half.x, y: -half.y }), { kind: 'contact' })}</g>`;
+  }
+  const from = { x: round(connection.from.x), y: round(connection.from.y) }; const to = { x: round(connection.to.x), y: round(connection.to.y) };
+  return `<g class="mm-binding mm-binding--relation" data-key="${key}" aria-hidden="true">${renderInteractionPrimitive(ends(from, to), { kind: 'relation' })}</g>`;
+}
+
+/**
  * Crop around the action for thumbnails: the bounding box of actors, chains, and lesions (or the
  * middle of the helix when nothing else is shown), widened to a 2:1 frame.
  */
 function focusViewBox(scene: SvgScene, actors: SceneActor[]): string {
   const acid = scene.nucleicAcids[0];
   const boxes = actors.map(actor => {
-    const reach = actor.chain ? actor.radius + chainReach(actor.chain.length) : actor.radius;
+    const reach = actor.chain ? Math.max(actor.radius, chainBase(actor) + chainReach(actor.chain.length)) : actor.radius;
     const tip = actor.chain ? { x: actor.x + Math.cos(actor.chain.angle) * reach, y: actor.y + Math.sin(actor.chain.angle) * reach } : actor;
     return [Math.min(actor.x - actor.radius, tip.x - 8), Math.min(actor.y - actor.radius, tip.y - 8), Math.max(actor.x + actor.radius, tip.x + 8), Math.max(actor.y + actor.radius, tip.y + 8)];
   });
@@ -105,11 +124,11 @@ export function describeScene(scene: SvgScene): string {
 // ---- Nucleic acids ----
 
 function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
-  const { amplitude: A, wavelength } = HELIX;
+  const { wavelength } = HELIX;
   const k = (2 * Math.PI) / wavelength;
   const phaseX = acid.sites[0]?.x ?? width / 2;
   const theta = (x: number) => k * (x - phaseX);
-  const strandY = (strand: 0 | 1, x: number) => acid.y + (strand === 0 ? -A : A) * Math.cos(theta(x));
+  const strandY = (strand: 0 | 1, x: number) => helixY(acid, strand, x, width);
   const isFront = (strand: 0 | 1, x: number) => (strand === 0 ? 1 : -1) * Math.sin(theta(x)) >= 0;
 
   const gaps: [0 | 1, number, number][] = [];
@@ -180,15 +199,6 @@ function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string):
 
 // ---- Actors ----
 
-interface Sphere { x: number; y: number; r: number }
-
-/** Small ball-and-stick chain for small molecules; jitter is seeded by the actor id. */
-function moleculeAtoms(seed: number, radius: number): Sphere[] {
-  let state = seed || 1;
-  const random = () => { state = Math.imul(state ^ (state >>> 15), 2246822507) ^ Math.imul(state ^ (state >>> 13), 3266489909); return ((state ^= state >>> 16) >>> 0) / 4294967296; };
-  return Array.from({ length: 6 }, (_, index) => ({ x: (index - 2.5) * radius * .55, y: (index % 2 ? -1 : 1) * radius * .32 + (random() - .5) * 4, r: radius * .36 }));
-}
-
 function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, compact: boolean): string {
   // Small molecules stay ball-and-stick; proteins and complexes share the catalog's unified surface.
   let shape: string;
@@ -197,7 +207,7 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
     const circles = (grow: number) => atoms.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r + grow)}"/>`).join('');
     shape = `<path class="mm-bonds" d="M${atoms.map(s => `${round(s.x)} ${round(s.y)}`).join('L')}"/><g class="mm-shape__outline">${circles(1.6)}</g><g class="mm-shape__body" fill="url(#${gradient})">${circles(0)}</g>`;
   } else {
-    shape = renderProteinSurface(proteinGeometry(actor.id, actor.radius, actor.type === 'complex' ? 32 : 28), actor.color, actor.radius);
+    shape = renderProteinSurface(actorParticles(actor.id, actor.type, actor.radius), actor.color, actor.radius);
   }
   const glow = actor.activity === 'active' && !actor.ghost ? `<circle class="mm-halo" r="${actor.radius + 18}" fill="url(#${halo})"/>` : '';
   const inhibition = actor.activity === 'inhibited' ? `<g class="mm-inhibition" aria-hidden="true"><circle r="${actor.radius + 7}"/><path d="M${round(-actor.radius * .72)} ${round(actor.radius * .72)}L${round(actor.radius * .72)} ${round(-actor.radius * .72)}"/></g>` : '';
@@ -223,32 +233,9 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
 
 /** Branched bead chain leaving the actor's surface along `chain.angle`. */
 function parChain(actor: SceneActor): string {
-  const { angle, length } = actor.chain!;
-  const beads: string[] = [];
-  const links: string[] = [];
-  const direction = { x: Math.cos(angle), y: Math.sin(angle) };
-  const normal = { x: -direction.y, y: direction.x };
-  const count = Math.min(length, 16);
-  let previous = { x: direction.x * (actor.radius - 4), y: direction.y * (actor.radius - 4) };
-  for (let index = 0; index < count; index++) {
-    const along = actor.radius + 6 + index * 12;
-    const wave = Math.sin(index * 1.3) * 6;
-    const point = { x: direction.x * along + normal.x * wave, y: direction.y * along + normal.y * wave };
-    links.push(`M${round(previous.x)} ${round(previous.y)}L${round(point.x)} ${round(point.y)}`);
-    beads.push(`<circle cx="${round(point.x)}" cy="${round(point.y)}" r="6" style="--i:${index}"/>`);
-    if (index % 4 === 2 && index < count - 2) {
-      // Short side branch, as PAR and other polymers branch.
-      let tip = point;
-      for (let branch = 1; branch <= 2; branch++) {
-        const next = { x: point.x + normal.x * 12 * branch - direction.x * 3 * branch, y: point.y + normal.y * 12 * branch - direction.y * 3 * branch };
-        links.push(`M${round(tip.x)} ${round(tip.y)}L${round(next.x)} ${round(next.y)}`);
-        beads.push(`<circle cx="${round(next.x)}" cy="${round(next.y)}" r="5.2" style="--i:${index + branch}"/>`);
-        tip = next;
-      }
-    }
-    previous = point;
-  }
-  return `<g class="mm-chain"><path d="${links.join('')}"/>${beads.join('')}</g>`;
+  const { beads, links } = chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor));
+  const path = links.map(([from, to]) => `M${round(from.x)} ${round(from.y)}L${round(to.x)} ${round(to.y)}`).join('');
+  return `<g class="mm-chain"><path d="${path}"/>${beads.map(bead => `<circle cx="${round(bead.x)}" cy="${round(bead.y)}" r="${bead.r}" style="--i:${bead.index}"/>`).join('')}</g>`;
 }
 
 // ---- Labels ----
@@ -282,7 +269,10 @@ function callout(x: number, y: number, tx: number, ty: number, text: string, anc
 function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]): string {
   const text = LESION_LABELS[lesion.type];
   const width = text.length * 7.4;
-  const blocked = (x0: number, x1: number) => actors.some(actor => !actor.ghost
+  // Chains count as obstacles too: a callout must not sit on top of the beads.
+  const beads = actors.filter(actor => !actor.ghost && actor.chain).flatMap(actor => chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor)).beads
+    .map(bead => ({ x: actor.x + bead.x, y: actor.y + bead.y, radius: bead.r + 2, ghost: false })));
+  const blocked = (x0: number, x1: number) => [...actors, ...beads].some(actor => !actor.ghost
     && actor.x + actor.radius > lesion.x + x0 && actor.x - actor.radius < lesion.x + x1
     && actor.y + actor.radius > lesion.y - 52 && actor.y - actor.radius < lesion.y - 20);
   let markup: string;
@@ -309,7 +299,7 @@ function actorLabel(actor: SceneActor): string {
 
 function chainLabel(actor: SceneActor): string {
   const { angle, length, label } = actor.chain!;
-  const reach = actor.radius + chainReach(length);
+  const reach = chainBase(actor) + chainReach(length);
   const tip = { x: Math.cos(angle) * reach * .72, y: Math.sin(angle) * reach * .72 };
   return `<g class="mm-label mm-label--chain" data-key="chain:${escape(actor.id)}" style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)" aria-hidden="true">`
     + callout(round(tip.x - 64), round(tip.y - 26), round(tip.x - 6), round(tip.y - 6), `${label} chain`) + '</g>';
@@ -331,12 +321,12 @@ export const molecularMotionCss = `
 .mm-svg{--mm-ink:#15213b;--mm-muted:#4f5d75;--mm-surface:#ffffff;--mm-canvas:#f5f7fb;--mm-line:#dfe4ee;--mm-alert:#e5484d;--mm-dna:#3f63c4;--mm-dna-back:#a9b9e4;--mm-dna-rung:#8ea3dc;--mm-chain:#b44fb0;--mm-accent:#2563eb;display:block;width:100%;height:auto;overflow:visible;font-family:var(--mm-font,Inter,system-ui,sans-serif)}
 :where([data-theme=dark],.mm-theme-dark) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}
 @media(prefers-color-scheme:dark){:where(:root:not([data-theme=light])) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}}
-.mm-dna__back path{fill:none;stroke:var(--mm-dna-back);stroke-width:10;stroke-linecap:round;stroke-linejoin:round}
+.mm-dna__back path{fill:none;stroke:var(--mm-dna-back);stroke-width:${HELIX.backTube};stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__rungs{fill:none;stroke:var(--mm-dna-rung);stroke-width:4.2;stroke-linecap:round;opacity:.85}
 .mm-dna__rungs--damaged{stroke:var(--mm-alert);opacity:1}
-.mm-dna__tube{fill:none;stroke:var(--mm-dna);stroke-width:12;stroke-linecap:round;stroke-linejoin:round}
+.mm-dna__tube{fill:none;stroke:var(--mm-dna);stroke-width:${HELIX.tube};stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__shine{fill:none;stroke:#fff;stroke-opacity:.3;stroke-width:3;stroke-linecap:round;transform:translateY(-2.5px)}
-.mm-binding{fill:none;stroke:var(--mm-muted);stroke-width:2;stroke-dasharray:4 3;opacity:.72;transition:d .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}
+.mm-binding{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}.mm-binding--relation path{stroke:var(--mm-muted);opacity:.72}
 .mm-lesion__glow{animation:mm-pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-lesion__dot{fill:var(--mm-alert);stroke:var(--mm-surface);stroke-width:1.5}.mm-lesion__ring{fill:var(--mm-surface);stroke:var(--mm-alert);stroke-width:2}
 .mm-actor,.mm-label{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}

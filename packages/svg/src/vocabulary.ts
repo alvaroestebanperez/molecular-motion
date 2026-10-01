@@ -1,8 +1,8 @@
 import {
-  contactOffset, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, renderActionVisual,
+  contactOffset, firstContact, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, proteinOutlineWidth, renderActionVisual,
   renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
   renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
-  type ActionVisualKind, type CompartmentVisualKind, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
+  type ActionVisualKind, type CompartmentVisualKind, type ContactShape, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -124,8 +124,9 @@ const proteinAt = (seed:string,x:number,y:number,color:string,state:ProteinVisua
 
 /*
  * Binding grammar shared by the Interactions cards and the binding events:
- * relation / recruitment → dotted (directed) link; physical binding → touching surfaces placed
- * anchor-to-anchor with `contactOffset`; complex → several distinct actors touching as one unit.
+ * relation / recruitment → dotted (directed) link; physical binding → touching surfaces placed by
+ * `firstContact` (the outlines meet, no lobe buried in the partner); complex → several distinct
+ * actors touching as one compact unit.
  * Each actor keeps its own group (`data-actor`), so members of a complex stay separately selectable.
  */
 interface BindingActor { id:string; seed:string; color:string }
@@ -135,32 +136,41 @@ const PARTNER_B:BindingActor={id:'B',seed:'B',color:'#54a488'};
 const PARTNER_C:BindingActor={id:'C',seed:'Cc',color:'#dd9957'};
 /** A second copy of A for dimers: same seed and colour, its own actor id. */
 const PARTNER_A2:BindingActor={...PARTNER_A,id:'A2'};
-interface Placed { actor:BindingActor; radius:number; x:number; y:number; anchors:ProteinAnchors; state:ProteinVisualState }
+interface Placed { actor:BindingActor; radius:number; x:number; y:number; anchors:ProteinAnchors; shape:ContactShape; state:ProteinVisualState; touch?:Point; touches?:Point[] }
+interface Point { x:number; y:number }
 const NORMALS:Record<ContactSide,[number,number]>={left:[-1,0],right:[1,0],top:[0,-1],bottom:[0,1]};
-const OPPOSITE:Record<ContactSide,ContactSide>={left:'right',right:'left',top:'bottom',bottom:'top'};
 const r1=(value:number)=>Math.round(value*10)/10;
-const place=(actor:BindingActor,radius:number,x=0,y=0,state:ProteinVisualState='normal'):Placed=>({actor,radius,x,y,state,anchors:proteinAnchors(proteinGeometry(actor.seed,radius),radius)});
-/** `partner` against `anchor` on `side`, anchor-to-anchor; a positive `gap` pulls it away along the same axis. */
-const against=(anchor:Placed,partner:BindingActor,side:ContactSide='right',gap=0,state:ProteinVisualState='normal'):Placed=>{
-  const placed=place(partner,anchor.radius,0,0,state); const offset=contactOffset(anchor.anchors,placed.anchors,side); const [nx,ny]=NORMALS[side];
-  return {...placed,x:r1(anchor.x+offset.x+nx*gap),y:r1(anchor.y+offset.y+ny*gap)};
+const place=(actor:BindingActor,radius:number,x=0,y=0,state:ProteinVisualState='normal'):Placed=>{
+  const particles=proteinGeometry(actor.seed,radius);
+  return {actor,radius,x,y,state,anchors:proteinAnchors(particles,radius),shape:{particles,margin:proteinOutlineWidth(radius)}};
 };
-/** Moves a group so the union of its visible bounds is centred on (cx, cy). */
+/** Where `partner` (at `at`) first touches `anchor`, in card coordinates. */
+const fitAgainst=(anchor:Placed,partner:Placed,direction:ContactSide|Point,originX?:number)=>{
+  const fit=firstContact(anchor.shape,partner.shape,direction,originX===undefined?{}:{origin:{x:originX-anchor.x,y:0}});
+  return {x:anchor.x+fit.offset.x,y:anchor.y+fit.offset.y,touch:{x:r1(anchor.x+fit.point.x),y:r1(anchor.y+fit.point.y)}};
+};
+/** `partner` against `anchor` on `side` at first contact; a positive `gap` pulls it away along the same axis. */
+const against=(anchor:Placed,partner:BindingActor,side:ContactSide='right',gap=0,state:ProteinVisualState='normal'):Placed=>{
+  const placed=place(partner,anchor.radius,0,0,state); const fit=fitAgainst(anchor,placed,side); const [nx,ny]=NORMALS[side];
+  return {...placed,x:r1(fit.x+nx*gap),y:r1(fit.y+ny*gap),touch:gap?undefined:fit.touch};
+};
+/** Moves a group (and its contact points) so the union of its visible bounds is centred on (cx, cy). */
 const centred=(group:Placed[],cx:number,cy:number):Placed[]=>{
   const x0=Math.min(...group.map(p=>p.x+p.anchors.bounds.x)); const x1=Math.max(...group.map(p=>p.x+p.anchors.bounds.x+p.anchors.bounds.width));
   const y0=Math.min(...group.map(p=>p.y+p.anchors.bounds.y)); const y1=Math.max(...group.map(p=>p.y+p.anchors.bounds.y+p.anchors.bounds.height));
   const dx=cx-(x0+x1)/2; const dy=cy-(y0+y1)/2;
-  return group.map(p=>({...p,x:r1(p.x+dx),y:r1(p.y+dy)}));
+  const shift=(point:Point)=>({x:r1(point.x+dx),y:r1(point.y+dy)});
+  return group.map(p=>({...p,x:r1(p.x+dx),y:r1(p.y+dy),...(p.touch&&{touch:shift(p.touch)}),...(p.touches&&{touches:p.touches.map(shift)})}));
 };
 const anchorOf=(p:Placed,side:ContactSide)=>({id:p.actor.id,x:r1(p.x+p.anchors[side].x),y:r1(p.y+p.anchors[side].y)});
 const actor=(p:Placed)=>`<g transform="translate(${p.x} ${p.y})" data-actor="${esc(p.actor.id)}" data-radius="${p.radius}">${renderProteinPrimitive({visualSeed:p.actor.seed,fill:p.actor.color,radius:p.radius,state:p.state})}</g>`;
-/** Contact shadow between two touching actors; drawn before them so it only shows in the crevice. */
-const contact=(a:Placed,b:Placed,side:ContactSide)=>renderInteractionPrimitive([anchorOf(a,side),anchorOf(b,OPPOSITE[side])],{kind:'contact'});
+/** Contact shadow where two actors touch; drawn before them so it only shows in the crevice. */
+const contact=(a:Placed,b:Placed,at:Point)=>renderInteractionPrimitive([{id:a.actor.id,...at},{id:b.actor.id,...at}],{kind:'contact'});
 
 /** Two partners side by side, either touching (bound) or apart, centred on (cx, cy). */
 function pairPanel(a:BindingActor,b:BindingActor,cx:number,cy:number,radius:number,bound:boolean):string {
   const first=place(a,radius); const [left,right]=centred([first,against(first,b,'right',bound?0:radius*.6)],cx,cy);
-  return `${bound?contact(left!,right!,'right'):''}${actor(left!)}${actor(right!)}`;
+  return `${bound?contact(left!,right!,right!.touch!):''}${actor(left!)}${actor(right!)}`;
 }
 
 /** Before → after for bind, unbind and dimerize: the only change is whether the surfaces touch. */
@@ -184,11 +194,24 @@ function recruitScene(radius:number):string {
   return `${actor(start)}${renderActionVisual('recruit',{x:r1(start.x),y:motionY},{x:r1(near.x-4),y:motionY})}${relation}${actor(a)}${actor(near)}`;
 }
 
-/** Three distinct actors touching as one unit, B ↔ A ↔ C, anchor-to-anchor. */
+/**
+ * Three distinct actors as one compact unit, not a row: A and B touch side by side and C nestles
+ * into the crevice beneath them, touching both. C approaches from below; its approach axis slides
+ * between A and B until it meets both outlines at once (bisection on first contact).
+ */
 function complexScene(radius:number):string {
-  const a=place(PARTNER_A,radius); const b=against(a,PARTNER_B,'left'); const c=against(a,PARTNER_C,'right');
-  const [pb,pa,pc]=centred([b,a,c],150,104);
-  return `${contact(pa!,pb!,'left')}${contact(pa!,pc!,'right')}${actor(pb!)}${actor(pa!)}${actor(pc!)}`;
+  const a=place(PARTNER_A,radius); const b=against(a,PARTNER_B,'right'); const c=place(PARTNER_C,radius);
+  const below={x:0,y:1};
+  let lo=a.x; let hi=b.x; let fitA=fitAgainst(a,c,below,lo); let fitB=fitAgainst(b,c,below,lo);
+  for(let i=0;i<18;i++){
+    const mid=(lo+hi)/2; fitA=fitAgainst(a,c,below,mid); fitB=fitAgainst(b,c,below,mid);
+    if(fitA.y>fitB.y) lo=mid; else hi=mid;
+  }
+  // The first outline met along the axis decides where C stops; the other is touched within a fraction of a px.
+  const stop=fitA.y>=fitB.y?fitA:fitB;
+  const nested:Placed={...c,x:r1(stop.x),y:r1(stop.y),touches:[fitA.touch,fitB.touch]};
+  const [pa,pb,pc]=centred([a,b,nested],150,96);
+  return `${contact(pa!,pb!,pb!.touch!)}${contact(pa!,pc!,pc!.touches![0]!)}${contact(pb!,pc!,pc!.touches![1]!)}${actor(pa!)}${actor(pb!)}${actor(pc!)}`;
 }
 
 function interactionScene(id:string,radius:number):string {
