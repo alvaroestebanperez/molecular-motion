@@ -100,8 +100,9 @@ h1, h2, h3 { letter-spacing: -.012em; }
 }
 @media (max-width: 520px) {
   .brand span { display: none; }
-  .search { flex: 1; width: auto; }
-  .site-header__tools { flex: 1; }
+  .search { flex: 1; width: auto; min-width: 0; }
+  .site-header__tools { flex: 1; min-width: 0; }
+  .site-header nav a { white-space: nowrap; }
 }
 
 /* ---- Playground ---- */
@@ -130,6 +131,11 @@ h1, h2, h3 { letter-spacing: -.012em; }
 .vocabulary-page__heading h1 { margin: 0; font-size: clamp(27px, 3vw, 40px); line-height: 1.15; }
 .vocabulary-page__heading span { display: block; max-width: 800px; margin-top: 7px; color: var(--muted); font-size: 16px; }
 .vocabulary-page .mm-vocabulary-grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+@media (max-width: 640px) {
+  .vocabulary-page { overflow: hidden; }
+  .vocabulary-page .mm-vocabulary-grid { grid-template-columns: minmax(0, 1fr); }
+  .vocabulary-page__heading h1 { overflow-wrap: anywhere; }
+}
 
 @media (max-width: 1080px) {
   .site-header { gap: 12px; }
