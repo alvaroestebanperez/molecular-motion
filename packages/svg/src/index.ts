@@ -67,7 +67,13 @@ export type {
   ProteinPrimitiveOptions,
   ProteinSphere,
   ProteinVisualState,
+  MoleculeElement,
+  MoleculeMark,
+  MoleculeRingSystem,
+  MoleculeSubstituent,
+  MoleculeUnit,
   SmallMoleculeOptions,
+  SmallMoleculeTopology,
   TransmembraneDomain,
   TransmembraneGeometry,
   TransmembraneOptions,
@@ -76,7 +82,7 @@ export type {
   VisualLesion,
 } from './primitives';
 export {
-  MOLECULAR_VOCABULARY, VOCABULARY_CATEGORY_LABELS, VOCABULARY_SVG_CSS,
+  MOLECULAR_VOCABULARY, SMALL_MOLECULE_TOPOLOGIES, VOCABULARY_CATEGORY_LABELS, VOCABULARY_SVG_CSS,
   nucleicAcid, proteinSurface, renderVocabularyGlyph, smallMolecule,
 } from './vocabulary';
 export type { VocabularyCategory, VocabularyItem, VocabularyRenderOptions, VocabularyVisual } from './vocabulary';

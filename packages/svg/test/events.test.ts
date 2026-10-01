@@ -56,6 +56,12 @@ describe('synthesize event', () => {
     for (const seed of product) expect(seeds(source).has(seed)).toBe(false);
     expect(source).not.toContain('mm-primitive--protein');
   });
+  it('joins the two precursors into one molecule: A + B → AB, no protein product', () => {
+    expect(source.match(/data-topology="ring"/g)).toHaveLength(2);
+    expect(target).toMatch(/data-product="">[^]*data-topology="units"/);
+    expect(target).toContain('data-units="1"');
+    expect(svg).not.toContain('mm-primitive--protein');
+  });
   it('is a solid transformation arrow and deterministic', () => {
     expect(svg).not.toContain('mm-action--dashed');
     expect(art('event-synthesize')).toBe(svg);

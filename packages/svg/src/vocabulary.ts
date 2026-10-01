@@ -3,6 +3,7 @@ import {
   renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
   renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, renderUnitChainPrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
   type ActionVisualKind, type CompartmentVisualKind, type ContactShape, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
+  type MoleculeRingSystem, type SmallMoleculeTopology,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -43,6 +44,32 @@ const IDENTITY_PROTEINS = [['parp1', 'PARP1'], ['xrcc1', 'XRCC1'], ['polb', 'POL
 const IDENTITY_STATES = ['normal', 'active', 'inhibited', 'future'] as const;
 const IDENTITY_COLOR = '#7774d8';
 const STATE_PROTEIN_SEED = 'reference-protein';
+
+/** Conceptual base ring systems (topology only, not literal chemistry). Purine: 6-ring fused to a 5-ring. */
+const PURINE: MoleculeRingSystem = { rings: [6, 5], hetero: [{ at: 3, atom: 'n' }, { at: 5, atom: 'n' }, { at: 6, atom: 'n' }, { at: 8, atom: 'n' }], attach: 8 };
+const ADENINE: MoleculeRingSystem = { ...PURINE, substituents: [{ at: 0, atom: 'n' }] };
+const GUANINE: MoleculeRingSystem = { ...PURINE, substituents: [{ at: 0, atom: 'o', bond: 'double' }, { at: 4, atom: 'n' }] };
+/** Nicotinamide: one 6-ring with a carboxamide; the oxidised form carries a ring charge, the reduced one an extra H. */
+const nicotinamide = (marks: MoleculeRingSystem['marks']): MoleculeRingSystem =>
+  ({ rings: [6], hetero: [{ at: 3, atom: 'n' }], attach: 3, substituents: [{ at: 1, atom: 'c', branches: [{ atom: 'o', bond: 'double' }, { atom: 'n' }] }], marks });
+
+/**
+ * Topology of each catalog small molecule. Reuse these entries wherever the molecule appears (e.g. ATP → ADP in a
+ * reaction) so the same molecule always has the same glyph.
+ */
+export const SMALL_MOLECULE_TOPOLOGIES: Readonly<Record<string, SmallMoleculeTopology>> = {
+  atp: { kind: 'units', units: [{ base: ADENINE, phosphates: 3 }] },
+  adp: { kind: 'units', units: [{ base: ADENINE, phosphates: 2 }] },
+  gtp: { kind: 'units', units: [{ base: GUANINE, phosphates: 3 }] },
+  gdp: { kind: 'units', units: [{ base: GUANINE, phosphates: 2 }] },
+  'nad-plus': { kind: 'units', closure: 'linear', units: [{ base: ADENINE, phosphates: 1 }, { base: nicotinamide([{ at: 3, kind: 'positive' }]), phosphates: 1 }] },
+  nadh: { kind: 'units', closure: 'linear', units: [{ base: ADENINE, phosphates: 1 }, { base: nicotinamide([{ at: 0, kind: 'hydrogen' }]), phosphates: 1 }] },
+  cgamp: { kind: 'units', closure: 'cyclic', units: [{ base: GUANINE, phosphates: 1 }, { base: ADENINE, phosphates: 1 }] },
+  glucose: { kind: 'ring', ring: { rings: [6], hetero: [{ at: 1, atom: 'o' }], substituents: [{ at: 2, atom: 'o' }, { at: 3, atom: 'o' }, { at: 4, atom: 'o' }, { at: 5, atom: 'o' }, { at: 0, atom: 'c', branches: [{ atom: 'o' }] }] } },
+  // Ion size follows the relative ionic radius (Ca²⁺ ≈ 100 pm, Zn²⁺ ≈ 74 pm); symbol and charge are drawn in the glyph.
+  calcium: { kind: 'ion', symbol: 'Ca', charge: 2, size: 1 },
+  zinc: { kind: 'ion', symbol: 'Zn', charge: 2, size: .74 },
+};
 
 /** Events whose generic one-liner would not say what the card shows. */
 const EVENT_DESCRIPTIONS:Partial<Record<string,string>>={
@@ -91,11 +118,11 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   lesion('ssb','Single-strand break','One strand is broken while the other remains intact.'),
   lesion('dsb','Double-strand break','Both backbones are physically discontinuous.'),
   lesion('crosslink','Crosslink','An anomalous bridge crosses the helix.'), lesion('adduct','DNA adduct','A bulky group projects from a base.'),
-  molecule('atp','ATP','Conceptual ball-and-stick ATP.'), molecule('adp','ADP','Conceptual ball-and-stick ADP.'),
-  molecule('gtp','GTP','Conceptual ball-and-stick GTP.'), molecule('gdp','GDP','Conceptual ball-and-stick GDP.'),
-  molecule('nad-plus','NAD⁺','Oxidized nicotinamide adenine dinucleotide.'), molecule('nadh','NADH','Reduced nicotinamide adenine dinucleotide.'),
-  molecule('cgamp','cGAMP','A cyclic dinucleotide messenger.'), molecule('glucose','Glucose','A compact carbohydrate representation.'),
-  molecule('calcium','Ca²⁺','A labeled ion.','#9368d8'), molecule('zinc','Zn²⁺','A labeled ion.','#8290a8'),
+  molecule('atp','ATP','Adenine base, sugar and a chain of three phosphates.'), molecule('adp','ADP','Same base and sugar as ATP, with two phosphates.'),
+  molecule('gtp','GTP','Same grammar as ATP on a guanine base.'), molecule('gdp','GDP','Guanine base, sugar and two phosphates.'),
+  molecule('nad-plus','NAD⁺','Oxidized dinucleotide: two nucleotides joined through their phosphates; charged nicotinamide ring.'), molecule('nadh','NADH','Reduced dinucleotide: the nicotinamide ring carries an extra hydrogen.'),
+  molecule('cgamp','cGAMP','A cyclic dinucleotide: two nucleotides closed into a ring.'), molecule('glucose','Glucose','A six-membered sugar ring.'),
+  molecule('calcium','Ca²⁺','A labeled ion; its size follows the ionic radius.','#c3a9ef'), molecule('zinc','Zn²⁺','A smaller labeled ion; its size follows the ionic radius.','#b4bfd1'),
   expression('promoter-gene','Promoter and gene','A regulatory DNA region followed by a gene.'),
   expression('transcription-factor','Transcription factor','A protein bound to a regulatory region.'),
   expression('transcription','Transcription','RNA polymerase produces mRNA from DNA.'),
@@ -355,13 +382,18 @@ function polymerizeScene():string {
 const plus=(x:number,y:number)=>`<path class="mm-vocab__plus" d="M${x-6} ${y}h12M${x} ${y-6}v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".7" aria-hidden="true"/>`;
 
 /**
- * Synthesize: two different precursors on the left are consumed; a new product, absent from the left,
- * appears on the right. Nothing on the source side reappears unchanged on the target side.
+ * Synthesize: A + B → AB. Two different small precursors on the left (a base-like ring and a sugar-like ring)
+ * are joined into one new molecule on the right, drawn with the same topology grammar at one shared scale,
+ * so the product is visibly made of both reactants and none of them reappears unchanged.
  */
+const SYNTHESIS_BASE:MoleculeRingSystem={rings:[6],hetero:[{at:1,atom:'n'},{at:3,atom:'n'}]};
+const SYNTHESIS_SUGAR:MoleculeRingSystem={rings:[5],hetero:[{at:0,atom:'o'}],substituents:[{at:2,atom:'o'},{at:3,atom:'o'}]};
 function synthesizeScene():string {
-  const precursors=`<g data-precursors="">${renderSmallMoleculePrimitive({visualSeed:'precursor-a',x:66,y:68})}${plus(66,104)}${renderSmallMoleculePrimitive({visualSeed:'precursor-b',x:66,y:140})}</g>`;
-  const product={x:230,y:104,seed:'event-product',radius:36};
-  return `${precursors}${actionArrow('synthesize',{x:122,y:104},product)}<g data-product="">${proteinAt(product.seed,product.x,product.y,'#3f9f8a','normal',product.radius)}</g>`;
+  const scale=1.3;
+  const molecule=(seed:string,topology:SmallMoleculeTopology,x:number,y:number)=>renderSmallMoleculePrimitive({visualSeed:seed,topology,x,y,scale});
+  const precursors=`<g data-precursors="">${molecule('precursor-a',{kind:'ring',ring:SYNTHESIS_BASE},66,62)}${plus(66,100)}${molecule('precursor-b',{kind:'ring',ring:SYNTHESIS_SUGAR},66,140)}</g>`;
+  const product={x:222,y:100};
+  return `${precursors}${actionArrow('synthesize',{x:112,y:100},{x:product.x-46,y:product.y})}<g data-product="">${molecule('event-product',{kind:'units',units:[{base:SYNTHESIS_BASE,phosphates:0}]},product.x,product.y)}</g>`;
 }
 
 function eventScene(rawId:string):string {
@@ -396,7 +428,7 @@ function art(entry:VocabularyItem):string {
   if(entry.category==='enzymatic-actions') return enzymeScene(entry.id);
   if(entry.category==='modifications') { const kind=entry.id.startsWith('parylation')?'parylation':entry.id as ModificationVisualKind; return proteinAt('modified-protein',130,104,'#7774d8','normal',44,[{kind,length:entry.id.includes('parylation')?8:entry.id==='ubiquitination'?4:undefined,branched:entry.id.endsWith('branched')}]); }
   if(entry.category==='dna-damage') return at(30,100,renderNucleicAcidPrimitive({width:240,lesion:entry.id as VisualLesion}));
-  if(entry.category==='small-molecules') return renderSmallMoleculePrimitive({visualSeed:entry.id,label:entry.label,x:150,y:100,scale:1.25,ion:entry.id==='calcium'||entry.id==='zinc'});
+  if(entry.category==='small-molecules') { const topology=SMALL_MOLECULE_TOPOLOGIES[entry.id]; return renderSmallMoleculePrimitive({visualSeed:entry.id,label:topology?.kind==='ion'?undefined:entry.label,x:150,y:100,scale:topology?.kind==='ion'?2:topology?.kind==='ring'?2.2:1.6,ion:entry.id==='calcium'||entry.id==='zinc',topology,fill:entry.color}); }
   if(entry.category==='gene-expression') return expressionScene(entry.id);
   if(entry.category==='interactions') return interactionScene(entry.id,entry.id==='complex-abc'?30:26);
   if(entry.id==='membrane-closed') return renderMembranePrimitive({shape:{kind:'ellipse',cx:150,cy:96,rx:105,ry:58}});
