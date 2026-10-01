@@ -30,6 +30,7 @@ export {
   renderProteinSurface,
   renderSmallMoleculePrimitive,
   renderTransmembranePrimitive,
+  renderUnitChainPrimitive,
   shapesOverlap,
   transmembraneGeometry,
 } from './primitives';
@@ -68,6 +69,7 @@ export type {
   TransmembraneGeometry,
   TransmembraneOptions,
   TransmembraneSpan,
+  UnitChainOptions,
   VisualLesion,
 } from './primitives';
 export {
