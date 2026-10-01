@@ -1,8 +1,8 @@
 import {
-  nascentStrandGeometry, primitiveCss, renderActionVisual, renderCompartmentPrimitive, renderInteractionPrimitive,
-  renderMembranePrimitive, renderNucleicAcidPrimitive, renderProteinPrimitive,
-  renderSmallMoleculePrimitive, PROTEIN_MORPHOLOGIES,
-  type ActionVisualKind, type ModificationVisualKind, type ProteinVisualState, type VisualLesion,
+  contactOffset, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, renderActionVisual,
+  renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
+  renderProteinPrimitive, renderSmallMoleculePrimitive, PROTEIN_MORPHOLOGIES,
+  type ActionVisualKind, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type VisualLesion,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -95,9 +95,9 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   expression('transcription','Transcription','RNA polymerase produces mRNA from DNA.'),
   expression('translation','Translation','A ribosome produces a polypeptide from mRNA.'),
   expression('ribosome','Ribosome','A conceptual ribonucleoprotein assembly.'), expression('nucleosome','Nucleosome','DNA wrapped around a histone core.'),
-  interaction('bind','Bind','Two actors form an explicit interaction.'), interaction('unbind','Unbind','A former interaction separates.'),
-  interaction('recruit','Recruit','One actor moves toward a partner.'), interaction('dimerize','Dimerize','Two proteins form a connected dimer.'),
-  interaction('complex-abc','A:B:C complex','Each member remains distinct and selectable.'),
+  interaction('bind','Bind','Two separate partners come into direct surface contact.'), interaction('unbind','Unbind','Touching partners separate; their surfaces no longer meet.'),
+  interaction('recruit','Recruit','One actor is drawn toward a partner: a directed relation, not yet contact.'), interaction('dimerize','Dimerize','Two copies of the same protein touch to form a dimer.'),
+  interaction('complex-abc','A:B:C complex','Three distinct proteins touch as one unit; each remains selectable.'),
   membrane('membrane-horizontal','Horizontal membrane','A reusable lipid bilayer.'),
   membrane('membrane-vertical','Vertical membrane','The same bilayer vertically.'), membrane('membrane-curved','Curved membrane','A gently curved bilayer.'),
   membrane('membrane-closed','Closed membrane','The same bilayer closed on itself, with inner and outer leaflets.'),
@@ -121,6 +121,81 @@ const at = (x:number,y:number,markup:string) => `<g transform="translate(${x} ${
 const label = (text:string,x:number,y:number) => `<text class="mm-vocab__label" x="${x}" y="${y}">${esc(text)}</text>`;
 const proteinAt = (seed:string,x:number,y:number,color:string,state:ProteinVisualState='normal',radius=34,mods:Parameters<typeof renderProteinPrimitive>[0]['modifications']=[]) =>
   at(x,y,renderProteinPrimitive({visualSeed:seed,fill:color,radius,state,modifications:mods}));
+
+/*
+ * Binding grammar shared by the Interactions cards and the binding events:
+ * relation / recruitment → dotted (directed) link; physical binding → touching surfaces placed
+ * anchor-to-anchor with `contactOffset`; complex → several distinct actors touching as one unit.
+ * Each actor keeps its own group (`data-actor`), so members of a complex stay separately selectable.
+ */
+interface BindingActor { id:string; seed:string; color:string }
+const PARTNER_A:BindingActor={id:'A',seed:'A',color:'#7774d8'};
+const PARTNER_B:BindingActor={id:'B',seed:'B',color:'#54a488'};
+/** Seed chosen for a third silhouette family, so A, B and C differ in grey as well as in colour. */
+const PARTNER_C:BindingActor={id:'C',seed:'Cc',color:'#dd9957'};
+/** A second copy of A for dimers: same seed and colour, its own actor id. */
+const PARTNER_A2:BindingActor={...PARTNER_A,id:'A2'};
+interface Placed { actor:BindingActor; radius:number; x:number; y:number; anchors:ProteinAnchors; state:ProteinVisualState }
+const NORMALS:Record<ContactSide,[number,number]>={left:[-1,0],right:[1,0],top:[0,-1],bottom:[0,1]};
+const OPPOSITE:Record<ContactSide,ContactSide>={left:'right',right:'left',top:'bottom',bottom:'top'};
+const r1=(value:number)=>Math.round(value*10)/10;
+const place=(actor:BindingActor,radius:number,x=0,y=0,state:ProteinVisualState='normal'):Placed=>({actor,radius,x,y,state,anchors:proteinAnchors(proteinGeometry(actor.seed,radius),radius)});
+/** `partner` against `anchor` on `side`, anchor-to-anchor; a positive `gap` pulls it away along the same axis. */
+const against=(anchor:Placed,partner:BindingActor,side:ContactSide='right',gap=0,state:ProteinVisualState='normal'):Placed=>{
+  const placed=place(partner,anchor.radius,0,0,state); const offset=contactOffset(anchor.anchors,placed.anchors,side); const [nx,ny]=NORMALS[side];
+  return {...placed,x:r1(anchor.x+offset.x+nx*gap),y:r1(anchor.y+offset.y+ny*gap)};
+};
+/** Moves a group so the union of its visible bounds is centred on (cx, cy). */
+const centred=(group:Placed[],cx:number,cy:number):Placed[]=>{
+  const x0=Math.min(...group.map(p=>p.x+p.anchors.bounds.x)); const x1=Math.max(...group.map(p=>p.x+p.anchors.bounds.x+p.anchors.bounds.width));
+  const y0=Math.min(...group.map(p=>p.y+p.anchors.bounds.y)); const y1=Math.max(...group.map(p=>p.y+p.anchors.bounds.y+p.anchors.bounds.height));
+  const dx=cx-(x0+x1)/2; const dy=cy-(y0+y1)/2;
+  return group.map(p=>({...p,x:r1(p.x+dx),y:r1(p.y+dy)}));
+};
+const anchorOf=(p:Placed,side:ContactSide)=>({id:p.actor.id,x:r1(p.x+p.anchors[side].x),y:r1(p.y+p.anchors[side].y)});
+const actor=(p:Placed)=>`<g transform="translate(${p.x} ${p.y})" data-actor="${esc(p.actor.id)}" data-radius="${p.radius}">${renderProteinPrimitive({visualSeed:p.actor.seed,fill:p.actor.color,radius:p.radius,state:p.state})}</g>`;
+/** Contact shadow between two touching actors; drawn before them so it only shows in the crevice. */
+const contact=(a:Placed,b:Placed,side:ContactSide)=>renderInteractionPrimitive([anchorOf(a,side),anchorOf(b,OPPOSITE[side])],{kind:'contact'});
+
+/** Two partners side by side, either touching (bound) or apart, centred on (cx, cy). */
+function pairPanel(a:BindingActor,b:BindingActor,cx:number,cy:number,radius:number,bound:boolean):string {
+  const first=place(a,radius); const [left,right]=centred([first,against(first,b,'right',bound?0:radius*.6)],cx,cy);
+  return `${bound?contact(left!,right!,'right'):''}${actor(left!)}${actor(right!)}`;
+}
+
+/** Before → after for bind, unbind and dimerize: the only change is whether the surfaces touch. */
+function bindingTransition(id:'bind'|'unbind'|'dimerize',radius:number):string {
+  const partner=id==='dimerize'?PARTNER_A2:PARTNER_B;
+  const bound=id!=='unbind';
+  return `${pairPanel(PARTNER_A,partner,70,104,radius,!bound)}${renderActionVisual(id,{x:131,y:104},{x:169,y:104})}${pairPanel(PARTNER_A,partner,230,104,radius,bound)}`;
+}
+
+/**
+ * B approaches A: a faded trace of B where it started, B nearer A, and a directed dotted relation
+ * A ·····→ B. B travels left to right because action arrows always point rightwards.
+ */
+function recruitScene(radius:number):string {
+  const a=place(PARTNER_A,radius,238,116);
+  const near=against(a,PARTNER_B,'left',radius*1.9);
+  const start=against(a,PARTNER_B,'left',radius*5.2,'future');
+  const from=anchorOf(a,'left'); const to=anchorOf(near,'right');
+  const relation=renderInteractionPrimitive([{...from,x:r1(from.x-5)},{...to,x:r1(to.x+5)}],{kind:'directed'});
+  const motionY=r1(Math.min(near.y+near.anchors.bounds.y,start.y+start.anchors.bounds.y)-10);
+  return `${actor(start)}${renderActionVisual('recruit',{x:r1(start.x),y:motionY},{x:r1(near.x-4),y:motionY})}${relation}${actor(a)}${actor(near)}`;
+}
+
+/** Three distinct actors touching as one unit, B ↔ A ↔ C, anchor-to-anchor. */
+function complexScene(radius:number):string {
+  const a=place(PARTNER_A,radius); const b=against(a,PARTNER_B,'left'); const c=against(a,PARTNER_C,'right');
+  const [pb,pa,pc]=centred([b,a,c],150,104);
+  return `${contact(pa!,pb!,'left')}${contact(pa!,pc!,'right')}${actor(pb!)}${actor(pa!)}${actor(pc!)}`;
+}
+
+function interactionScene(id:string,radius:number):string {
+  if(id==='bind'||id==='unbind'||id==='dimerize') return bindingTransition(id,radius);
+  if(id==='recruit') return recruitScene(radius);
+  return complexScene(radius);
+}
 
 function enzymeScene(id:string):string {
   const center=proteinAt(id,150,68,'#6f72d8','normal',37);
@@ -163,11 +238,7 @@ function eventScene(rawId:string):string {
   const after=map[id]?[{kind:map[id]!,length:id==='ubiquitinate'?3:undefined,branched:id==='parylate'}]:[];
   const finalState:ProteinVisualState=id==='activate'?'active':id==='inhibit'?'inhibited':id==='degrade'?'degraded':'normal';
   const action=(map[id]?'modify':id) as ActionVisualKind;
-  if(id==='bind'||id==='dimerize'||id==='recruit') {
-    const points=[{id:'A',x:205,y:104},{id:'B',x:248,y:104}];
-    return `${proteinAt('A',48,104,'#7774d8','normal',24)}${proteinAt('B',102,104,'#54a488',id==='recruit'?'future':'normal',24)}${renderActionVisual(action,{x:128,y:104},{x:170,y:104})}${renderInteractionPrimitive(points)}${proteinAt('A',205,104,'#7774d8','normal',24)}${proteinAt('B',248,104,'#54a488','normal',24)}`;
-  }
-  if(id==='unbind') return `${renderInteractionPrimitive([{id:'A',x:50,y:104},{id:'B',x:92,y:104}])}${proteinAt('A',50,104,'#7774d8','normal',24)}${proteinAt('B',92,104,'#54a488','normal',24)}${renderActionVisual('unbind',{x:125,y:104},{x:165,y:104})}${proteinAt('A',208,104,'#7774d8','normal',24)}${proteinAt('B',270,104,'#54a488','normal',24)}`;
+  if(id==='bind'||id==='unbind'||id==='dimerize'||id==='recruit') return interactionScene(id,24);
   if(id==='cleave'||id==='degrade') return `${proteinAt('event-actor',60,108,'#7774d8','normal',29)}${renderActionVisual(id as ActionVisualKind,{x:100,y:108},{x:180,y:108})}${proteinAt('event-fragments',238,108,'#7774d8','degraded',25)}`;
   if(id==='polymerize') return `${proteinAt('event-actor',72,108,'#7774d8','normal',29)}${renderActionVisual('polymerize',{x:110,y:108},{x:176,y:108})}${proteinAt('event-actor',215,108,'#7774d8','normal',29,[{kind:'parylation',length:7}])}`;
   if(id==='translocate') return `${label('CYTOPLASM',45,22)}${label('NUCLEUS',40,166)}${renderMembranePrimitive({x:20,y:92,length:260})}${proteinAt('event-actor',150,52,'#7774d8','active',24)}${proteinAt('event-actor',150,140,'#7774d8','active',24)}${renderActionVisual('translocate',{x:150,y:76},{x:150,y:115})}`;
@@ -194,7 +265,7 @@ function art(entry:VocabularyItem):string {
   if(entry.category==='dna-damage') return at(30,100,renderNucleicAcidPrimitive({width:240,lesion:entry.id as VisualLesion}));
   if(entry.category==='small-molecules') return renderSmallMoleculePrimitive({visualSeed:entry.id,label:entry.label,x:150,y:100,scale:1.25,ion:entry.id==='calcium'||entry.id==='zinc'});
   if(entry.category==='gene-expression') return expressionScene(entry.id);
-  if(entry.category==='interactions') { const separated=entry.id==='unbind'; const three=entry.id==='complex-abc'; const points=three?[{id:'A',x:150,y:58},{id:'B',x:92,y:125},{id:'C',x:208,y:125}]:[{id:'A',x:80,y:105},{id:'B',x:separated?230:190,y:105}]; return `${renderInteractionPrimitive(separated?[]:points)}${points.map((p,i)=>proteinAt(p.id,p.x,p.y,['#7774d8','#54a488','#dd9957'][i]!,(entry.id==='recruit'&&i===1)?'future':'normal',27)).join('')}${entry.id==='recruit'?renderActionVisual('recruit',{x:220,y:60},{x:185,y:91}):''}`; }
+  if(entry.category==='interactions') return interactionScene(entry.id,entry.id==='complex-abc'?30:26);
   if(entry.id==='membrane-closed') return renderMembranePrimitive({shape:{kind:'ellipse',cx:150,cy:96,rx:105,ry:58}});
   if(entry.category==='membranes') return renderMembranePrimitive({x:entry.id.endsWith('vertical')?150:25,y:entry.id.endsWith('vertical')?15:entry.id.endsWith('curved')?108:96,length:entry.id.endsWith('vertical')?150:250,orientation:entry.id.replace('membrane-','') as 'horizontal'|'vertical'|'curved'});
   if(entry.category==='compartments') return renderCompartmentPrimitive(entry.id==='generic-organelle'?'organelle':entry.id as Parameters<typeof renderCompartmentPrimitive>[0],{x:55,y:48});

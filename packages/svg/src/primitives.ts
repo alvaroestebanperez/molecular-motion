@@ -688,10 +688,51 @@ export function renderCompartmentPrimitive(kind: 'extracellular' | 'cytoplasm' |
   return `<g class="mm-primitive mm-compartment mm-compartment--${kind}"><ellipse cx="${at.x + 95}" cy="${at.y + 48}" rx="88" ry="44"/>${inner}</g>`;
 }
 
-export function renderInteractionPrimitive(points: readonly { id: string; x: number; y: number }[]): string {
+export type ContactSide = 'left' | 'right' | 'top' | 'bottom';
+const OPPOSITE_SIDE: Record<ContactSide, ContactSide> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
+const SIDE_NORMAL: Record<ContactSide, ProteinPoint> = { left: { x: -1, y: 0 }, right: { x: 1, y: 0 }, top: { x: 0, y: -1 }, bottom: { x: 0, y: 1 } };
+
+/**
+ * Where to put a partner so that it touches an anchor shape: returns the translation of the
+ * partner's local origin, relative to the anchor shape's local origin, that brings
+ * `partner[opposite(side)]` onto `anchor[side]`, pressed `overlap` px further along the contact
+ * normal so the two outlines merge instead of leaving a hairline gap. Pure visual geometry built
+ * on contact anchors (never on bounding radii), with no biological meaning; it composes, e.g.
+ * B relative to A, then C relative to B, for chains and assemblies.
+ */
+export function contactOffset(anchor: ProteinAnchors, partner: ProteinAnchors, side: ContactSide = 'right', overlap = 1.5): ProteinPoint {
+  const from = anchor[side]; const to = partner[OPPOSITE_SIDE[side]]; const normal = SIDE_NORMAL[side];
+  return { x: round(from.x - to.x - normal.x * overlap), y: round(from.y - to.y - normal.y * overlap) };
+}
+
+/**
+ * How two or more actors are related, which decides how (and whether) a link is drawn:
+ * - `relation` (default): a dotted link, for associations that are not physical contact;
+ * - `directed`: the same dotted link with an arrowhead on the last point (A ·····→ B), e.g. recruitment;
+ * - `contact`: the actors physically touch (place them with `contactOffset`). No line is drawn,
+ *   because a line must never stand in for molecular contact; only a soft contact shadow is
+ *   painted at the midpoint of each pair of facing anchors. Render it *before* the actors so it
+ *   only shows in the crevice between the touching surfaces.
+ */
+export type InteractionKind = 'relation' | 'directed' | 'contact';
+export interface InteractionOptions { kind?: InteractionKind }
+
+export function renderInteractionPrimitive(points: readonly { id: string; x: number; y: number }[], options: InteractionOptions = {}): string {
   if (points.length < 2) return '';
-  const links = points.slice(1).map((point, index) => `<path data-interaction="${esc(points[index]!.id)}:${esc(point.id)}" d="M${points[index]!.x} ${points[index]!.y}L${point.x} ${point.y}"/>`).join('');
-  return `<g class="mm-primitive mm-primitive--interaction">${links}</g>`;
+  const kind = options.kind ?? 'relation';
+  const pairs = points.slice(1).map((point, index) => [points[index]!, point] as const);
+  const id = (a: { id: string }, b: { id: string }) => `${esc(a.id)}:${esc(b.id)}`;
+  if (kind === 'contact') {
+    const shadows = pairs.map(([a, b]) => `<ellipse class="mm-interaction__contact" data-interaction="${id(a, b)}" cx="${round((a.x + b.x) / 2)}" cy="${round((a.y + b.y) / 2)}" rx="7" ry="7"/>`).join('');
+    return `<g class="mm-primitive mm-primitive--interaction mm-interaction--contact" aria-hidden="true">${shadows}</g>`;
+  }
+  const links = pairs.map(([a, b]) => `<path data-interaction="${id(a, b)}" d="M${a.x} ${a.y}L${b.x} ${b.y}"/>`).join('');
+  if (kind === 'relation') return `<g class="mm-primitive mm-primitive--interaction">${links}</g>`;
+  const [tail, tip] = pairs[pairs.length - 1]!;
+  const angle = Math.atan2(tip.y - tail.y, tip.x - tail.x);
+  const wing = (turn: number) => `${round(tip.x - Math.cos(angle + turn) * 7)} ${round(tip.y - Math.sin(angle + turn) * 7)}`;
+  const head = `<path class="mm-interaction__head" d="M${wing(-.55)}L${round(tip.x)} ${round(tip.y)}L${wing(.55)}"/>`;
+  return `<g class="mm-primitive mm-primitive--interaction mm-interaction--directed">${links}${head}</g>`;
 }
 
 export function renderActionVisual(kind: ActionVisualKind, from: { x: number; y: number }, to: { x: number; y: number }): string {
@@ -729,7 +770,7 @@ export const membraneCss = `.mm-primitive--membrane{--mm-membrane-head:#e58f78;-
 export const compartmentCss = `.mm-compartment{fill:#8aa7d5;opacity:.72}.mm-compartment path{fill:none;stroke:#5d86cc;stroke-width:6;stroke-linecap:round}.mm-compartment--mitochondrion{fill:#e57443}.mm-compartment--mitochondrion path{stroke:#fff}.mm-compartment--lysosome{fill:#8268bd}.mm-compartment--endosome{fill:#5b8fd8}`;
 
 /** Interactions between actors. */
-export const interactionCss = `.mm-primitive--interaction path{fill:none;stroke:#64748b;stroke-width:2;stroke-dasharray:3 3}`;
+export const interactionCss = `.mm-primitive--interaction path{fill:none;stroke:#64748b;stroke-width:2;stroke-dasharray:3 3}.mm-primitive--interaction .mm-interaction__head{stroke-dasharray:none;stroke-linecap:round;stroke-linejoin:round}.mm-interaction__contact{fill:#17213b;opacity:.3;filter:blur(2.5px)}`;
 
 /** Action arrows. */
 export const actionCss = `.mm-action{color:var(--mm-action,currentColor)}.mm-action path{fill:none;stroke:currentColor;stroke-opacity:.82;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.mm-action--inhibit path{stroke:#e5484d;stroke-opacity:1}.mm-action--cleave path:last-child{stroke-opacity:1;stroke-width:3}`;
