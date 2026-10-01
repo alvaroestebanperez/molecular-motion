@@ -4,6 +4,9 @@ import {
   nascentStrandGeometry, renderMembranePrimitive, renderModificationPrimitive, renderNucleicAcidPrimitive,
   renderProteinPrimitive, renderVocabularyGlyph,
 } from '../src';
+import {
+  actionCss, compartmentCss, interactionCss, lesionCss, membraneCss, modificationCss, moleculeCss, motionCss, nucleicCss, proteinCss,
+} from '../src/primitives';
 
 describe('visual primitives', () => {
   it('generates stable but distinct protein surfaces from visualSeed', () => {
@@ -102,6 +105,13 @@ describe('visual primitives', () => {
       expect(renderNucleicAcidPrimitive(options)).toBe(svg);
       expect(svg).not.toMatch(/polymerase|kinase|ligase/i);
     });
+  });
+
+  it('assembles primitiveCss from one constant per primitive', () => {
+    for (const css of [proteinCss, modificationCss, moleculeCss, nucleicCss, lesionCss, membraneCss, compartmentCss, interactionCss, actionCss, motionCss]) {
+      expect(css.length).toBeGreaterThan(0);
+      expect(primitiveCss).toContain(css);
+    }
   });
 
   it('supports horizontal, vertical and curved membranes', () => {

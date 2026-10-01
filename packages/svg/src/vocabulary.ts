@@ -42,15 +42,16 @@ const identity = make('protein-identity', 'protein');
 const IDENTITY_PROTEINS = [['parp1', 'PARP1'], ['xrcc1', 'XRCC1'], ['polb', 'POLβ'], ['lig3', 'LIG3'], ['ogg1', 'OGG1'], ['ape1', 'APE1']] as const;
 const IDENTITY_STATES = ['normal', 'active', 'inhibited', 'future'] as const;
 const IDENTITY_COLOR = '#7774d8';
+const STATE_PROTEIN_SEED = 'reference-protein';
 
 export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   protein('protein-normal','Normal','A stable, conceptual protein surface.','#7774d8'),
-  protein('protein-active','Active','A subtle halo communicates activity.','#4f9e91'),
-  protein('protein-inactive','Inactive','Lower contrast communicates inactivity.','#d19158'),
-  protein('protein-inhibited','Inhibited','A consistent inhibition ring and slash.','#dc7184'),
-  protein('protein-degraded','Degraded','Fragments disperse while identity remains legible.','#7185bd'),
-  protein('protein-selected','Selected','Selection is distinct from biological activity.','#4c91e7'),
-  protein('protein-future','Future / preview','Blurred, muted and non-interactive.','#57aa85'),
+  protein('protein-active','Active','A subtle halo communicates activity.','#7774d8'),
+  protein('protein-inactive','Inactive','Lower contrast communicates inactivity.','#7774d8'),
+  protein('protein-inhibited','Inhibited','A consistent inhibition ring and slash.','#7774d8'),
+  protein('protein-degraded','Degraded','Fragments disperse while identity remains legible.','#7774d8'),
+  protein('protein-selected','Selected','Selection is distinct from biological activity.','#7774d8'),
+  protein('protein-future','Future / preview','Blurred, muted and non-interactive.','#7774d8'),
   protein('protein-morphologies','Morphology families','Six deterministic silhouette families, distinguishable in a single colour.','#7774d8'),
   ...IDENTITY_PROTEINS.map(([seed, name]) => identity(`identity-${seed}`, name, 'Same colour and size as every identity card: only the silhouette differs.', IDENTITY_COLOR)),
   ...IDENTITY_STATES.map(state => identity(`identity-parp1-${state}`, `PARP1 · ${state}`, 'Same silhouette as PARP1: only the state presentation changes.', IDENTITY_COLOR)),
@@ -180,7 +181,8 @@ function eventScene(rawId:string):string {
 function art(entry:VocabularyItem):string {
   if(entry.id==='protein-morphologies') return PROTEIN_MORPHOLOGIES.map((family,i)=>{const x=55+(i%3)*95; const y=50+Math.floor(i/3)*78; return `${at(x,y,renderProteinPrimitive({visualSeed:`morphology-${family}`,morphology:family,fill:entry.color,radius:25}))}${label(family,x,y+39)}`;}).join('');
   if(entry.category==='protein-identity') { const [, seed, state='normal']=entry.id.split('-') as [string,string,ProteinVisualState?]; return proteinAt(seed,150,98,entry.color??IDENTITY_COLOR,state,52); }
-  if(entry.category==='proteins') return proteinAt(entry.id,150,98,entry.color??'#7774d8',entry.id.replace('protein-','') as ProteinVisualState,52);
+  // Every state card shows the same protein, so the page proves that state never alters identity.
+  if(entry.category==='proteins') return proteinAt(STATE_PROTEIN_SEED,150,98,entry.color??'#7774d8',entry.id.replace('protein-','') as ProteinVisualState,52);
   if(entry.category==='nucleic-acids') {
     const kind=entry.id==='generic-rna'?'rna':entry.id==='mrna'?'mrna':entry.id==='single-stranded-dna'?'ssdna':'dsdna';
     const state=entry.id.startsWith('unwound')?'unwound':entry.id.startsWith('resected')?'resected':entry.id.startsWith('elongating')?'elongating':entry.id.startsWith('repaired')?'repaired':'normal';
