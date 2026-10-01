@@ -2,7 +2,7 @@ import {
   contactOffset, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, renderActionVisual,
   renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
   renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
-  type ActionVisualKind, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
+  type ActionVisualKind, type CompartmentVisualKind, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -101,11 +101,11 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   membrane('membrane-horizontal','Horizontal membrane','A reusable lipid bilayer.'),
   membrane('membrane-vertical','Vertical membrane','The same bilayer vertically.'), membrane('membrane-curved','Curved membrane','A gently curved bilayer.'),
   membrane('membrane-closed','Closed membrane','The same bilayer closed on itself, with inner and outer leaflets.'),
-  compartment('extracellular','Extracellular space','Sparse extracellular context.'), compartment('cytoplasm','Cytoplasm','Subtle intracellular context.'),
-  compartment('nucleus','Nucleus','A schematic nucleus.'), compartment('generic-organelle','Generic organelle','A neutral membrane-bound compartment.'),
-  compartment('er','Endoplasmic reticulum','A schematic membrane network.'), compartment('golgi','Golgi apparatus','A stack of curved cisternae.'),
-  compartment('mitochondrion','Mitochondrion','An organelle with a cristae cue.'), compartment('lysosome','Lysosome','A compact degradative compartment.'),
-  compartment('endosome','Endosome','A compact trafficking compartment.'),
+  compartment('extracellular','Extracellular space','Outside the cell: banded matrix fibres and sparse particles.'), compartment('cytoplasm','Cytoplasm','Crowded soluble interior: fine solutes, a faint filament, no organelles.'),
+  compartment('nucleus','Nucleus','Double envelope crossed by pores, around a dense nucleolus.'), compartment('generic-organelle','Generic organelle','A single closed bilayer around a lumen.'),
+  compartment('er','Endoplasmic reticulum','One lumen shaped into a network of connected tubules.'), compartment('golgi','Golgi apparatus','Stacked curved cisternae; vesicles leave the concave trans face.'),
+  compartment('mitochondrion','Mitochondrion','Double membrane whose inner bilayer folds into cristae.'), compartment('lysosome','Lysosome','A round vesicle whose lumen is packed with dense material.'),
+  compartment('endosome','Endosome','A vesicle budding off, with membrane-bound cargo sorted into the bud.'),
   receptor('generic-receptor','Generic receptor','A membrane-spanning protein bound to ligand.'),
   receptor('rtk','Receptor tyrosine kinase','Ligand-driven dimerization and phosphorylation.'), receptor('gpcr','GPCR','A conceptual multi-pass receptor.'),
   receptor('ion-channel','Ion channel','A membrane pore with transported ions.'), receptor('proteasome','Proteasomal degradation','Ubiquitinated protein enters a proteolytic complex.'),
@@ -318,7 +318,7 @@ function art(entry:VocabularyItem):string {
   if(entry.category==='interactions') return interactionScene(entry.id,entry.id==='complex-abc'?30:26);
   if(entry.id==='membrane-closed') return renderMembranePrimitive({shape:{kind:'ellipse',cx:150,cy:96,rx:105,ry:58}});
   if(entry.category==='membranes') return renderMembranePrimitive({x:entry.id.endsWith('vertical')?150:25,y:entry.id.endsWith('vertical')?15:entry.id.endsWith('curved')?108:96,length:entry.id.endsWith('vertical')?150:250,orientation:entry.id.replace('membrane-','') as 'horizontal'|'vertical'|'curved'});
-  if(entry.category==='compartments') return renderCompartmentPrimitive(entry.id==='generic-organelle'?'organelle':entry.id as Parameters<typeof renderCompartmentPrimitive>[0],{x:55,y:48});
+  if(entry.category==='compartments') return renderCompartmentPrimitive(entry.id==='generic-organelle'?'organelle':entry.id as CompartmentVisualKind,{x:20,y:15},{width:260,height:150});
   if(entry.category==='receptors-complexes') return receptorScene(entry.id);
   if(entry.category==='molecular-events') return eventScene(entry.id);
   if(entry.id==='test-kinase') return enzymeScene('kinase'); if(entry.id==='test-protease') return enzymeScene('protease');

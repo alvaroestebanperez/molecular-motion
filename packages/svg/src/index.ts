@@ -27,6 +27,8 @@ export {
 } from './primitives';
 export type {
   ActionVisualKind,
+  CompartmentOptions,
+  CompartmentVisualKind,
   ContactSide,
   DnaVisualState,
   InteractionKind,
