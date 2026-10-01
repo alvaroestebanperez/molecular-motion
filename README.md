@@ -20,7 +20,7 @@ Molecular Motion turns a YAML or JSON description of **actors, molecular sites, 
 
 ## Demo
 
-The [interactive playground](https://alvaroestebanperez.github.io/molecular-motion/) places an editable YAML document next to the generated mechanism. Change an actor, target, or action and the preview updates immediately.
+The [demo](https://alvaroestebanperez.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [playground](https://alvaroestebanperez.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
