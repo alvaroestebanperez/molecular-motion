@@ -6,8 +6,8 @@ export type DnaVisualState = 'normal' | 'damaged' | 'cleaved' | 'unwound' | 'res
 export type VisualLesion = 'damaged-base' | 'ap-site' | 'mismatch' | 'nick' | 'ssb' | 'dsb' | 'crosslink' | 'adduct';
 export type ActionVisualKind = 'bind' | 'unbind' | 'recruit' | 'dimerize' | 'activate' | 'inhibit' | 'modify' | 'cleave' | 'ligate' | 'synthesize' | 'degrade' | 'translocate' | 'polymerize' | 'unwind' | 'elongate' | 'conformational-change';
 
-/** One overlapping ellipsoidal volume of a protein surface. `r` is the geometric mean radius. */
-export interface ProteinSphere { x: number; y: number; r: number; rx: number; ry: number; rotation: number; depth: number }
+/** One overlapping ellipsoidal volume of a protein surface. `r` is the geometric mean radius; `domain` is its lobe. */
+export interface ProteinSphere { x: number; y: number; r: number; rx: number; ry: number; rotation: number; depth: number; domain?: number }
 /** Deterministic silhouette families. They are visual archetypes, never PDB structures. */
 export type ProteinMorphology = 'compact' | 'elongated' | 'bilobed' | 'multidomain' | 'ring' | 'crescent';
 export const PROTEIN_MORPHOLOGIES: readonly ProteinMorphology[] = ['compact', 'elongated', 'bilobed', 'multidomain', 'ring', 'crescent'];
@@ -58,36 +58,46 @@ function proteinDomains(family: ProteinMorphology, random: () => number): Domain
   const jitter = (amount: number) => (random() - .5) * 2 * amount;
   switch (family) {
     case 'compact': {
-      // A squat core with 2–3 bulges of varied size; uneven spacing leaves one or two shallow notches.
-      const lobes = 2 + Math.floor(random() * 2);
+      // A squat core with 1–3 bulges gathered on one arc: the free side stays flat or notched,
+      // so compact proteins differ in where their mass sits, not only in their outline noise.
+      const core = { x: 0, y: 0, rx: .46 + random() * .14, ry: .32 + random() * .18, rotation: jitter(.4) };
+      const lobes = 1 + Math.floor(random() * 3);
       const start = random() * Math.PI * 2;
-      const core = { x: 0, y: 0, rx: .5 + random() * .14, ry: .34 + random() * .16, rotation: 0 };
+      const spread = Math.PI * (.55 + random() * 1.05);
       return [core, ...Array.from({ length: lobes }, (_, index) => {
-        const angle = start + index * (Math.PI * 2 / lobes) * (.65 + random() * .3);
-        const size = .2 + random() * .17;
-        const distance = .36 + random() * .16;
-        return { x: Math.cos(angle) * distance * 1.1, y: Math.sin(angle) * distance * .9, rx: size * 1.15, ry: size, rotation: angle };
+        const angle = start + (lobes > 1 ? index / (lobes - 1) : .5) * spread;
+        const size = .16 + random() * .24;
+        const distance = .36 + random() * .3;
+        return { x: Math.cos(angle) * distance * 1.1, y: Math.sin(angle) * distance * .9, rx: size * (1 + random() * .3), ry: size, rotation: angle };
       })];
     }
     case 'elongated': {
-      const count = 3 + Math.floor(random() * 2);
-      const bend = jitter(.22);
+      const count = 3 + Math.floor(random() * 3);
+      const bend = jitter(.35);
+      const half = .55 + random() * .17;
+      const heavy = random() < .5 ? -1 : 1;
       return Array.from({ length: count }, (_, index) => {
         const t = index / (count - 1) * 2 - 1;
-        const size = .26 + random() * .13;
-        return { x: t * .62, y: bend * (1 - t * t) + jitter(.05), rx: size * 1.12, ry: size * (.8 + random() * .15), rotation: jitter(.4) };
+        // One end may carry a heavier domain, so elongated proteins are not all symmetric rods.
+        const size = .21 + random() * .12 + Math.max(0, t * heavy) * random() * .12;
+        return { x: t * half, y: bend * (1 - t * t) + jitter(.05), rx: size * 1.12, ry: size * (.75 + random() * .2), rotation: jitter(.5) };
       });
     }
     case 'bilobed': {
-      const gap = .42 + random() * .14;
-      const major = .4 + random() * .08;
-      const minor = major * (.58 + random() * .4);
-      const tilt = jitter(.35);
-      const first = { x: -gap, y: 0, rx: major * (1 + random() * .2), ry: major, rotation: jitter(.6) };
-      const second = { x: gap * (.8 + random() * .2), y: Math.sin(tilt) * gap, rx: minor * (1 + random() * .25), ry: minor, rotation: jitter(.6) };
+      const gap = .4 + random() * .18;
+      const major = .38 + random() * .1;
+      const minor = major * (.55 + random() * .45);
+      const tilt = jitter(.45);
+      const first = { x: -gap, y: 0, rx: major * (1 + random() * .25), ry: major, rotation: jitter(.6) };
+      const second = { x: gap * (.8 + random() * .2), y: Math.sin(tilt) * gap, rx: minor * (1 + random() * .3), ry: minor, rotation: jitter(.6) };
       // The neck sits on the axis between the lobes and is thinner than both: a visible waist, never a gap.
-      const neck = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2, rx: Math.hypot(second.x - first.x, second.y - first.y) * .3, ry: minor * (.5 + random() * .15), rotation: Math.atan2(second.y - first.y, second.x - first.x) };
-      return [first, second, neck];
+      const neck = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2, rx: Math.hypot(second.x - first.x, second.y - first.y) * .3, ry: minor * (.5 + random() * .2), rotation: Math.atan2(second.y - first.y, second.x - first.x) };
+      const domains = [first, second, neck];
+      if (random() < .45) {
+        const angle = Math.PI + jitter(1.1);
+        domains.push({ x: first.x + Math.cos(angle) * major * .9, y: first.y + Math.sin(angle) * major * .9, rx: major * .42, ry: major * .34, rotation: angle });
+      }
+      return domains;
     }
     case 'multidomain': {
       const count = 3 + Math.floor(random() * 2);
@@ -106,14 +116,20 @@ function proteinDomains(family: ProteinMorphology, random: () => number): Domain
     }
     case 'ring': {
       const count = 5 + Math.floor(random() * 5);
-      const squash = .74 + random() * .26;
-      const thickness = .16 + random() * .08;
-      return Array.from({ length: count }, (_, index) => {
+      const squash = .68 + random() * .32;
+      const thickness = .14 + random() * .12;
+      const subunits = Array.from({ length: count }, (_, index) => {
         const angle = index / count * Math.PI * 2 + jitter(.06);
         // Subunits are sized from the chord between neighbours so the ring always closes.
         const chord = 2 * .62 * Math.sin(Math.PI / count);
         return { x: Math.cos(angle) * .62, y: Math.sin(angle) * .62 * squash, rx: chord * .66 + jitter(.02), ry: thickness, rotation: angle + Math.PI / 2 };
       });
+      if (random() < .4) {
+        // An outward cap on one subunit breaks the ring's rotational symmetry.
+        const angle = random() * Math.PI * 2;
+        subunits.push({ x: Math.cos(angle) * .86, y: Math.sin(angle) * .86 * squash, rx: .2, ry: .15, rotation: angle });
+      }
+      return subunits;
     }
     case 'crescent': {
       const count = 4 + Math.floor(random() * 3);
@@ -163,6 +179,7 @@ export function proteinGeometry(visualSeed: string, radius = 52, count = 28, mor
         ry: core ? domain.ry * .9 : minor * size * ellipticity,
         rotation: core ? domain.rotation : random() * Math.PI,
         depth: core ? .5 + domainIndex * .01 : random(),
+        domain: domainIndex,
       });
     }
   });
@@ -185,27 +202,47 @@ export function proteinGeometry(visualSeed: string, radius = 52, count = 28, mor
 }
 
 /**
- * One continuous volume built from overlapping particles: a single silhouette outline, then shadow,
- * body and light layers offset towards one top-left light. Group opacity keeps overlaps seamless.
+ * One continuous volume built from overlapping particles. The silhouette outline is the dominant
+ * line; shading is computed per lobe (each lobe's particles scaled towards one top-left light), so
+ * the eye reads lobes as volumes first and the particles only as a faint surface texture.
  */
 export function renderProteinSurface(particles: readonly ProteinSphere[], fill: string, radius: number): string {
   const light = { x: -.6, y: -.8 };
-  const largest = Math.max(...particles.map(particle => particle.r));
-  const ellipses = (shift: number, grow: (particle: ProteinSphere) => number, scale = 1, minimum = 0) => particles.map(particle => {
-    if (particle.r < largest * minimum) return '';
-    const rx = particle.rx * scale + grow(particle); const ry = particle.ry * scale + grow(particle);
-    if (rx < .8 || ry < .8) return '';
-    const cx = round(particle.x + light.x * shift); const cy = round(particle.y + light.y * shift);
-    return `<ellipse cx="${cx}" cy="${cy}" rx="${round(rx)}" ry="${round(ry)}" transform="rotate(${round(particle.rotation)} ${cx} ${cy})"/>`;
+  const lobes = new Map<number, ProteinSphere[]>();
+  for (const particle of particles) lobes.set(particle.domain ?? 0, [...(lobes.get(particle.domain ?? 0) ?? []), particle]);
+  const centres = new Map([...lobes].map(([domain, members]) => {
+    const weight = members.reduce((sum, particle) => sum + particle.r * particle.r, 0);
+    const x = members.reduce((sum, particle) => sum + particle.x * particle.r * particle.r, 0) / weight;
+    const y = members.reduce((sum, particle) => sum + particle.y * particle.r * particle.r, 0) / weight;
+    // The lobe's thinnest dimension bounds every offset, so light never leaves a narrow lobe.
+    const unit = Math.max(...members.map(particle => Math.min(particle.rx, particle.ry)));
+    return [domain, { x, y, unit, largest: Math.max(...members.map(particle => particle.r)) }];
+  }));
+  const ellipse = (x: number, y: number, rx: number, ry: number, rotation: number) => rx < .6 || ry < .6 ? ''
+    : `<ellipse cx="${round(x)}" cy="${round(y)}" rx="${round(rx)}" ry="${round(ry)}" transform="rotate(${round(rotation)} ${round(x)} ${round(y)})"/>`;
+  const all = (grow: number) => particles.map(particle => ellipse(particle.x, particle.y, particle.rx + grow, particle.ry + grow, particle.rotation)).join('');
+  // Each lobe scaled about its own centre and nudged towards the light: a lit core with a shaded rim.
+  // Every lit ellipse is clamped inside its own particle, so no layer can leave the silhouette.
+  const lit = (scale: number, shift: number, major = 0) => particles.map(particle => {
+    const centre = centres.get(particle.domain ?? 0)!;
+    if (particle.r < centre.largest * major) return '';
+    const offset = shift * centre.unit;
+    let dx = centre.x + (particle.x - centre.x) * scale + light.x * offset - particle.x;
+    let dy = centre.y + (particle.y - centre.y) * scale + light.y * offset - particle.y;
+    const room = Math.min(particle.rx, particle.ry) * (1 - scale);
+    const distance = Math.hypot(dx, dy);
+    if (distance > room) { dx *= room / distance; dy *= room / distance; }
+    return ellipse(particle.x + dx, particle.y + dy, particle.rx * scale, particle.ry * scale, particle.rotation);
   }).join('');
-  const bodyShift = radius * .06;
-  // Light falls on the main lobes only (their large particles), so it reads as one lit volume.
+  // Texture: a faint highlight per particle, offset towards the same light.
+  const sheen = particles.map(particle => ellipse(particle.x + light.x * particle.r * .32, particle.y + light.y * particle.r * .32, particle.rx * .42, particle.ry * .42, particle.rotation)).join('');
+  const outline = Math.max(1.6, radius * .038);
   return `<g class="mm-surface">`
-    + `<g class="mm-surface__outline" fill="${mix(fill, '#17213b', .42)}">${ellipses(0, () => 1.4)}</g>`
-    + `<g class="mm-surface__shade" fill="${mix(fill, '#1b2340', .26)}">${ellipses(0, () => 0)}</g>`
-    + `<g class="mm-surface__body" fill="${esc(fill)}">${ellipses(bodyShift, () => -bodyShift)}</g>`
-    + `<g class="mm-surface__light" fill="${mix(fill, '#ffffff', .42)}" opacity=".55">${ellipses(radius * .12, () => 0, .62, .55)}</g>`
-    + `<g class="mm-surface__sheen" fill="#ffffff" opacity=".18">${ellipses(radius * .22, () => 0, .3, .75)}</g>`
+    + `<g class="mm-surface__outline" fill="${mix(fill, '#17213b', .45)}">${all(outline)}</g>`
+    + `<g class="mm-surface__shade" fill="${mix(fill, '#1b2340', .28)}">${all(0)}</g>`
+    + `<g class="mm-surface__body" fill="${esc(fill)}">${lit(.93, .1)}</g>`
+    + `<g class="mm-surface__light" fill="${mix(fill, '#ffffff', .45)}" opacity=".45">${lit(.58, .3, .7)}</g>`
+    + `<g class="mm-surface__sheen" fill="#ffffff" opacity=".1">${sheen}</g>`
     + `</g>`;
 }
 

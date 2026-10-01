@@ -3,10 +3,10 @@
  * components by overriding `--mm-*` tokens; light values are the default, dark values apply under
  * `[data-theme=dark]`, `.mm-theme-dark`, or the OS preference when no light theme is forced.
  */
-const dark = '--mm-ui-bg:#0b1020;--mm-ui-surface:#111829;--mm-ui-raised:#161f33;--mm-ui-canvas:#0e1422;--mm-ui-ink:#e7ecf6;--mm-ui-muted:#93a1b8;--mm-ui-faint:#5f6c84;--mm-ui-line:#232d44;--mm-ui-accent:#6ea0ff;--mm-ui-accent-soft:#6ea0ff1f;--mm-ui-on-accent:#0b1020;--mm-ui-alert:#ff6b6b';
+const dark = '--mm-ui-bg:#0b1020;--mm-ui-surface:#111829;--mm-ui-raised:#161f33;--mm-ui-canvas:#0e1422;--mm-ui-ink:#e7ecf6;--mm-ui-muted:#93a1b8;--mm-ui-faint:#5f6c84;--mm-ui-line:#232d44;--mm-ui-accent:#6ea0ff;--mm-ui-accent-soft:#6ea0ff1f;--mm-ui-on-accent:#0b1020;--mm-ui-alert:#ff6b6b;--mm-ui-section-tint:16%';
 
 export const uiCss = `
-:root{--mm-ui-bg:#f6f8fb;--mm-ui-surface:#ffffff;--mm-ui-raised:#f9fafc;--mm-ui-canvas:#f5f7fb;--mm-ui-ink:#15213b;--mm-ui-muted:#4f5d75;--mm-ui-faint:#98a3b5;--mm-ui-line:#e3e8f0;--mm-ui-accent:#2563eb;--mm-ui-accent-soft:#2563eb14;--mm-ui-on-accent:#ffffff;--mm-ui-alert:#e5484d}
+:root{--mm-ui-bg:#f6f8fb;--mm-ui-surface:#ffffff;--mm-ui-raised:#f9fafc;--mm-ui-canvas:#f5f7fb;--mm-ui-ink:#15213b;--mm-ui-muted:#4f5d75;--mm-ui-faint:#98a3b5;--mm-ui-line:#e3e8f0;--mm-ui-accent:#2563eb;--mm-ui-accent-soft:#2563eb14;--mm-ui-on-accent:#ffffff;--mm-ui-alert:#e5484d;--mm-ui-section-tint:55%}
 :root[data-theme=dark],.mm-theme-dark{${dark}}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){${dark}}}
 
@@ -85,8 +85,8 @@ export const uiCss = `
 .mm-player .mm-controls{padding:12px 14px}
 .mm-vocabulary{display:grid;gap:18px;color:var(--mm-ui-ink);font-family:var(--mm-font,Inter,system-ui,sans-serif)}
 .mm-vocabulary-section{overflow:hidden;border:1px solid var(--mm-ui-line);border-radius:14px;background:var(--mm-ui-surface)}
-.mm-vocabulary-section>h2{margin:0;padding:8px 13px;border-bottom:1px solid var(--mm-ui-line);background:color-mix(in srgb,var(--mm-section,#dbeafe) 55%,var(--mm-ui-surface));font-size:16px;line-height:1.3}
-.mm-vocabulary-section--enzymatic-actions{--mm-section:#dbeafe}.mm-vocabulary-section--proteins,.mm-vocabulary-section--interactions{--mm-section:#d8f1ed}.mm-vocabulary-section--small-molecules{--mm-section:#fce1e7}.mm-vocabulary-section--nucleic-acids,.mm-vocabulary-section--gene-expression{--mm-section:#ffedd5}.mm-vocabulary-section--dna-damage{--mm-section:#fce7f3}.mm-vocabulary-section--modifications,.mm-vocabulary-section--molecular-events{--mm-section:#ede9fe}.mm-vocabulary-section--compartments,.mm-vocabulary-section--membranes,.mm-vocabulary-section--receptors-complexes{--mm-section:#dbeafe}.mm-vocabulary-section--test-scenes{--mm-section:#dcfce7}
+.mm-vocabulary-section>h2{margin:0;padding:8px 13px;border-bottom:1px solid var(--mm-ui-line);background:color-mix(in srgb,var(--mm-section,#dbeafe) var(--mm-ui-section-tint),var(--mm-ui-surface));font-size:16px;line-height:1.3}
+.mm-vocabulary-section--enzymatic-actions{--mm-section:#dbeafe}.mm-vocabulary-section--proteins,.mm-vocabulary-section--protein-identity,.mm-vocabulary-section--interactions{--mm-section:#d8f1ed}.mm-vocabulary-section--small-molecules{--mm-section:#fce1e7}.mm-vocabulary-section--nucleic-acids,.mm-vocabulary-section--gene-expression{--mm-section:#ffedd5}.mm-vocabulary-section--dna-damage{--mm-section:#fce7f3}.mm-vocabulary-section--modifications,.mm-vocabulary-section--molecular-events{--mm-section:#ede9fe}.mm-vocabulary-section--compartments,.mm-vocabulary-section--membranes,.mm-vocabulary-section--receptors-complexes{--mm-section:#dbeafe}.mm-vocabulary-section--test-scenes{--mm-section:#dcfce7}
 .mm-vocabulary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
 .mm-vocabulary-card{display:grid;grid-template-rows:auto 1fr;min-height:250px;padding:12px;border-right:1px solid var(--mm-ui-line);border-bottom:1px solid var(--mm-ui-line);background:linear-gradient(145deg,var(--mm-ui-surface),color-mix(in srgb,var(--mm-section,#dbeafe) 17%,var(--mm-ui-surface)))}
 .mm-vocabulary-card header{position:relative;z-index:1}.mm-vocabulary-card h3{margin:0;color:var(--mm-ui-ink);font-size:15px;line-height:1.25}.mm-vocabulary-card p{min-height:38px;margin:3px 0 0;color:var(--mm-ui-muted);font-size:12px;line-height:1.35}
