@@ -126,10 +126,11 @@ describe('catalogue arrows', () => {
     ['event-conformational-change', [['event-actor', 29, 62, 108], ['event-actor', 29, 238, 108]]],
     ['event-polymerize', [['event-actor', 29, 72, 108], ['event-actor', 29, 215, 108]]],
     ['event-translocate', [['event-actor', 24, 150, 52], ['event-actor', 24, 150, 140]]],
-    ['kinase', [['kinase-substrate', 24, 55, 128], ['kinase', 37, 150, 68], ['kinase-substrate', 24, 245, 128]]],
+    ['kinase', [['kinase-substrate', 23, 65.9, 137.6], ['kinase', 27, 151.7, 71.7], ['kinase-substrate', 23, 243.8, 140.6]]],
+    ['phosphatase', [['phosphatase-substrate', 23, 65.6, 111.9], ['phosphatase', 27, 153.3, 81.3], ['phosphatase-substrate', 23, 239.7, 87.9]]],
     ['test-translocation', [['IRF3', 27, 150, 52], ['IRF3', 27, 150, 140]]],
     ['proteasome', [['target', 25, 55, 67], ['proteasome', 48, 150, 110]]],
-    ['ligase', [['ligase', 37, 150, 68]]],
+    ['ligase', [['ligase', 27, 150.4, 83.3]]],
   ];
   it.each(ACTORS)('%s: the arrow never enters an actor', (id, actors) => {
     const arrow = arrowPoints(renderVocabularyGlyph(id));

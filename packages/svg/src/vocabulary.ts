@@ -1,9 +1,9 @@
 import {
   contactOffset, firstContact, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, proteinOutlineWidth, renderActionVisual,
-  renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
+  renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderModificationPrimitive, renderNucleicAcidPrimitive,
   renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, renderUnitChainPrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
   type ActionVisualKind, type CompartmentVisualKind, type ContactShape, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
-  type MoleculeRingSystem, type SmallMoleculeTopology,
+  type MoleculeRingSystem, type NucleicAcidOptions, type SmallMoleculeTopology,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -281,21 +281,132 @@ function interactionScene(id:string,radius:number):string {
   return complexScene(radius);
 }
 
+/*
+ * Reaction grammar for the enzymatic cards: reactants → products, read left to right. Each side is
+ * one column of species stacked with the shared `plus`; the transformation arrow joins both columns
+ * at the height of their middle, and the catalyst sits just above that arrow, outside both columns,
+ * so it is never read as a reactant. Every species carries its own extents, so proteins, small
+ * molecules, free groups and DNA fragments stack without overlap. Pure composition of primitives.
+ */
+interface Species {
+  /** Tag for the species group (`data-species`). */
+  name:string;
+  /** Extents of the drawing from its anchor (px): above, below, left and right. */
+  top:number; bottom:number; left:number; right:number;
+  draw:(x:number,y:number)=>string;
+}
+/** One molecule scale shared by every reaction, so ATP and ADP are always comparable (phosphates stay countable). */
+const REACTION_MOLECULE_SCALE=.6;
+const ENZYME_COLOR='#6f72d8';
+/** Substrates get their own hue, so catalyst and substrate never read as the same entity. */
+const SUBSTRATE_COLOR='#54a488';
+const DONOR_COLOR='#dd9957';
+const REACTION_DNA_WIDTH=96;
+/** Wide enough that both double-strand-break fragments, or the duplex and peeled parts of unwound DNA, end on a full lobe of the helix. */
+const WIDE_DNA_WIDTH=110;
+/** Vertical room for a `plus` between two stacked species; horizontal room in a row. */
+const PLUS_ROOM=22; const ROW_PLUS_ROOM=24;
+const species=(name:string,draw:Species['draw'],top:number,bottom:number,left:number,right:number):Species=>({name,draw,top,bottom,left,right});
+
+type ProteinMods=NonNullable<Parameters<typeof renderProteinPrimitive>[0]['modifications']>;
+/** A protein with its visible bounds; markers, halo and fragment scatter widen them. */
+function proteinSpecies(name:string,seed:string,color:string,radius:number,state:ProteinVisualState='normal',mods:ProteinMods=[]):Species {
+  const b=proteinAnchors(proteinGeometry(seed,radius),radius).bounds;
+  const grow=state==='degraded'?1.6:1;
+  let top=-b.y*grow; let bottom=(b.y+b.height)*grow; let left=-b.x*grow; let right=(b.x+b.width)*grow;
+  if(state==='active'||state==='selected') { top=Math.max(top,radius+14); bottom=Math.max(bottom,radius+14); left=Math.max(left,radius+14); right=Math.max(right,radius+14); }
+  // Markers fan out from the upper left of the surface (see renderProteinPrimitive).
+  for(const mod of mods) { const reach=mod.kind==='ubiquitination'?10+(mod.length??1)*15:11; top+=reach*.55; left+=reach*.35; }
+  return species(name,(x,y)=>proteinAt(seed,x,y,color,state,radius,mods),top,bottom,left,right);
+}
+/** A catalogue small molecule, drawn with its catalogue topology and label at the reaction scale. */
+function moleculeSpecies(id:string):Species {
+  const topology=SMALL_MOLECULE_TOPOLOGIES[id]!; const name=MOLECULAR_VOCABULARY.find(item=>item.id===id)?.label??id;
+  const draw=(x:number,y:number)=>renderSmallMoleculePrimitive({visualSeed:id,label:name,x,y,scale:REACTION_MOLECULE_SCALE,topology});
+  // The primitive centres its atoms' box on (x, y): measure that box once from the drawing itself.
+  const circles=[...draw(0,0).matchAll(/cx="(-?[\d.]+)" cy="(-?[\d.]+)" r="([\d.]+)"/g)].map(m=>m.slice(1).map(Number) as [number,number,number]);
+  const half=(axis:0|1)=>REACTION_MOLECULE_SCALE*(Math.max(...circles.map(c=>c[axis]+c[2]))-Math.min(...circles.map(c=>c[axis]-c[2])))/2;
+  return species(id,draw,half(1)+15,half(1),half(0),half(0));
+}
+/** A free chemical group (released Pᵢ, acetate…): the same tag that marks it on a protein, attached to nothing. */
+function groupSpecies(kind:ModificationVisualKind):Species {
+  const half=kind==='phosphorylation'?9:11;
+  return species(`free-${kind}`,(x,y)=>renderModificationPrimitive({kind},{x,y}),10,10,half,half);
+}
+/** A short DNA fragment centred on its anchor; lesion and state come from the shared nucleic-acid primitive. */
+function dnaSpecies(name:string,options:Pick<NucleicAcidOptions,'state'|'lesion'>,width=REACTION_DNA_WIDTH):Species {
+  const half=width/2;
+  return species(name,(x,y)=>at(r1(x-half),y,renderNucleicAcidPrimitive({...options,width})),options.state==='unwound'?50:17,17,half+4,half+4);
+}
+/** Several species side by side, joined by `plus` (e.g. ADP + Pᵢ). */
+function speciesRow(name:string,items:Species[]):Species {
+  const widths=items.map(item=>item.left+item.right); const total=widths.reduce((a,b)=>a+b,0)+ROW_PLUS_ROOM*(items.length-1);
+  const top=Math.max(...items.map(item=>item.top)); const bottom=Math.max(...items.map(item=>item.bottom));
+  return species(name,(x,y)=>{
+    let cursor=x-total/2;
+    return items.map((item,i)=>{
+      const markup=`<g data-species="${esc(item.name)}">${item.draw(r1(cursor+item.left),y)}</g>`;
+      cursor+=widths[i]!;
+      const sign=i<items.length-1?plus(r1(cursor+ROW_PLUS_ROOM/2),y):'';
+      cursor+=ROW_PLUS_ROOM; return markup+sign;
+    }).join('');
+  },top,bottom,total/2,total/2);
+}
+interface ReactionOptions {
+  reactants:Species[]; products:Species[]; catalyst?:Species; action?:ActionVisualKind;
+  /** Height of the arrow and of both columns' middle. */
+  y?:number;
+  /** Centres of the reactant and product columns. */
+  columns?:[number,number];
+}
+function reactionScene({reactants,products,catalyst,action='modify',y=106,columns=[62,238]}:ReactionOptions):string {
+  const column=(items:Species[],cx:number,role:'reactants'|'products')=>{
+    const total=items.reduce((sum,item)=>sum+item.top+item.bottom,0)+PLUS_ROOM*(items.length-1);
+    let cursor=y-total/2;
+    const markup=items.map((item,i)=>{
+      const cy=r1(cursor+item.top); cursor+=item.top+item.bottom;
+      const drawn=`<g data-species="${esc(item.name)}">${item.draw(r1(cx+(item.left-item.right)/2),cy)}</g>`;
+      if(i===items.length-1) return drawn;
+      const sign=plus(cx,r1(cursor+PLUS_ROOM/2)); cursor+=PLUS_ROOM; return drawn+sign;
+    }).join('');
+    return `<g data-${role}="">${markup}</g>`;
+  };
+  const halfWidth=(items:Species[])=>Math.max(...items.map(item=>(item.left+item.right)/2));
+  const from={x:r1(columns[0]+halfWidth(reactants)+8),y}; const to={x:r1(columns[1]-halfWidth(products)-8),y};
+  const enzyme=catalyst?`<g data-catalyst="">${catalyst.draw(r1(150+(catalyst.left-catalyst.right)/2),r1(y-10-catalyst.bottom))}</g>`:'';
+  return `${column(reactants,columns[0],'reactants')}${enzyme}${renderActionVisual(action,from,to,{curvature:0})}${column(products,columns[1],'products')}`;
+}
+
 function enzymeScene(id:string):string {
-  const center=proteinAt(id,150,68,'#6f72d8','normal',37);
-  if(id==='protease') return `${center}${proteinAt('substrate',55,128,'#8b94d8','normal',24)}${proteinAt('fragment-a',235,128,'#8b94d8','degraded',20)}${actionArrow('cleave',{x:55,y:128,seed:'substrate',radius:24},{x:235,y:128,seed:'fragment-a',radius:20,state:'degraded'})}`;
-  if(id==='nuclease') return `${center}${at(25,130,renderNucleicAcidPrimitive({width:250,lesion:'dsb'}))}${actionArrow('cleave',{x:150,y:68,seed:id,radius:37},{x:150,y:130,reach:STRAND_REACH})}`;
   if(id==='polymerase') {
     const dna={x:25,y:136,width:250,state:'elongating' as const}; const {threePrime:end,follow}=nascentStrandGeometry(dna);
-    return `${renderNucleicAcidPrimitive(dna)}<g ${follow}>${proteinAt(id,end.x+8,end.y-30,'#6f72d8','normal',32)}</g>`;
+    return `${renderNucleicAcidPrimitive(dna)}<g ${follow}>${proteinAt(id,end.x+8,end.y-30,ENZYME_COLOR,'normal',32)}</g>`;
   }
-  if(id==='helicase'||id==='ligase'||id==='glycosylase') {
-    const state=id==='helicase'?'unwound':'normal'; const dnaLesion=id==='ligase'?'nick':id==='glycosylase'?'ap-site':undefined;
-    return `${center}${at(25,130,renderNucleicAcidPrimitive({width:250,state,lesion:dnaLesion}))}${id==='helicase'?renderSmallMoleculePrimitive({visualSeed:'ATP',label:'ATP',x:42,y:45,scale:.6}):''}${actionArrow(id==='ligase'?'ligate':id==='helicase'?'unwind':'modify',{x:150,y:68,seed:id,radius:37},{x:150,y:130,reach:STRAND_REACH})}`;
+  const catalyst=proteinSpecies(id,id,ENZYME_COLOR,27);
+  const substrate=(mods:ProteinMods=[])=>proteinSpecies(mods.length?`substrate-${mods[0]!.kind}`:'substrate',`${id}-substrate`,SUBSTRATE_COLOR,23,'normal',mods);
+  const phosphate=groupSpecies('phosphorylation');
+  switch(id) {
+    // The γ-phosphate moves from ATP to the substrate: ATP + S → ADP + S-P.
+    case 'kinase': return reactionScene({catalyst,reactants:[moleculeSpecies('atp'),substrate()],products:[moleculeSpecies('adp'),substrate([{kind:'phosphorylation'}])]});
+    // S-P → S + Pᵢ: the released phosphate is the same tag, now free.
+    case 'phosphatase': return reactionScene({catalyst,reactants:[substrate([{kind:'phosphorylation'}])],products:[substrate(),phosphate]});
+    case 'deacetylase': return reactionScene({catalyst,reactants:[substrate([{kind:'acetylation'}])],products:[substrate(),groupSpecies('acetylation')]});
+    // A group moves from a donor to an acceptor.
+    case 'transferase': {
+      const donor=(mods:ProteinMods)=>proteinSpecies(mods.length?'donor-acetylation':'donor','donor',DONOR_COLOR,20,'normal',mods);
+      const acceptor=(mods:ProteinMods)=>proteinSpecies(mods.length?'acceptor-acetylation':'acceptor',`${id}-substrate`,SUBSTRATE_COLOR,20,'normal',mods);
+      return reactionScene({catalyst,reactants:[donor([{kind:'acetylation'}]),acceptor([])],products:[donor([]),acceptor([{kind:'acetylation'}])]});
+    }
+    case 'ubiquitin-ligase': return reactionScene({catalyst,reactants:[substrate()],products:[substrate([{kind:'ubiquitination',length:3}])],y:112});
+    case 'protease': return reactionScene({catalyst,action:'cleave',reactants:[proteinSpecies('substrate',`${id}-substrate`,SUBSTRATE_COLOR,24)],products:[proteinSpecies('fragments',`${id}-substrate`,SUBSTRATE_COLOR,24,'degraded')]});
+    // The protein is its own subject: ATP + protein → ADP + Pᵢ + the same protein in a new (active) state.
+    case 'atpase': return reactionScene({reactants:[moleculeSpecies('atp'),proteinSpecies('protein',id,ENZYME_COLOR,26)],products:[speciesRow('adp-pi',[moleculeSpecies('adp'),phosphate]),proteinSpecies('protein-active',id,ENZYME_COLOR,26,'active')],y:100});
+    case 'nuclease': return reactionScene({catalyst,action:'cleave',reactants:[dnaSpecies('dna-intact',{},WIDE_DNA_WIDTH)],products:[dnaSpecies('dna-broken',{lesion:'dsb'},WIDE_DNA_WIDTH)],y:118,columns:[60,240]});
+    case 'ligase': return reactionScene({catalyst,action:'ligate',reactants:[dnaSpecies('dna-nicked',{lesion:'nick'})],products:[dnaSpecies('dna-intact',{state:'repaired'})],y:118});
+    case 'glycosylase': return reactionScene({catalyst,reactants:[dnaSpecies('dna-damaged-base',{lesion:'damaged-base'})],products:[dnaSpecies('dna-ap-site',{lesion:'ap-site'})],y:118});
+    case 'helicase': return reactionScene({catalyst,action:'unwind',reactants:[moleculeSpecies('atp'),dnaSpecies('dna-duplex',{},WIDE_DNA_WIDTH)],products:[speciesRow('adp-pi',[moleculeSpecies('adp'),phosphate]),dnaSpecies('dna-unwound',{state:'unwound'},WIDE_DNA_WIDTH)],columns:[60,240]});
+    default: return reactionScene({catalyst,reactants:[substrate()],products:[substrate()]});
   }
-  const before:ModificationVisualKind|undefined=id==='phosphatase'?'phosphorylation':id==='deacetylase'?'acetylation':undefined;
-  const after:ModificationVisualKind|undefined=id==='kinase'?'phosphorylation':id==='transferase'?'acetylation':id==='ubiquitin-ligase'?'ubiquitination':undefined;
-  return `${['kinase','atpase'].includes(id)?renderSmallMoleculePrimitive({visualSeed:'ATP',label:'ATP',x:42,y:45,scale:.6}):''}${proteinAt(`${id}-substrate`,55,128,'#8b94d8','normal',24,before?[{kind:before}]:[])}${center}${proteinAt(`${id}-substrate`,245,128,'#8b94d8',id==='atpase'?'active':'normal',24,after?[{kind:after,length:3}]:[])}${actionArrow('modify',{x:55,y:128,seed:`${id}-substrate`,radius:24},{x:245,y:128,seed:`${id}-substrate`,radius:24,state:id==='atpase'?'active':'normal'})}`;
 }
 
 function expressionScene(id:string):string {
@@ -411,7 +522,9 @@ function eventScene(rawId:string):string {
     const dna={x:25,y:112,width:250,state:'elongating' as const,showDirectionality:true}; const {fivePrime,threePrime}=nascentStrandGeometry(dna);
     return `${renderNucleicAcidPrimitive(dna)}${renderActionVisual('elongate',{x:fivePrime.x+30,y:fivePrime.y-34},{x:threePrime.x-10,y:threePrime.y-34})}`;
   }
-  if(['unwind','ligate'].includes(id)) return `${at(25,108,renderNucleicAcidPrimitive({width:250,state:id==='unwind'?'unwound':'normal',lesion:id==='ligate'?'nick':undefined}))}${actionArrow(action,{x:80,y:55},{x:150,y:108,reach:STRAND_REACH})}`;
+  // Ligate: the nicked DNA of the DNA lesions card → one continuous backbone, before → after.
+  if(id==='ligate') return reactionScene({action:'ligate',reactants:[dnaSpecies('dna-nicked',{lesion:'nick'})],products:[dnaSpecies('dna-intact',{state:'repaired'})],y:100});
+  if(id==='unwind') return `${at(25,108,renderNucleicAcidPrimitive({width:250,state:'unwound'}))}${actionArrow(action,{x:80,y:55},{x:150,y:108,reach:STRAND_REACH})}`;
   return `${proteinAt('event-actor',62,108,'#7774d8','normal',29,before)}${proteinAt('event-actor',238,108,'#7774d8',finalState,29,after)}${actionArrow(action,{x:62,y:108,seed:'event-actor',radius:29},{x:238,y:108,seed:'event-actor',radius:29,state:finalState})}`;
 }
 
