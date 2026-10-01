@@ -13,7 +13,7 @@ Thank you for helping make molecular mechanisms easier to communicate, inspect, 
 Requirements: Node.js 20 or newer and npm 10 or newer.
 
 ```bash
-git clone https://github.com/alvaroesteban/molecular-motion.git
+git clone https://github.com/alvaroestebanperez/molecular-motion.git
 cd molecular-motion
 npm install
 npm run dev

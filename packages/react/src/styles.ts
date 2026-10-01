@@ -83,5 +83,16 @@ export const uiCss = `
 .mm-player__header{padding:18px 20px 12px}.mm-player__eyebrow{margin:0 0 4px;color:var(--mm-ui-muted);font-size:12.5px}.mm-player__header h2{margin:0;font-size:clamp(18px,2.4vw,24px);letter-spacing:-.01em}.mm-player__header p{margin:6px 0 0;color:var(--mm-ui-muted);font-size:14px}
 .mm-player .mm-stage{border-block:1px solid var(--mm-ui-line)}
 .mm-player .mm-controls{padding:12px 14px}
+.mm-vocabulary{display:grid;gap:18px;color:var(--mm-ui-ink);font-family:var(--mm-font,Inter,system-ui,sans-serif)}
+.mm-vocabulary-section{overflow:hidden;border:1px solid var(--mm-ui-line);border-radius:14px;background:var(--mm-ui-surface)}
+.mm-vocabulary-section>h2{margin:0;padding:8px 13px;border-bottom:1px solid var(--mm-ui-line);background:color-mix(in srgb,var(--mm-section,#dbeafe) 55%,var(--mm-ui-surface));font-size:16px;line-height:1.3}
+.mm-vocabulary-section--enzymes{--mm-section:#dbeafe}.mm-vocabulary-section--proteins{--mm-section:#d8f1ed}.mm-vocabulary-section--molecules{--mm-section:#fce1e7}.mm-vocabulary-section--nucleic-acids{--mm-section:#ffedd5}.mm-vocabulary-section--lesions{--mm-section:#fce7f3}.mm-vocabulary-section--modifications{--mm-section:#ede9fe}.mm-vocabulary-section--compartments{--mm-section:#dbeafe}
+.mm-vocabulary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+.mm-vocabulary-card{display:grid;grid-template-rows:auto 1fr;min-height:250px;padding:12px;border-right:1px solid var(--mm-ui-line);border-bottom:1px solid var(--mm-ui-line);background:linear-gradient(145deg,var(--mm-ui-surface),color-mix(in srgb,var(--mm-section,#dbeafe) 17%,var(--mm-ui-surface)))}
+.mm-vocabulary-card header{position:relative;z-index:1}.mm-vocabulary-card h3{margin:0;color:var(--mm-ui-ink);font-size:15px;line-height:1.25}.mm-vocabulary-card p{min-height:38px;margin:3px 0 0;color:var(--mm-ui-muted);font-size:12px;line-height:1.35}
+.mm-vocabulary-glyph{display:grid;place-items:center;align-self:end;width:100%;min-width:0;transition:opacity .3s,filter .3s,transform .3s}.mm-vocabulary-glyph .mm-vocab__svg{width:100%;height:auto;color:var(--mm-ui-ink)}
+.mm-vocabulary-glyph[data-state=inactive]{opacity:.38;filter:saturate(.35);transform:scale(.96)}.mm-vocabulary-glyph[data-state=active]{filter:drop-shadow(0 0 10px color-mix(in srgb,var(--mm-ui-accent) 42%,transparent));animation:mm-vocabulary-active 2.4s ease-in-out infinite}
+@keyframes mm-vocabulary-active{50%{transform:translateY(-2px)}}
+@media(prefers-reduced-motion:reduce){.mm-vocabulary-glyph{transition:none}.mm-vocabulary-glyph[data-state=active]{animation:none}}
 @media(max-width:640px){.mm-controls{flex-wrap:wrap}.mm-scrubber{order:-1;flex-basis:100%;margin:0 4px 6px}.mm-switch span{display:none}}
 `;
