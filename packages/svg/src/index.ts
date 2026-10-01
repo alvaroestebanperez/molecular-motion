@@ -24,10 +24,14 @@ export {
   renderProteinPrimitive,
   renderProteinSurface,
   renderSmallMoleculePrimitive,
+  renderTransmembranePrimitive,
   shapesOverlap,
+  transmembraneGeometry,
 } from './primitives';
 export type {
   ActionVisualKind,
+  CompartmentOptions,
+  CompartmentVisualKind,
   ContactShape,
   ContactSide,
   DnaVisualState,
@@ -50,6 +54,10 @@ export type {
   ProteinSphere,
   ProteinVisualState,
   SmallMoleculeOptions,
+  TransmembraneDomain,
+  TransmembraneGeometry,
+  TransmembraneOptions,
+  TransmembraneSpan,
   VisualLesion,
 } from './primitives';
 export {

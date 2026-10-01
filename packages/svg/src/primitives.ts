@@ -681,12 +681,230 @@ export function renderMembranePrimitive(options: MembraneOptions = {}): string {
   return `<g class="mm-primitive mm-primitive--membrane mm-membrane--${variant}"><path class="mm-membrane__core" d="${core}" stroke-width="${round((geometry.halfThickness - r) * 2 + 2)}"/>${leaflets}</g>`;
 }
 
-export function renderCompartmentPrimitive(kind: 'extracellular' | 'cytoplasm' | 'nucleus' | 'organelle' | 'er' | 'golgi' | 'mitochondrion' | 'lysosome' | 'endosome', at = { x: 0, y: 0 }): string {
-  if (kind === 'extracellular' || kind === 'cytoplasm') return `<g class="mm-primitive mm-compartment mm-compartment--${kind}">${Array.from({ length: 12 }, (_, i) => `<ellipse cx="${at.x + (i * 37) % 180}" cy="${at.y + (i * 23) % 80}" rx="${5 + i % 3 * 2}" ry="${3 + i % 2}"/>`).join('')}</g>`;
-  if (kind === 'er' || kind === 'golgi') return `<g class="mm-primitive mm-compartment mm-compartment--${kind}">${Array.from({ length: 5 }, (_, i) => `<path d="M${at.x + 10 + i * 7} ${at.y + 12 + i * 14}C${at.x + 50} ${at.y + i * 14} ${at.x + 130} ${at.y + 28 + i * 10} ${at.x + 180 - i * 8} ${at.y + 12 + i * 14}"/>`).join('')}</g>`;
-  const inner = kind === 'mitochondrion' ? `<path d="M${at.x + 25} ${at.y + 48}c22-36 42 36 66 0s42 36 68 0"/>` : '';
-  return `<g class="mm-primitive mm-compartment mm-compartment--${kind}"><ellipse cx="${at.x + 95}" cy="${at.y + 48}" rx="88" ry="44"/>${inner}</g>`;
+export type CompartmentVisualKind = 'extracellular' | 'cytoplasm' | 'nucleus' | 'organelle' | 'er' | 'golgi' | 'mitochondrion' | 'lysosome' | 'endosome';
+export interface CompartmentOptions {
+  /** Box the figure is fitted into (uniformly, centred), measured from `at`. Defaults to 190 × 96. */
+  width?: number; height?: number;
 }
+
+/** Every compartment is laid out in this design box, then fitted into the requested one. */
+const COMPARTMENT_BOX = { width: 260, height: 150 } as const;
+interface CompartmentMembrane { shape: MembraneShape; className: string }
+
+/**
+ * Closed bilayers drawn by the membrane primitive at a reduced `scale`, so nested membranes stay thin but
+ * are the same lipid bilayer as everywhere else. Shapes are given in design units; `lumen` lists the
+ * shapes whose interior is tinted (even-odd, so a shape inside another one cuts a hole).
+ */
+function compartmentMembranes(membranes: readonly CompartmentMembrane[], scale: number, lumen: readonly number[]): string {
+  const native = (shape: MembraneShape): MembraneShape => shape.kind === 'ellipse'
+    ? { kind: 'ellipse', cx: shape.cx / scale, cy: shape.cy / scale, rx: shape.rx / scale, ry: shape.ry / scale }
+    : { ...shape, points: shape.points.map(p => ({ x: p.x / scale, y: p.y / scale })) };
+  // Keep the on-screen head pitch close to the native membrane's, without packing small membranes densely.
+  const spacing = Math.max(9, round(4.2 / scale));
+  const shapes = membranes.map(membrane => native(membrane.shape));
+  const lumenPath = lumen.map(index => {
+    const line = membraneGeometry({ shape: shapes[index]! }).centerline;
+    return `M${line.filter((_, k) => k % 4 === 0).map(p => `${p.x} ${p.y}`).join('L')}Z`;
+  }).join('');
+  return `<g class="mm-compartment__membranes" transform="scale(${scale})">${lumenPath ? `<path class="mm-compartment__lumen" fill-rule="evenodd" d="${lumenPath}"/>` : ''}${membranes.map((membrane, i) => `<g class="${membrane.className}">${renderMembranePrimitive({ shape: shapes[i]!, spacing })}</g>`).join('')}</g>`;
+}
+
+const closedPath = (points: readonly MembranePoint[]): MembraneShape => ({ kind: 'path', closed: true, points: points.map(p => ({ x: round(p.x), y: round(p.y) })) });
+const dots = (items: readonly { x: number; y: number; r: number }[]) => items.map(({ x, y, r }) => `M${round(x - r)} ${round(y)}a${round(r)} ${round(r)} 0 1 0 ${round(r * 2)} 0a${round(r)} ${round(r)} 0 1 0 ${round(-r * 2)} 0`).join('');
+
+/** Moves every edge of a polygon `d` towards its interior (negative `d` grows it). */
+function insetPolygon(points: readonly MembranePoint[], d: number): MembranePoint[] {
+  const n = points.length;
+  const area = points.reduce((sum, p, i) => { const q = points[(i + 1) % n]!; return sum + p.x * q.y - q.x * p.y; }, 0);
+  const sign = area > 0 ? 1 : -1;
+  const lines = points.map((a, i) => {
+    const b = points[(i + 1) % n]!; const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const t = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+    return { p: { x: a.x - t.y * sign * d, y: a.y + t.x * sign * d }, t };
+  });
+  return lines.map((line, i) => {
+    const prev = lines[(i - 1 + n) % n]!; const cross = prev.t.x * line.t.y - prev.t.y * line.t.x;
+    if (Math.abs(cross) < 1e-6) return line.p;
+    const u = ((line.p.x - prev.p.x) * line.t.y - (line.p.y - prev.p.y) * line.t.x) / cross;
+    return { x: prev.p.x + prev.t.x * u, y: prev.p.y + prev.t.y * u };
+  });
+}
+
+/** Cuts every corner so a smoothed outline rounds it instead of overshooting. */
+function chamfer(points: readonly MembranePoint[], cut: number): MembranePoint[] {
+  return points.flatMap((v, i) => {
+    const p = points[(i - 1 + points.length) % points.length]!; const q = points[(i + 1) % points.length]!;
+    const toward = (w: MembranePoint) => { const len = Math.hypot(w.x - v.x, w.y - v.y) || 1; const c = Math.min(cut, len / 3); return { x: v.x + (w.x - v.x) / len * c, y: v.y + (w.y - v.y) / len * c }; };
+    return [toward(p), toward(q)];
+  });
+}
+
+/** Two concentric closed bilayers crossed by pore plugs, with a dense inner body. */
+function nucleusArt(): string {
+  const cx = 130; const cy = 75; const outer = { rx: 114, ry: 66 }; const gap = 17;
+  const membranes = [
+    { shape: { kind: 'ellipse', cx, cy, ...outer } as const, className: 'mm-compartment__envelope mm-compartment__envelope--outer' },
+    { shape: { kind: 'ellipse', cx, cy, rx: outer.rx - gap, ry: outer.ry - gap } as const, className: 'mm-compartment__envelope mm-compartment__envelope--inner' },
+  ];
+  const mid = { rx: outer.rx - gap / 2, ry: outer.ry - gap / 2 };
+  const pores = [-150, -95, -35, 25, 85, 145].map(degrees => {
+    const t = degrees * Math.PI / 180; const x = cx + mid.rx * Math.cos(t); const y = cy + mid.ry * Math.sin(t);
+    const angle = Math.atan2(Math.sin(t) / mid.ry, Math.cos(t) / mid.rx) * 180 / Math.PI;
+    return `<rect class="mm-compartment__pore" x="-15.5" y="-2.6" width="31" height="5.2" rx="2.6" transform="translate(${round(x)} ${round(y)}) rotate(${round(angle)})"/>`;
+  }).join('');
+  const nucleolus = `<ellipse class="mm-compartment__nucleolus" cx="148" cy="82" rx="23" ry="17" transform="rotate(-14 148 82)"/>`;
+  return `${compartmentMembranes(membranes, .42, [1])}<g class="mm-compartment__pores" data-pores="6">${pores}</g>${nucleolus}`;
+}
+
+/** Closed outer bilayer around a closed inner bilayer folded into alternating finger-like invaginations. */
+function mitochondrionArt(): string {
+  const cx = 130; const cy = 75; const rx = 100; const ry = 43; const width = 17; const reach = 7;
+  const folds = [-66, -22, 22, 66].map((x, i) => ({ x, side: i % 2 ? 1 : -1 }));
+  const edge = (x: number, side: number) => side * ry * Math.sqrt(Math.max(0, 1 - (x / rx) ** 2));
+  const points: MembranePoint[] = []; const steps = 96; const inside = new Set<number>();
+  for (let s = 0; s < steps; s++) {
+    const t = s / steps * Math.PI * 2; const x = rx * Math.cos(t); const side = Math.sin(t) >= 0 ? 1 : -1;
+    const fold = folds.findIndex(f => f.side === side && Math.abs(x - f.x) < width / 2 + 9);
+    if (fold < 0) { points.push({ x: cx + x, y: cy + ry * Math.sin(t) }); continue; }
+    if (inside.has(fold)) continue;
+    inside.add(fold);
+    // Bottom edge runs right→left, top edge left→right; either way walk in, round the tip, walk out.
+    const f = folds[fold]!; const dir = side > 0 ? -1 : 1; const tip = -side * reach;
+    for (const offset of [-1, 1]) {
+      const fx = f.x + offset * dir * width / 2; const base = edge(fx, side);
+      // A flared shoulder rounds the fold's mouth so the leaflets do not crowd into a sharp corner.
+      const shoulder = { x: cx + fx + offset * dir * 6, y: cy + edge(fx + offset * dir * 6, side) * .97 };
+      const run = [.16, .42, .7, 1].map(k => ({ x: cx + fx, y: cy + base + (tip - base) * k }));
+      points.push(...(offset < 0 ? [shoulder, ...run] : [...run.reverse(), shoulder]));
+      if (offset < 0) points.push({ x: cx + f.x, y: cy + tip - side * width / 2 });
+    }
+  }
+  const membranes = [
+    { shape: { kind: 'ellipse', cx, cy, rx: 120, ry: 63 } as const, className: 'mm-compartment__outer-membrane' },
+    { shape: closedPath(points), className: 'mm-compartment__inner-membrane mm-compartment__cristae' },
+  ];
+  return `<g data-cristae="${folds.length}">${compartmentMembranes(membranes, .4, [1])}</g>`;
+}
+
+/** Stacked, curved, closed cisternae with dilated rims; transport vesicles only on the concave face. */
+function golgiArt(): string {
+  const cx = 130; const cy = 236; const pitch = 28; const half = 6; const count = 4;
+  const cisternae = Array.from({ length: count }, (_, i) => {
+    const r = 220 - i * pitch; const span = (100 - i * 8) / r; const points: MembranePoint[] = [];
+    const at = (a: number, offset: number) => ({ x: cx + (r + offset) * Math.sin(a), y: cy - (r + offset) * Math.cos(a) });
+    const thickness = (u: number) => half * (1 + .35 * u ** 8);
+    // Rounded rim: half a circle from one face of the cisterna to the other, bulging past its end.
+    const cap = (end: 1 | -1) => {
+      const a = end * span; const c = at(a, 0); const w = thickness(1);
+      const radial = { x: Math.sin(a), y: -Math.cos(a) }; const tangent = { x: Math.cos(a) * end, y: Math.sin(a) * end };
+      return Array.from({ length: 5 }, (_, k) => { const phi = (k + 1) * Math.PI / 6; return { x: c.x + w * (end * Math.cos(phi) * radial.x + Math.sin(phi) * tangent.x), y: c.y + w * (end * Math.cos(phi) * radial.y + Math.sin(phi) * tangent.y) }; });
+    };
+    for (let k = 0; k <= 16; k++) { const u = -1 + k / 8; points.push(at(u * span, thickness(u))); }
+    points.push(...cap(1));
+    for (let k = 16; k >= 0; k--) { const u = -1 + k / 8; points.push(at(u * span, -thickness(u))); }
+    points.push(...cap(-1));
+    const face = i === 0 ? ' mm-compartment__cisterna--cis' : i === count - 1 ? ' mm-compartment__cisterna--trans' : '';
+    return { shape: closedPath(points), className: `mm-compartment__cisterna${face}` };
+  });
+  const vesicles = [{ x: 130, y: 127 }, { x: 100, y: 135 }, { x: 160, y: 135 }].map(({ x, y }) => ({ shape: { kind: 'ellipse', cx: x, cy: y, rx: 7.5, ry: 7.5 } as const, className: 'mm-compartment__vesicle' }));
+  return `<g class="mm-compartment__stack" data-cisternae="${count}" data-vesicle-face="trans">${compartmentMembranes([...cisternae, ...vesicles], .32, cisternae.map((_, i) => i))}</g>`;
+}
+
+/**
+ * One continuous lumen: a closed outer bilayer pierced by closed fenestrae, so the membrane between
+ * neighbouring holes reads as tubules meeting at three-way junctions.
+ */
+function erArt(): string {
+  const outline = [{ x: 16, y: 46 }, { x: 88, y: 10 }, { x: 178, y: 10 }, { x: 246, y: 46 }, { x: 244, y: 112 }, { x: 172, y: 142 }, { x: 82, y: 142 }, { x: 14, y: 108 }];
+  const [A, B, C, D, E, F, G, H] = outline as [MembranePoint, MembranePoint, MembranePoint, MembranePoint, MembranePoint, MembranePoint, MembranePoint, MembranePoint];
+  const P = { x: 86, y: 72 }; const Q = { x: 140, y: 50 }; const R = { x: 188, y: 86 }; const S = { x: 132, y: 110 };
+  const faces = [[P, Q, R, S], [A, B, Q, P], [B, C, D, R, Q], [D, E, F, S, R], [F, G, H, A, P, S]];
+  const half = 12;
+  const membranes = [
+    { shape: closedPath(chamfer(insetPolygon(outline, -half), 16)), className: 'mm-compartment__er-boundary' },
+    ...faces.map(face => ({ shape: closedPath(chamfer(insetPolygon(face, half), 9)), className: 'mm-compartment__fenestra' })),
+  ];
+  return `<g class="mm-compartment__network" data-fenestrae="${faces.length}" data-junctions="4">${compartmentMembranes(membranes, .36, membranes.map((_, i) => i))}</g>`;
+}
+
+/** A single round vesicle whose lumen is packed with dense particles. */
+function lysosomeArt(random: () => number): string {
+  const cx = 130; const cy = 75; const inner = 43; const granules: { x: number; y: number; r: number }[] = [];
+  for (let attempt = 0; attempt < 400 && granules.length < 14; attempt++) {
+    const r = 2.6 + random() * 3.6; const a = random() * Math.PI * 2; const d = Math.sqrt(random()) * (inner - r - 3);
+    const g = { x: cx + d * Math.cos(a), y: cy + d * Math.sin(a) * .93, r };
+    if (granules.every(o => Math.hypot(o.x - g.x, o.y - g.y) > o.r + g.r + 2.4)) granules.push(g);
+  }
+  return `${compartmentMembranes([{ shape: { kind: 'ellipse', cx, cy, rx: 56, ry: 52 }, className: 'mm-compartment__boundary' }], .45, [0])}<path class="mm-compartment__content" data-particles="${granules.length}" d="${dots(granules)}"/>`;
+}
+
+/** A vesicle with a bud pinching off through a narrow neck; membrane-bound cargo is sorted into the bud. */
+function endosomeArt(): string {
+  const body = { x: 112, y: 88, r: 48 }; const budRadius = 24; const theta = -40 * Math.PI / 180;
+  const distance = body.r + budRadius + 2; const fillet = 9;
+  const budCentre = { x: body.x + distance * Math.cos(theta), y: body.y + distance * Math.sin(theta), r: budRadius };
+  // Work along the body→bud axis; a fillet circle tangent to both spheres rounds each side of the neck.
+  const along = ((body.r + fillet) ** 2 - (budRadius + fillet) ** 2 + distance ** 2) / (2 * distance);
+  const across = Math.sqrt((body.r + fillet) ** 2 - along ** 2);
+  const toCard = (u: number, v: number) => ({ x: body.x + u * Math.cos(theta) - v * Math.sin(theta), y: body.y + u * Math.sin(theta) + v * Math.cos(theta) });
+  const arc = (cu: number, cv: number, r: number, from: number, to: number, steps: number) => Array.from({ length: steps + 1 }, (_, k) => { const a = from + (to - from) * k / steps; return toCard(cu + r * Math.cos(a), cv + r * Math.sin(a)); });
+  const bodyTangent = Math.atan2(across, along); const budTangent = Math.atan2(across, along - distance);
+  const filletArc = (side: 1 | -1, fromBody: boolean) => {
+    const toBody = Math.atan2(-side * across, -along); const toBud = Math.atan2(-side * across, distance - along);
+    let delta = toBud - toBody; if (delta > Math.PI) delta -= Math.PI * 2; if (delta < -Math.PI) delta += Math.PI * 2;
+    const points = arc(along, side * across, fillet, toBody, toBody + delta, 4).slice(1, -1);
+    return fromBody ? points : points.reverse();
+  };
+  const points: MembranePoint[] = [
+    ...arc(0, 0, body.r, bodyTangent, Math.PI * 2 - bodyTangent, 40), ...filletArc(-1, true),
+    ...arc(distance, 0, budRadius, -budTangent, budTangent, 16), ...filletArc(1, false),
+  ];
+  const cargo = [[200, body], [245, body], [150, body], [-5, budCentre], [-75, budCentre]] as const;
+  const marks = cargo.map(([degrees, centre]) => {
+    const a = degrees * Math.PI / 180; const d = centre.r - 11;
+    return `<rect class="mm-compartment__cargo" x="-3.2" y="-3.2" width="6.4" height="6.4" rx="1.4" transform="translate(${round(centre.x + d * Math.cos(a))} ${round(centre.y + d * Math.sin(a))}) rotate(${round(degrees + 45)})"/>`;
+  }).join('');
+  return `${compartmentMembranes([{ shape: closedPath(points), className: 'mm-compartment__boundary mm-compartment__bud' }], .45, [0])}<g class="mm-compartment__cargo-set" data-cargo="${cargo.length}" data-bud="1">${marks}</g>`;
+}
+
+/** Unbounded surroundings: banded matrix fibres crossing the field and a few scattered particles. */
+function extracellularArt(random: () => number): string {
+  const fibres = ['M-6 34C60 18 130 56 266 36', 'M-6 108C80 128 170 80 266 100', 'M18 156C64 104 118 46 168 -6', 'M126 156C160 116 214 84 266 64', 'M-6 72C70 76 150 132 214 156'];
+  const particles = Array.from({ length: 10 }, (_, i) => ({ x: 12 + (i % 5) * 52 + random() * 30, y: 14 + Math.floor(i / 5) * 72 + random() * 50, r: 1.8 + random() * 1.8 }));
+  return `<path class="mm-compartment__fibres" data-fibres="${fibres.length}" d="${fibres.join('')}"/><path class="mm-compartment__particles" data-particles="${particles.length}" d="${dots(particles)}"/>`;
+}
+
+/** Unbounded crowded solution: an even stipple of small solutes and at most two faint filaments. */
+function cytoplasmArt(random: () => number): string {
+  const columns = 14; const rows = 8;
+  const solutes = Array.from({ length: columns * rows }, (_, i) => ({ x: 6 + (i % columns + random() * .8) * 18.4, y: 6 + (Math.floor(i / columns) + random() * .8) * 18, r: .8 + random() * 1 }));
+  const filaments = ['M8 44C80 30 150 62 252 40', 'M24 128C100 110 176 130 250 112'];
+  return `<path class="mm-compartment__solutes" data-solutes="${solutes.length}" d="${dots(solutes)}"/><path class="mm-compartment__filaments" data-filaments="${filaments.length}" d="${filaments.join('')}"/>`;
+}
+
+/**
+ * Compartments are identified by geometry, not colour: envelope count, inner folds, stacking, tubular
+ * networks, lumen content, budding and environmental texture all survive greyscale. Membrane-bounded
+ * compartments reuse the closed lipid bilayer of `renderMembranePrimitive`; the output is deterministic.
+ */
+export function renderCompartmentPrimitive(kind: CompartmentVisualKind, at = { x: 0, y: 0 }, options: CompartmentOptions = {}): string {
+  const width = options.width ?? 190; const height = options.height ?? 96;
+  const k = Math.min(width / COMPARTMENT_BOX.width, height / COMPARTMENT_BOX.height);
+  const x = round(at.x + (width - COMPARTMENT_BOX.width * k) / 2); const y = round(at.y + (height - COMPARTMENT_BOX.height * k) / 2);
+  const random = seededRandom(`compartment-${kind}`);
+  const art = kind === 'extracellular' ? extracellularArt(random)
+    : kind === 'cytoplasm' ? cytoplasmArt(random)
+      : kind === 'nucleus' ? nucleusArt()
+        : kind === 'er' ? erArt()
+          : kind === 'golgi' ? golgiArt()
+            : kind === 'mitochondrion' ? mitochondrionArt()
+              : kind === 'lysosome' ? lysosomeArt(random)
+                : kind === 'endosome' ? endosomeArt()
+                  : compartmentMembranes([{ shape: { kind: 'ellipse', cx: 130, cy: 75, rx: 96, ry: 54 }, className: 'mm-compartment__boundary' }], .5, [0]);
+  return `<g class="mm-primitive mm-compartment mm-compartment--${kind}"><g transform="translate(${x} ${y}) scale(${Math.round(k * 1000) / 1000})">${art}</g></g>`;
+}
+
 
 export type ContactSide = 'left' | 'right' | 'top' | 'bottom';
 const OPPOSITE_SIDE: Record<ContactSide, ContactSide> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
@@ -863,6 +1081,203 @@ export function renderActionVisual(kind: ActionVisualKind, from: { x: number; y:
   return `<g class="mm-action mm-action--${kind}"><path d="${path}"/><path d="M${to.x - 8} ${to.y - 5}L${to.x} ${to.y}l-8 5"/></g>`;
 }
 
+/** A globular domain carried at one end of a membrane-spanning chain. */
+export interface TransmembraneDomain { radius: number }
+export interface TransmembraneOptions {
+  visualSeed: string;
+  /** The membrane the chain crosses; only its geometry is read, the bilayer itself is not drawn. */
+  membrane: MembraneOptions;
+  /** Arc-length position along the membrane midplane, in px from its start. Defaults to the middle. */
+  along?: number;
+  /** Number of times the chain crosses the bilayer. Defaults to 1. */
+  passes?: number;
+  /** Splits the passes into two walls around an open, aqueous pore that spans the bilayer. */
+  pore?: boolean;
+  /** Centre-to-centre distance between neighbouring passes. Defaults to 16. */
+  spacing?: number;
+  /** Clear width of the pore. Defaults to 14. */
+  poreWidth?: number;
+  fill?: string;
+  /** Presentation state, applied as the shared `mm-primitive--<state>` class (no halo). */
+  state?: ProteinVisualState;
+  /** Mirrors the unit along the membrane (same silhouette, facing the other way), e.g. for symmetric pairs. */
+  mirror?: boolean;
+  /** Globular domain on the outer side, joined to the outer end of the first pass. Ignored with `pore`. */
+  outside?: TransmembraneDomain;
+  /** Globular domain on the inner side, joined to the inner end of the last pass. Ignored with `pore`. */
+  inside?: TransmembraneDomain;
+  /**
+   * Markers attached to the domain (or the chain end) on one side of the membrane. `angle` (radians in the
+   * membrane frame: 0 along the membrane, π/2 inwards) overrides the default fan facing away from it.
+   */
+  modifications?: readonly { kind: ModificationVisualKind; side: 'outside' | 'inside'; angle?: number; length?: number; branched?: boolean }[];
+}
+/** A segment crossing the bilayer, from its outer end to its inner end (screen coordinates). */
+export interface TransmembraneSpan { outside: MembranePoint; inside: MembranePoint }
+export interface TransmembraneGeometry {
+  /** Point on the midplane where the unit sits, the tangent along the membrane and the normal pointing inwards. */
+  origin: MembranePoint; tangent: MembranePoint; normal: MembranePoint;
+  /** Distance from the midplane to each end of a span; always beyond the polar heads of both leaflets. */
+  reach: number;
+  spans: readonly TransmembraneSpan[];
+  /** Axis of the pore, outer mouth to inner mouth, and its clear width (screen coordinates). */
+  pore?: { outside: MembranePoint; inside: MembranePoint; width: number };
+  /**
+   * Contact anchors of the domains in screen coordinates. Sides follow the membrane frame: `top` faces
+   * outwards and `bottom` inwards, so a partner on the outer side binds `outsideAnchors.top`.
+   */
+  outsideAnchors?: ProteinAnchors; insideAnchors?: ProteinAnchors;
+  /** Surface particles in the local frame (x along the membrane, y inwards). */
+  particles: readonly ProteinSphere[];
+  /** Local attachment centre and radius for markers on each side. */
+  attach: Record<'outside' | 'inside', { point: MembranePoint; radius: number }>;
+}
+
+const TM_SPAN_RADIUS = 5;
+const TM_LOOP_RADIUS = 2.6;
+const TM_LOOP_DEPTH = 9;
+/** A domain hanging off a chain end is a globule: its seed picks among the globular families only. */
+const TM_DOMAIN_MORPHOLOGIES: readonly ProteinMorphology[] = ['compact', 'bilobed', 'multidomain'];
+
+/**
+ * Geometry of a chain that crosses a membrane `passes` times: straight spans through the bilayer,
+ * thin loops alternating on both sides, optional globular domains (shaped by `visualSeed`) at its
+ * ends and an optional pore. Built in the membrane's local frame from `membraneGeometry`, so spans
+ * always reach past both leaflets. Pure function of the options, with no biological meaning.
+ */
+export function transmembraneGeometry(options: TransmembraneOptions): TransmembraneGeometry {
+  const membrane = membraneGeometry(options.membrane); const line = membrane.centerline;
+  const passes = Math.max(1, Math.round(options.passes ?? 1)); const spacing = options.spacing ?? 16;
+  const pore = !!options.pore && passes >= 2; const poreWidth = options.poreWidth ?? 14;
+  // Locate the unit on the midplane by arc length.
+  const lengths = [0];
+  for (let i = 1; i < line.length; i++) lengths.push(lengths[i - 1]! + Math.hypot(line[i]!.x - line[i - 1]!.x, line[i]!.y - line[i - 1]!.y));
+  const total = lengths[lengths.length - 1]!; const along = clamp(options.along ?? total / 2, 0, total);
+  let index = 1; while (index < line.length - 1 && lengths[index]! < along) index++;
+  const a = line[index - 1]!; const b = line[index]!; const t = (along - lengths[index - 1]!) / ((lengths[index]! - lengths[index - 1]!) || 1);
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const tangent = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
+  // The outer leaflet lies on the left of travel (see membraneGeometry), so inwards is the right-hand normal.
+  const normal = { x: -tangent.y, y: tangent.x };
+  const origin = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  // A mirrored unit is built as usual and flipped along the membrane: same silhouette, facing the other way.
+  const flip = options.mirror ? -1 : 1;
+  const screen = (p: MembranePoint) => ({ x: round(origin.x + tangent.x * p.x * flip + normal.x * p.y), y: round(origin.y + tangent.y * p.x * flip + normal.y * p.y) });
+  const reach = membrane.halfThickness + membrane.headRadius + 4;
+
+  const particles: ProteinSphere[] = []; let lobe = 0;
+  const tube = (points: readonly MembranePoint[], r: number) => {
+    const domain = lobe++;
+    for (const p of points) particles.push({ x: round(p.x), y: round(p.y), rx: r, ry: r, r, rotation: 0, depth: .5, domain });
+  };
+  const bezier = (p0: MembranePoint, p1: MembranePoint, p2: MembranePoint, p3: MembranePoint, steps: number) => Array.from({ length: steps + 1 }, (_, i) => {
+    const s = i / steps; const u = 1 - s;
+    return { x: u * u * u * p0.x + 3 * u * u * s * p1.x + 3 * u * s * s * p2.x + s * s * s * p3.x, y: u * u * u * p0.y + 3 * u * u * s * p1.y + 3 * u * s * s * p2.y + s * s * s * p3.y };
+  });
+  /** A short free terminus leaving a span end and curling towards `direction` along the membrane. */
+  const tail = (x: number, y: number, direction: number) => {
+    const sign = Math.sign(y);
+    tube(bezier({ x, y }, { x, y: y + sign * 8 }, { x: x + direction * 6, y: y + sign * 10 }, { x: x + direction * 12, y: y + sign * 14 }, 8), TM_LOOP_RADIUS);
+  };
+  const spans: number[] = [];
+  /** One chain entering from the outer side at xs[0] and crossing at each x in turn; returns its two ends. */
+  const chain = (xs: readonly number[], firstTail?: number, lastTail?: number) => {
+    xs.forEach((x, i) => {
+      const from = i % 2 === 0 ? -reach : reach;
+      if (i > 0) {
+        const previous = xs[i - 1]!; const bulge = Math.sign(from) * TM_LOOP_DEPTH * 1.33;
+        tube(bezier({ x: previous, y: from }, { x: previous, y: from + bulge }, { x, y: from + bulge }, { x, y: from }, 14), TM_LOOP_RADIUS);
+      }
+      const steps = Math.ceil(2 * (reach - TM_SPAN_RADIUS) / 3);
+      tube(Array.from({ length: steps + 1 }, (_, k) => ({ x, y: -Math.sign(from) * (k * 2 * (reach - TM_SPAN_RADIUS) / steps - (reach - TM_SPAN_RADIUS)) })), TM_SPAN_RADIUS);
+      spans.push(x);
+    });
+    const end = { x: xs[xs.length - 1]!, y: xs.length % 2 === 1 ? reach : -reach };
+    if (firstTail !== undefined) tail(xs[0]!, -reach, firstTail);
+    if (lastTail !== undefined) tail(end.x, end.y, lastTail);
+    return { first: { x: xs[0]!, y: -reach }, last: end };
+  };
+
+  let outsideAnchors: ProteinAnchors | undefined; let insideAnchors: ProteinAnchors | undefined;
+  const attach: TransmembraneGeometry['attach'] = { outside: { point: { x: 0, y: -reach }, radius: 6 }, inside: { point: { x: 0, y: reach }, radius: 6 } };
+  if (pore) {
+    // Two walls flank the pore; each is its own chain entering at the wall's far side, with free ends
+    // curling away from the pore so its mouths stay clear.
+    const left = Math.ceil(passes / 2); const right = passes - left; const inner = poreWidth / 2 + TM_SPAN_RADIUS;
+    chain(Array.from({ length: left }, (_, i) => -(inner + (left - 1 - i) * spacing)), -1, -1);
+    chain(Array.from({ length: right }, (_, i) => inner + (right - 1 - i) * spacing), 1, 1);
+  } else {
+    const xs = Array.from({ length: passes }, (_, i) => (i - (passes - 1) / 2) * spacing);
+    const endsInside = passes % 2 === 1;
+    const { first, last } = chain(xs, options.outside ? undefined : -1, options.inside && endsInside ? undefined : 1);
+    // Domains join the chain ends anchor-to-anchor, pressed in slightly so the outlines merge.
+    const domain = (side: 'outside' | 'inside', spec: TransmembraneDomain, end: MembranePoint): ProteinAnchors => {
+      const seed = `${options.visualSeed}::${side}`;
+      const shape = proteinGeometry(seed, spec.radius, 28, TM_DOMAIN_MORPHOLOGIES[hashString(`${seed}::morphology`) % TM_DOMAIN_MORPHOLOGIES.length]);
+      const local = proteinAnchors(shape, spec.radius);
+      const joint = side === 'outside' ? local.bottom : local.top;
+      const dx = end.x - joint.x; const dy = end.y - joint.y + (side === 'outside' ? 3 : -3);
+      const base = lobe;
+      for (const p of shape) particles.push({ ...p, x: p.x + dx, y: p.y + dy, domain: base + (p.domain ?? 0) });
+      lobe = base + Math.max(...shape.map(p => p.domain ?? 0)) + 1;
+      attach[side] = { point: { x: local.center.x + dx, y: local.center.y + dy }, radius: spec.radius };
+      const move = (p: ProteinPoint) => screen({ x: p.x + dx, y: p.y + dy });
+      const c0 = move({ x: local.bounds.x, y: local.bounds.y }); const c1 = move({ x: local.bounds.x + local.bounds.width, y: local.bounds.y + local.bounds.height });
+      return {
+        center: move(local.center), left: move(flip === 1 ? local.left : local.right), right: move(flip === 1 ? local.right : local.left), top: move(local.top), bottom: move(local.bottom),
+        bounds: { x: Math.min(c0.x, c1.x), y: Math.min(c0.y, c1.y), width: round(Math.abs(c1.x - c0.x)), height: round(Math.abs(c1.y - c0.y)) },
+      };
+    };
+    if (options.outside) outsideAnchors = domain('outside', options.outside, first);
+    else attach.outside.point = first;
+    const innerEnd = { x: endsInside ? last.x : xs[xs.length - 1]!, y: reach };
+    if (options.inside) insideAnchors = domain('inside', options.inside, innerEnd);
+    else attach.inside.point = innerEnd;
+  }
+  return {
+    origin: { x: round(origin.x), y: round(origin.y) }, tangent, normal, reach,
+    spans: spans.map(x => ({ outside: screen({ x, y: -reach }), inside: screen({ x, y: reach }) })),
+    pore: pore ? { outside: screen({ x: 0, y: -reach }), inside: screen({ x: 0, y: reach }), width: poreWidth } : undefined,
+    outsideAnchors, insideAnchors,
+    particles: flip === 1 ? particles : particles.map(p => ({ ...p, x: -p.x, rotation: -p.rotation })),
+    attach: flip === 1 ? attach : {
+      outside: { ...attach.outside, point: { x: -attach.outside.point.x, y: attach.outside.point.y } },
+      inside: { ...attach.inside, point: { x: -attach.inside.point.x, y: attach.inside.point.y } },
+    },
+  };
+}
+
+/**
+ * A protein chain spanning a membrane (see `transmembraneGeometry`), drawn with the shared protein
+ * surface so spans, loops and domains read as one continuous volume. Compose it over
+ * `renderMembranePrimitive` with the same membrane options. `data-spans` and `data-pore` expose the
+ * crossing geometry in screen coordinates; `data-outside`/`data-inside` the domain anchors
+ * (left, right, top, bottom).
+ */
+export function renderTransmembranePrimitive(options: TransmembraneOptions): string {
+  const geometry = transmembraneGeometry(options);
+  const fill = options.fill ?? 'var(--mm-protein,#7d78d8)'; const state = options.state ?? 'normal';
+  const { origin, tangent, normal, reach } = geometry;
+  const unit = (value: number) => Math.round(value * 1000) / 1000;
+  const transform = tangent.x === 1 && tangent.y === 0 ? `translate(${origin.x} ${origin.y})` : `matrix(${unit(tangent.x)} ${unit(tangent.y)} ${unit(normal.x)} ${unit(normal.y)} ${origin.x} ${origin.y})`;
+  const pore = geometry.pore ? `<rect class="mm-transmembrane__pore" x="${round(-geometry.pore.width / 2 - 1)}" y="${round(-reach)}" width="${round(geometry.pore.width + 2)}" height="${round(reach * 2)}"/>` : '';
+  const counts = { outside: 0, inside: 0 };
+  const slots = (options.modifications ?? []).map(modification => ({ modification, slot: counts[modification.side]++ }));
+  const markers = slots.map(({ modification, slot }) => {
+    const { point, radius } = geometry.attach[modification.side]; const count = counts[modification.side];
+    const fan = modification.angle ?? ((modification.side === 'inside' ? Math.PI / 2 : -Math.PI / 2) + (slot - (count - 1) / 2) * 1.5);
+    const angle = options.mirror ? Math.PI - fan : fan;
+    return renderModificationPrimitive(modification, { x: point.x + Math.cos(angle) * radius * .92, y: point.y + Math.sin(angle) * radius * .92 });
+  }).join('');
+  const pair = (p: MembranePoint) => `${p.x} ${p.y}`;
+  const anchors = (name: string, a?: ProteinAnchors) => a ? ` data-${name}="${[a.left, a.right, a.top, a.bottom].map(pair).join(' ')}"` : '';
+  return `<g class="mm-primitive mm-primitive--transmembrane mm-primitive--${state}" data-visual-seed="${esc(options.visualSeed)}" data-passes="${geometry.spans.length}"`
+    + ` data-spans="${geometry.spans.map(span => `${pair(span.outside)} ${pair(span.inside)}`).join(';')}"`
+    + (geometry.pore ? ` data-pore="${pair(geometry.pore.outside)} ${pair(geometry.pore.inside)} ${geometry.pore.width}"` : '')
+    + `${anchors('outside', geometry.outsideAnchors)}${anchors('inside', geometry.insideAnchors)} style="--mm-protein:${esc(fill)}">`
+    + `<g transform="${transform}">${pore}${renderProteinSurface(geometry.particles, fill, Math.max(options.outside?.radius ?? 0, options.inside?.radius ?? 0, 20))}${markers}</g></g>`;
+}
+
 // One CSS constant per primitive, so independent changes to different primitives do not collide.
 
 /** Protein surfaces, states, halo and inhibition. */
@@ -888,13 +1303,16 @@ export const membraneCss = `.mm-primitive--membrane{--mm-membrane-head:#e58f78;-
 :root[data-theme=dark] .mm-primitive--membrane,.mm-theme-dark .mm-primitive--membrane{--mm-membrane-head:#e4927c;--mm-membrane-head-edge:#8a4a3d;--mm-membrane-tail:#cfa07a;--mm-membrane-core:#6a5038}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .mm-primitive--membrane{--mm-membrane-head:#e4927c;--mm-membrane-head-edge:#8a4a3d;--mm-membrane-tail:#cfa07a;--mm-membrane-core:#6a5038}}`;
 
 /** Compartments and organelles. */
-export const compartmentCss = `.mm-compartment{fill:#8aa7d5;opacity:.72}.mm-compartment path{fill:none;stroke:#5d86cc;stroke-width:6;stroke-linecap:round}.mm-compartment--mitochondrion{fill:#e57443}.mm-compartment--mitochondrion path{stroke:#fff}.mm-compartment--lysosome{fill:#8268bd}.mm-compartment--endosome{fill:#5b8fd8}`;
+export const compartmentCss = `.mm-compartment{--mm-compartment-lumen:#8fa9de}.mm-compartment--organelle{--mm-compartment-lumen:#a3afc4}.mm-compartment--er{--mm-compartment-lumen:#86b0e2}.mm-compartment--golgi{--mm-compartment-lumen:#b29ad8}.mm-compartment--mitochondrion{--mm-compartment-lumen:#ec9a72}.mm-compartment--lysosome{--mm-compartment-lumen:#8a72c4}.mm-compartment--endosome{--mm-compartment-lumen:#79a4dc}.mm-compartment__lumen{fill:var(--mm-compartment-lumen);fill-opacity:.3}.mm-compartment--lysosome .mm-compartment__lumen{fill-opacity:.5}.mm-compartment__nucleolus{fill:currentColor;fill-opacity:.36}.mm-compartment__pore{fill:currentColor;fill-opacity:.55}.mm-compartment__content{fill:currentColor;fill-opacity:.45}.mm-compartment__cargo{fill:currentColor;fill-opacity:.62}.mm-compartment__fibres{fill:none;stroke:currentColor;stroke-opacity:.3;stroke-width:3.2;stroke-dasharray:9 1.8}.mm-compartment__particles{fill:currentColor;fill-opacity:.32}.mm-compartment__solutes{fill:currentColor;fill-opacity:.26}.mm-compartment__filaments{fill:none;stroke:currentColor;stroke-opacity:.16;stroke-width:.9}`;
 
 /** Interactions between actors. */
 export const interactionCss = `.mm-primitive--interaction path{fill:none;stroke:#64748b;stroke-width:2;stroke-dasharray:3 3}.mm-primitive--interaction .mm-interaction__head{stroke-dasharray:none;stroke-linecap:round;stroke-linejoin:round}.mm-interaction__contact{fill:#17213b;opacity:.3;filter:blur(2.5px)}`;
 
 /** Action arrows. */
 export const actionCss = `.mm-action{color:var(--mm-action,currentColor)}.mm-action path{fill:none;stroke:currentColor;stroke-opacity:.82;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.mm-action--inhibit path{stroke:#e5484d;stroke-opacity:1}.mm-action--cleave path:last-child{stroke-opacity:1;stroke-width:3}`;
+
+/** Membrane-spanning chains: the aqueous lumen of a pore masks the lipids behind it. */
+export const transmembraneCss = `.mm-transmembrane__pore{fill:var(--mm-transmembrane-pore,#d2e5f6);stroke:none}:root[data-theme=dark] .mm-transmembrane__pore,.mm-theme-dark .mm-transmembrane__pore{--mm-transmembrane-pore:#24425f}@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .mm-transmembrane__pore{--mm-transmembrane-pore:#24425f}}`;
 
 /** Shared keyframes and the reduced-motion guard. Primitive-specific keyframes may also live in their own constant. */
 export const motionCss = `@keyframes mm-primitive-breathe{50%{transform:scale(1.05);opacity:.23}}@keyframes mm-nucleic-grow{0%,12%{stroke-dashoffset:var(--mm-grow-from)}70%,100%{stroke-dashoffset:var(--mm-grow-to)}}@keyframes mm-nucleic-reveal{0%,68%{opacity:0}74%,100%{opacity:1}}@keyframes mm-nucleic-follow{0%,12%{transform:translateX(var(--mm-follow-from))}70%,100%{transform:none}}@media(prefers-reduced-motion:reduce){.mm-primitive *,.mm-action *,.mm-nucleic__follow{animation:none!important;transition:none!important}}`;
@@ -906,6 +1324,7 @@ ${moleculeCss}
 ${nucleicCss}
 ${lesionCss}
 ${membraneCss}${compartmentCss}
+${transmembraneCss}
 ${interactionCss}${actionCss}
 ${motionCss}
 `;
