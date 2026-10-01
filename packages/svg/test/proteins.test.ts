@@ -25,6 +25,14 @@ describe('protein surfaces', () => {
     random.mockRestore();
   });
 
+  it('keeps the lobe index on every particle so shading can be computed per lobe', () => {
+    for (const morphology of PROTEIN_MORPHOLOGIES) {
+      const particles = proteinGeometry(`lobes-${morphology}`, 40, 28, morphology);
+      expect(particles.every(particle => Number.isInteger(particle.domain))).toBe(true);
+      expect(new Set(particles.map(particle => particle.domain)).size).toBeGreaterThan(1);
+    }
+  });
+
   it('keeps every family within its nominal radius', () => {
     for (const morphology of PROTEIN_MORPHOLOGIES) {
       for (const particle of proteinGeometry(`fit-${morphology}`, 50, 28, morphology)) {

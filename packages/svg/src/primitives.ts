@@ -197,7 +197,7 @@ export function proteinGeometry(visualSeed: string, radius = 52, count = 28, mor
   const scale = radius * .98 / extent;
   return rotated.map(particle => {
     const rx = particle.rx * scale; const ry = particle.ry * scale;
-    return { x: (particle.x - cx) * scale, y: (particle.y - cy) * scale, rx, ry, r: Math.sqrt(rx * ry), rotation: particle.rotation * 180 / Math.PI, depth: particle.depth };
+    return { x: (particle.x - cx) * scale, y: (particle.y - cy) * scale, rx, ry, r: Math.sqrt(rx * ry), rotation: particle.rotation * 180 / Math.PI, depth: particle.depth, domain: particle.domain };
   }).sort((a, b) => a.depth - b.depth);
 }
 
