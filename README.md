@@ -73,6 +73,7 @@ actors:
   - id: parp1
     type: protein
     label: PARP1
+    visual: { preset: transferase }
     compartment: nucleus
     initial: { activity: inactive }
 

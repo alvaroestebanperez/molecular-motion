@@ -43,12 +43,19 @@ describe('SVG renderer', () => {
   });
 
   it('exposes activity as data, not as action knowledge', () => {
-    expect(renderSvg(buildSvgScene(parp1().at('activation')))).toMatch(/data-actor="parp1" data-activity="active"/);
+    expect(renderSvg(buildSvgScene(parp1().at('activation')))).toMatch(/data-actor="parp1"[^>]*data-activity="active"/);
+  });
+
+  it('carries visual presets into animated actors and draws their semantic marks', () => {
+    const svg = renderSvg(buildSvgScene(parp1().at('scaffold')));
+    expect(svg).toMatch(/data-actor="parp1"[^>]*data-preset="transferase"/);
+    expect(svg).toMatch(/data-actor="xrcc1"[^>]*data-preset="scaffold"/);
+    expect(svg).toContain('class="mm-preset-mark"');
   });
 
   it('draws upcoming actors out of focus, hidden from assistive tech and not focusable', () => {
     const svg = renderSvg(buildSvgScene(parp1().at('intact'), { ghosts: ['ogg1', 'ape1'] }));
-    expect(svg).toMatch(/class="mm-actor mm-actor--protein mm-actor--ghost" data-key="actor:ogg1" data-actor="ogg1" aria-hidden="true"/);
+    expect(svg).toMatch(/class="mm-actor mm-actor--protein mm-actor--ghost" data-key="actor:ogg1" data-actor="ogg1"[^>]*aria-hidden="true"/);
     expect(interactiveActors(svg)).toEqual([]);
     expect(svg).toContain('filter="url(#mm-blur)"');
   });

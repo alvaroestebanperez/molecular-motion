@@ -260,6 +260,18 @@
         "compartment": {
           "$ref": "#/$defs/id"
         },
+        "visual": {
+          "type": "object",
+          "required": [
+            "preset"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "preset": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
         "initial": {
           "type": "object",
           "additionalProperties": false,
