@@ -1,5 +1,6 @@
 import type { LesionType } from '@molecular-motion/core';
 import { chainReach, hashString, HELIX, type SceneActor, type SceneNucleicAcid, type SvgScene } from './scene';
+import { primitiveCss, proteinGeometry, renderModificationPrimitive, type ModificationVisualKind } from './primitives';
 
 export interface RenderOptions {
   /** Unique per SVG in the document: gradient and filter ids are derived from it. */
@@ -38,6 +39,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
   const acids = scene.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, scene.width, prefix)}</g>`).join('');
+  const connections = scene.connections.map(connection => `<path class="mm-binding" data-key="connection:${escape(connection.source)}:${escape(connection.target)}" d="M${round(connection.from.x)} ${round(connection.from.y)}L${round(connection.to.x)} ${round(connection.to.y)}" aria-hidden="true"/>`).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact)).join('');
   const labels = compact ? '' : [
     ...actors.map(actor => actorLabel(actor)),
@@ -51,6 +53,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<title id="${prefix}-title">${escape(scene.title)}</title><desc id="${prefix}-description">${escape([scene.description, summary].filter(Boolean).join(' '))}</desc>`
     + `<g data-layer="defs">${defs}</g>`
     + `<g class="mm-layer" data-layer="acids">${acids}</g>`
+    + `<g class="mm-layer" data-layer="connections">${connections}</g>`
     + `<g class="mm-layer" data-layer="actors">${actorMarkup}</g>`
     + `<g class="mm-layer" data-layer="labels">${labels}</g></svg>`;
 }
@@ -178,54 +181,42 @@ function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string):
 interface Sphere { x: number; y: number; r: number }
 
 /** Deterministic cluster of spheres that reads as a molecular surface; shape is seeded by the actor id. */
-function sphereCluster(seed: number, radius: number, type: SceneActor['type'], preset?: string): Sphere[] {
+function sphereCluster(seed: number, radius: number, type: SceneActor['type']): Sphere[] {
   let state = seed || 1;
   const random = () => { state = Math.imul(state ^ (state >>> 15), 2246822507) ^ Math.imul(state ^ (state >>> 13), 3266489909); return ((state ^= state >>> 16) >>> 0) / 4294967296; };
   if (type === 'molecule') {
     // Small ball-and-stick chain.
-    const count = ['nad-plus', 'nadh', 'atp', 'adp', 'gtp'].includes(preset ?? '') ? 8 : 6;
-    return Array.from({ length: count }, (_, index) => ({ x: (index - (count - 1) / 2) * radius * .43, y: Math.sin(index * 1.75) * radius * .34 + (random() - .5) * 3, r: radius * (.27 + random() * .1) }));
+    return Array.from({ length: 6 }, (_, index) => ({ x: (index - 2.5) * radius * .55, y: (index % 2 ? -1 : 1) * radius * .32 + (random() - .5) * 4, r: radius * .36 }));
   }
-  const count = type === 'complex' || preset === 'scaffold' || preset === 'polymerase' ? 32 : preset === 'nuclease' ? 20 : 24;
-  const stretchX = preset === 'scaffold' ? 1.34 : preset === 'polymerase' ? 1.2 : preset === 'ligase' ? .9 : 1.06;
-  const stretchY = preset === 'ligase' ? 1.15 : preset === 'glycosylase' ? .86 : .94;
+  const count = type === 'complex' ? 30 : 24;
   const spheres: Sphere[] = [{ x: 0, y: 0, r: radius * .42 }];
   for (let index = 1; index < count; index++) {
     const angle = index * 2.399963 + random() * .5;
     const distance = radius * (.2 + .56 * Math.sqrt(index / count)) * (type === 'complex' ? 1.08 : 1);
-    const cleft = preset === 'ligase' && Math.cos(angle) > .25 ? .64 : 1;
-    spheres.push({ x: Math.cos(angle) * distance * stretchX * cleft, y: Math.sin(angle) * distance * stretchY, r: radius * (.2 + random() * .1) });
+    spheres.push({ x: Math.cos(angle) * distance * 1.06, y: Math.sin(angle) * distance * .94, r: radius * (.2 + random() * .1) });
   }
   return spheres;
 }
 
-/** Small semantic cue embedded in a protein surface; state remains independent of presentation. */
-function presetMark(preset: string | undefined, radius: number): string {
-  const r = round(radius);
-  switch (preset) {
-    case 'polymerase': return `<g class="mm-preset-mark"><path d="M${-r * .48} 8Q0 ${-r * .35} ${r * .48} 8M${-r * .42} 17Q0 ${-r * .12} ${r * .42} 17"/><circle cx="0" cy="-8" r="4"/></g>`;
-    case 'ligase': return `<g class="mm-preset-mark"><path d="M-25 6h18m14 0h18M-8-2 0 6l-8 8M8-2 0 6l8 8"/></g>`;
-    case 'nuclease': return `<g class="mm-preset-mark"><path d="m-16-10 32 25m0-25-32 25"/><circle cx="-18" cy="-12" r="5"/><circle cx="18" cy="-12" r="5"/></g>`;
-    case 'glycosylase': return `<g class="mm-preset-mark"><path d="M-24 10Q0-18 24 10"/><circle cx="0" cy="-5" r="6"/></g>`;
-    case 'transferase': return `<g class="mm-preset-mark"><path d="M-24 7h42m-9-8 9 8-9 8"/><circle cx="-17" cy="-7" r="5"/></g>`;
-    case 'scaffold': return `<g class="mm-preset-mark"><path d="M0 0-19-15M0 0l21-13M0 0l2 24"/><circle cx="-20" cy="-16" r="5"/><circle cx="22" cy="-14" r="5"/><circle cx="2" cy="25" r="5"/></g>`;
-    case 'structural-protein': return `<g class="mm-preset-mark"><path d="M-24 12-12-10 0 12 12-10 24 12"/></g>`;
-    default: return '';
-  }
-}
-
 function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, compact: boolean): string {
-  const spheres = sphereCluster(hashString(actor.id), actor.radius, actor.type, actor.visualPreset);
+  const spheres = actor.type === 'molecule'
+    ? sphereCluster(hashString(actor.id), actor.radius, actor.type)
+    : proteinGeometry(actor.id, actor.radius, actor.type === 'complex' ? 32 : 28);
   const outline = spheres.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r + 1.6)}"/>`).join('');
   const body = spheres.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r)}"/>`).join('');
   const bonds = actor.type === 'molecule'
     ? `<path class="mm-bonds" d="M${spheres.map(s => `${round(s.x)} ${round(s.y)}`).join('L')}"/>` : '';
   const glow = actor.activity === 'active' && !actor.ghost ? `<circle class="mm-halo" r="${actor.radius + 18}" fill="url(#${halo})"/>` : '';
+  const inhibition = actor.activity === 'inhibited' ? `<g class="mm-inhibition" aria-hidden="true"><circle r="${actor.radius + 7}"/><path d="M${round(-actor.radius * .72)} ${round(actor.radius * .72)}L${round(actor.radius * .72)} ${round(-actor.radius * .72)}"/></g>` : '';
   const chain = actor.chain ? parChain(actor) : '';
   const badges = actor.badges.map((badge, index) => {
     const angle = -2.4 + index * .5;
     const x = round(Math.cos(angle) * actor.radius * .95);
     const y = round(Math.sin(angle) * actor.radius * .95);
+    const kind = badge.kind.toLowerCase() as ModificationVisualKind;
+    if (['phosphorylation', 'acetylation', 'methylation', 'ubiquitination', 'sumoylation', 'glycosylation', 'parylation'].includes(kind)) {
+      return renderModificationPrimitive({ kind }, { x, y });
+    }
     return `<g class="mm-badge"><circle cx="${x}" cy="${y}" r="9"/><text x="${x}" y="${y + 3.5}" text-anchor="middle">${escape(badge.label)}</text></g>`;
   }).join('');
   const classes = ['mm-actor', `mm-actor--${actor.type}`, actor.ghost && 'mm-actor--ghost', actor.activity && `mm-actor--${actor.activity}`].filter(Boolean).join(' ');
@@ -233,8 +224,8 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
   const interactive = actor.ghost || compact
     ? 'aria-hidden="true"'
     : `role="button" tabindex="0" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity].filter(Boolean).join(', '))}"`;
-  return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.visualPreset ? ` data-preset="${escape(actor.visualPreset)}"` : ''}${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
-    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${bonds}<g class="mm-shape__outline">${outline}</g><g class="mm-shape__body" fill="url(#${gradient})">${body}</g>${presetMark(actor.visualPreset, actor.radius)}${badges}</g></g>`;
+  return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
+    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${bonds}<g class="mm-shape__outline">${outline}</g><g class="mm-shape__body" fill="url(#${gradient})">${body}</g>${inhibition}${badges}</g></g>`;
 }
 
 /** Branched bead chain leaving the actor's surface along `chain.angle`. */
@@ -366,6 +357,7 @@ export const molecularMotionCss = `
 .mm-dna__rungs--damaged{stroke:var(--mm-alert);opacity:1}
 .mm-dna__tube{fill:none;stroke:var(--mm-dna);stroke-width:12;stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__shine{fill:none;stroke:#fff;stroke-opacity:.3;stroke-width:3;stroke-linecap:round;transform:translateY(-2.5px)}
+.mm-binding{fill:none;stroke:var(--mm-muted);stroke-width:2;stroke-dasharray:4 3;opacity:.72;transition:d .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}
 .mm-lesion__glow{animation:mm-pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-lesion__dot{fill:var(--mm-alert);stroke:var(--mm-surface);stroke-width:1.5}.mm-lesion__ring{fill:var(--mm-surface);stroke:var(--mm-alert);stroke-width:2}
 .mm-actor,.mm-label{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}
@@ -373,9 +365,9 @@ export const molecularMotionCss = `
 .mm-shape__outline{fill:color-mix(in srgb,var(--mm-actor) 62%,var(--mm-ink))}
 .mm-actor--inactive .mm-actor__inner{opacity:.82}.mm-actor--inhibited .mm-shape__body{filter:grayscale(.75)}.mm-actor--inhibited .mm-shape__outline{fill:var(--mm-muted)}
 .mm-halo{animation:mm-breathe 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.mm-inhibition circle{fill:none;stroke:var(--mm-alert);stroke-width:3}.mm-inhibition path{stroke:var(--mm-alert);stroke-width:4;stroke-linecap:round}
 .mm-actor:focus-visible .mm-shape__outline,.mm-actor[aria-pressed=true] .mm-shape__outline{fill:var(--mm-accent)}
 .mm-bonds{fill:none;stroke:color-mix(in srgb,var(--mm-actor) 70%,var(--mm-ink));stroke-width:3.5;stroke-linecap:round}
-.mm-preset-mark{fill:none;stroke:#fff;stroke-opacity:.7;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 1px #1b234055);pointer-events:none}.mm-preset-mark circle{fill:#fff;fill-opacity:.72;stroke:var(--mm-actor);stroke-width:2}
 .mm-chain path{fill:none;stroke:var(--mm-chain);stroke-width:2.2;opacity:.7}.mm-chain circle{fill:var(--mm-chain);stroke:var(--mm-surface);stroke-width:1.2;animation:mm-bead .4s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 45ms);transform-box:fill-box;transform-origin:center}
 .mm-badge circle{fill:var(--mm-surface);stroke:var(--mm-ink);stroke-width:1.2}.mm-badge text{fill:var(--mm-ink);font-size:9px;font-weight:700}
 .mm-pill{fill:color-mix(in srgb,var(--mm-actor) 14%,var(--mm-surface));stroke:color-mix(in srgb,var(--mm-actor) 45%,var(--mm-surface));stroke-width:1}
@@ -386,4 +378,4 @@ export const molecularMotionCss = `
 .mm-enter{opacity:0}.mm-exit{opacity:0!important;transition:opacity .45s ease}
 @keyframes mm-pulse{50%{transform:scale(1.18);opacity:.75}}@keyframes mm-breathe{50%{transform:scale(1.06);opacity:.8}}@keyframes mm-bead{from{transform:scale(0);opacity:0}}
 @media(prefers-reduced-motion:reduce){.mm-svg *{animation:none!important;transition:none!important}}
-`;
+${primitiveCss}`;

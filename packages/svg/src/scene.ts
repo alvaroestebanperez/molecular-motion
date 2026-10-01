@@ -16,7 +16,6 @@ export interface SceneActor extends Point {
   type: ActorType;
   label: string;
   description?: string;
-  visualPreset?: string;
   color: string;
   radius: number;
   compartment?: string;
@@ -122,7 +121,6 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       type: definition.type,
       label: definition.label ?? definition.id,
       ...(definition.description && { description: definition.description }),
-      ...(definition.visual?.preset && { visualPreset: definition.visual.preset }),
       color: definition.color ?? defaultColor(definition.id),
       radius: RADIUS[definition.type],
       ...(state.compartment && { compartment: state.compartment }),
