@@ -123,6 +123,34 @@ const proteinAt = (seed:string,x:number,y:number,color:string,state:ProteinVisua
   at(x,y,renderProteinPrimitive({visualSeed:seed,fill:color,radius,state,modifications:mods}));
 
 /*
+ * Action arrows between catalogue elements. An end is a free point, an actor drawn with `proteinAt`
+ * (same seed, radius and state), or a point with an explicit `reach` (e.g. a helix crossing). Actor
+ * and reach ends keep ARROW_CLEARANCE px off the visible outline along the arrow, so no arrow ever
+ * touches what it links; the arrow itself (shape, head, curvature) is entirely the shared primitive's.
+ */
+type ArrowEnd = Point & { seed?:string; radius?:number; state?:ProteinVisualState; reach?:number };
+const ARROW_CLEARANCE=5;
+/** Half-thickness of a backbone, or of a helix crossing, that an arrow points at. */
+const STRAND_REACH=4;
+/** Distance from an actor's centre to its visible outline along the unit direction (ux, uy): the support of its particle ellipses. */
+function arrowReach(end:ArrowEnd,ux:number,uy:number):number {
+  if(end.reach!==undefined) return end.reach;
+  if(!end.seed||!end.radius) return 0;
+  const margin=proteinOutlineWidth(end.radius); const scatter=end.state==='degraded'?2.05:1;
+  const support=Math.max(...proteinGeometry(end.seed,end.radius).map(p=>{
+    const t=p.rotation*Math.PI/180; const along=ux*Math.cos(t)+uy*Math.sin(t); const across=-ux*Math.sin(t)+uy*Math.cos(t);
+    return (p.x*ux+p.y*uy)*scatter+Math.hypot(p.rx*along,p.ry*across)+margin;
+  }));
+  // The inhibition ring (radius + 8) is part of an inhibited actor's outline.
+  return end.state==='inhibited'?Math.max(support,end.radius+9):support;
+}
+function actionArrow(kind:ActionVisualKind,from:ArrowEnd,to:ArrowEnd):string {
+  const d=Math.hypot(to.x-from.x,to.y-from.y)||1; const ux=(to.x-from.x)/d; const uy=(to.y-from.y)/d;
+  const gap=(end:ArrowEnd,sx:number,sy:number)=>{const reach=arrowReach(end,sx,sy); return reach?r1(reach+ARROW_CLEARANCE):0;};
+  return renderActionVisual(kind,{x:from.x,y:from.y},{x:to.x,y:to.y},{startGap:gap(from,ux,uy),endGap:gap(to,-ux,-uy)});
+}
+
+/*
  * Binding grammar shared by the Interactions cards and the binding events:
  * relation / recruitment → dotted (directed) link; physical binding → touching surfaces placed by
  * `firstContact` (the outlines meet, no lobe buried in the partner); complex → several distinct
@@ -222,32 +250,32 @@ function interactionScene(id:string,radius:number):string {
 
 function enzymeScene(id:string):string {
   const center=proteinAt(id,150,68,'#6f72d8','normal',37);
-  if(id==='protease') return `${center}${proteinAt('substrate',55,128,'#8b94d8','normal',24)}${proteinAt('fragment-a',235,128,'#8b94d8','degraded',20)}${renderActionVisual('cleave',{x:92,y:128},{x:200,y:128})}`;
-  if(id==='nuclease') return `${center}${at(25,130,renderNucleicAcidPrimitive({width:250,lesion:'dsb'}))}${renderActionVisual('cleave',{x:150,y:100},{x:150,y:128})}`;
+  if(id==='protease') return `${center}${proteinAt('substrate',55,128,'#8b94d8','normal',24)}${proteinAt('fragment-a',235,128,'#8b94d8','degraded',20)}${actionArrow('cleave',{x:55,y:128,seed:'substrate',radius:24},{x:235,y:128,seed:'fragment-a',radius:20,state:'degraded'})}`;
+  if(id==='nuclease') return `${center}${at(25,130,renderNucleicAcidPrimitive({width:250,lesion:'dsb'}))}${actionArrow('cleave',{x:150,y:68,seed:id,radius:37},{x:150,y:130,reach:STRAND_REACH})}`;
   if(id==='polymerase') {
     const dna={x:25,y:136,width:250,state:'elongating' as const}; const {threePrime:end,follow}=nascentStrandGeometry(dna);
     return `${renderNucleicAcidPrimitive(dna)}<g ${follow}>${proteinAt(id,end.x+8,end.y-30,'#6f72d8','normal',32)}</g>`;
   }
   if(id==='helicase'||id==='ligase'||id==='glycosylase') {
     const state=id==='helicase'?'unwound':'normal'; const dnaLesion=id==='ligase'?'nick':id==='glycosylase'?'ap-site':undefined;
-    return `${center}${at(25,130,renderNucleicAcidPrimitive({width:250,state,lesion:dnaLesion}))}${id==='helicase'?renderSmallMoleculePrimitive({visualSeed:'ATP',label:'ATP',x:42,y:45,scale:.6}):''}${renderActionVisual(id==='ligase'?'ligate':id==='helicase'?'unwind':'modify',{x:150,y:100},{x:150,y:126})}`;
+    return `${center}${at(25,130,renderNucleicAcidPrimitive({width:250,state,lesion:dnaLesion}))}${id==='helicase'?renderSmallMoleculePrimitive({visualSeed:'ATP',label:'ATP',x:42,y:45,scale:.6}):''}${actionArrow(id==='ligase'?'ligate':id==='helicase'?'unwind':'modify',{x:150,y:68,seed:id,radius:37},{x:150,y:130,reach:STRAND_REACH})}`;
   }
   const before:ModificationVisualKind|undefined=id==='phosphatase'?'phosphorylation':id==='deacetylase'?'acetylation':undefined;
   const after:ModificationVisualKind|undefined=id==='kinase'?'phosphorylation':id==='transferase'?'acetylation':id==='ubiquitin-ligase'?'ubiquitination':undefined;
-  return `${['kinase','atpase'].includes(id)?renderSmallMoleculePrimitive({visualSeed:'ATP',label:'ATP',x:42,y:45,scale:.6}):''}${proteinAt(`${id}-substrate`,55,128,'#8b94d8','normal',24,before?[{kind:before}]:[])}${center}${proteinAt(`${id}-substrate`,245,128,'#8b94d8',id==='atpase'?'active':'normal',24,after?[{kind:after,length:3}]:[])}${renderActionVisual('modify',{x:92,y:128},{x:207,y:128})}`;
+  return `${['kinase','atpase'].includes(id)?renderSmallMoleculePrimitive({visualSeed:'ATP',label:'ATP',x:42,y:45,scale:.6}):''}${proteinAt(`${id}-substrate`,55,128,'#8b94d8','normal',24,before?[{kind:before}]:[])}${center}${proteinAt(`${id}-substrate`,245,128,'#8b94d8',id==='atpase'?'active':'normal',24,after?[{kind:after,length:3}]:[])}${actionArrow('modify',{x:55,y:128,seed:`${id}-substrate`,radius:24},{x:245,y:128,seed:`${id}-substrate`,radius:24,state:id==='atpase'?'active':'normal'})}`;
 }
 
 function expressionScene(id:string):string {
-  if(id==='ribosome'||id==='translation') return `${at(28,130,renderNucleicAcidPrimitive({kind:'mrna',width:245}))}${proteinAt('ribosome',150,92,'#4c91e7','normal',45)}${renderActionVisual('synthesize',{x:150,y:55},{x:225,y:30})}`;
+  if(id==='ribosome'||id==='translation') return `${at(28,130,renderNucleicAcidPrimitive({kind:'mrna',width:245}))}${proteinAt('ribosome',150,92,'#4c91e7','normal',45)}${actionArrow('synthesize',{x:150,y:92,seed:'ribosome',radius:45},{x:225,y:30})}`;
   if(id==='nucleosome') return `${at(25,106,renderNucleicAcidPrimitive({width:250}))}${proteinAt('histone-core',150,106,'#557ac1','normal',38)}`;
   const dna=at(25,128,renderNucleicAcidPrimitive({width:250}));
   if(id==='promoter-gene') return `${dna}${label('promoter',82,82)}${label('gene',215,82)}`;
   if(id==='transcription-factor') return `${dna}${renderInteractionPrimitive([{id:'tf',x:92,y:118},{id:'promoter',x:92,y:128}])}${proteinAt('TF',92,96,'#8068e8','active',30)}`;
-  return `${dna}${proteinAt('RNA-Pol-II',150,96,'#4f8ad7','active',38)}${at(162,55,renderNucleicAcidPrimitive({kind:'mrna',width:112}))}${renderActionVisual('synthesize',{x:150,y:83},{x:205,y:58})}`;
+  return `${dna}${proteinAt('RNA-Pol-II',150,96,'#4f8ad7','active',38)}${at(162,55,renderNucleicAcidPrimitive({kind:'mrna',width:112}))}${actionArrow('synthesize',{x:150,y:96,seed:'RNA-Pol-II',radius:38},{x:205,y:58,reach:STRAND_REACH})}`;
 }
 
 function receptorScene(id:string):string {
-  if(id==='proteasome') return `${proteinAt('target',55,67,'#7e83d5','normal',25,[{kind:'ubiquitination',length:3}])}${proteinAt('proteasome',150,110,'#4c91e7','active',48)}${proteinAt('peptides',246,112,'#7e83d5','degraded',20)}${renderActionVisual('degrade',{x:90,y:76},{x:112,y:98})}`;
+  if(id==='proteasome') return `${proteinAt('target',55,67,'#7e83d5','normal',25,[{kind:'ubiquitination',length:3}])}${proteinAt('proteasome',150,110,'#4c91e7','active',48)}${proteinAt('peptides',246,112,'#7e83d5','degraded',20)}${actionArrow('degrade',{x:55,y:67,seed:'target',radius:25},{x:150,y:110,seed:'proteasome',radius:48,state:'active'})}`;
   const sides=`${label('EXTRACELLULAR',58,16)}${label('CYTOSOL',40,174)}`;
   return `${sides}${renderMembranePrimitive(RECEPTOR_MEMBRANE)}${id==='rtk'?dimerReceptorScene():id==='gpcr'?multiPassScene():id==='ion-channel'?channelScene():singlePassScene()}`;
 }
@@ -312,15 +340,15 @@ function eventScene(rawId:string):string {
   const finalState:ProteinVisualState=id==='activate'?'active':id==='inhibit'?'inhibited':id==='degrade'?'degraded':'normal';
   const action=(map[id]?'modify':id) as ActionVisualKind;
   if(id==='bind'||id==='unbind'||id==='dimerize'||id==='recruit') return interactionScene(id,24);
-  if(id==='cleave'||id==='degrade') return `${proteinAt('event-actor',60,108,'#7774d8','normal',29)}${renderActionVisual(id as ActionVisualKind,{x:100,y:108},{x:180,y:108})}${proteinAt('event-fragments',238,108,'#7774d8','degraded',25)}`;
-  if(id==='polymerize') return `${proteinAt('event-actor',72,108,'#7774d8','normal',29)}${renderActionVisual('polymerize',{x:110,y:108},{x:176,y:108})}${proteinAt('event-actor',215,108,'#7774d8','normal',29,[{kind:'parylation',length:7}])}`;
-  if(id==='translocate') return `${label('CYTOPLASM',45,22)}${label('NUCLEUS',40,166)}${renderMembranePrimitive({x:20,y:92,length:260})}${proteinAt('event-actor',150,52,'#7774d8','active',24)}${proteinAt('event-actor',150,140,'#7774d8','active',24)}${renderActionVisual('translocate',{x:150,y:76},{x:150,y:115})}`;
+  if(id==='cleave'||id==='degrade') return `${proteinAt('event-actor',60,108,'#7774d8','normal',29)}${actionArrow(id as ActionVisualKind,{x:60,y:108,seed:'event-actor',radius:29},{x:238,y:108,seed:'event-fragments',radius:25,state:'degraded'})}${proteinAt('event-fragments',238,108,'#7774d8','degraded',25)}`;
+  if(id==='polymerize') return `${proteinAt('event-actor',72,108,'#7774d8','normal',29)}${actionArrow('polymerize',{x:72,y:108,seed:'event-actor',radius:29},{x:215,y:108,seed:'event-actor',radius:29})}${proteinAt('event-actor',215,108,'#7774d8','normal',29,[{kind:'parylation',length:7}])}`;
+  if(id==='translocate') return `${label('CYTOPLASM',45,22)}${label('NUCLEUS',40,166)}${renderMembranePrimitive({x:20,y:92,length:260})}${proteinAt('event-actor',150,52,'#7774d8','active',24)}${proteinAt('event-actor',150,140,'#7774d8','active',24)}${actionArrow('translocate',{x:150,y:52,seed:'event-actor',radius:24,state:'active'},{x:150,y:140,seed:'event-actor',radius:24,state:'active'})}`;
   if(id==='elongate') {
     const dna={x:25,y:112,width:250,state:'elongating' as const,showDirectionality:true}; const {fivePrime,threePrime}=nascentStrandGeometry(dna);
     return `${renderNucleicAcidPrimitive(dna)}${renderActionVisual('elongate',{x:fivePrime.x+30,y:fivePrime.y-34},{x:threePrime.x-10,y:threePrime.y-34})}`;
   }
-  if(['unwind','ligate'].includes(id)) return `${at(25,108,renderNucleicAcidPrimitive({width:250,state:id==='unwind'?'unwound':'normal',lesion:id==='ligate'?'nick':undefined}))}${renderActionVisual(action,{x:80,y:55},{x:150,y:90})}`;
-  return `${proteinAt('event-actor',62,108,'#7774d8','normal',29,before)}${proteinAt('event-actor',238,108,'#7774d8',finalState,29,after)}${renderActionVisual(action,{x:100,y:108},{x:198,y:108})}`;
+  if(['unwind','ligate'].includes(id)) return `${at(25,108,renderNucleicAcidPrimitive({width:250,state:id==='unwind'?'unwound':'normal',lesion:id==='ligate'?'nick':undefined}))}${actionArrow(action,{x:80,y:55},{x:150,y:108,reach:STRAND_REACH})}`;
+  return `${proteinAt('event-actor',62,108,'#7774d8','normal',29,before)}${proteinAt('event-actor',238,108,'#7774d8',finalState,29,after)}${actionArrow(action,{x:62,y:108,seed:'event-actor',radius:29},{x:238,y:108,seed:'event-actor',radius:29,state:finalState})}`;
 }
 
 function art(entry:VocabularyItem):string {
@@ -345,7 +373,7 @@ function art(entry:VocabularyItem):string {
   if(entry.category==='receptors-complexes') return receptorScene(entry.id);
   if(entry.category==='molecular-events') return eventScene(entry.id);
   if(entry.id==='test-kinase') return enzymeScene('kinase'); if(entry.id==='test-protease') return enzymeScene('protease');
-  return `${label('CYTOPLASM',45,24)}${label('NUCLEUS',40,165)}${renderMembranePrimitive({x:20,y:93,length:260})}${proteinAt('IRF3',150,52,'#7774d8','active',27,[{kind:'phosphorylation'}])}${proteinAt('IRF3',150,140,'#7774d8','active',27,[{kind:'phosphorylation'}])}${renderActionVisual('translocate',{x:150,y:78},{x:150,y:112})}`;
+  return `${label('CYTOPLASM',45,24)}${label('NUCLEUS',40,165)}${renderMembranePrimitive({x:20,y:93,length:260})}${proteinAt('IRF3',150,52,'#7774d8','active',27,[{kind:'phosphorylation'}])}${proteinAt('IRF3',150,140,'#7774d8','active',27,[{kind:'phosphorylation'}])}${actionArrow('translocate',{x:150,y:52,seed:'IRF3',radius:27,state:'active'},{x:150,y:140,seed:'IRF3',radius:27,state:'active'})}`;
 }
 
 /** Backwards-compatible wrappers around the generic primitives. */
@@ -362,4 +390,4 @@ export function renderVocabularyGlyph(entryOrId:VocabularyItem|string,options:Vo
 }
 
 export const VOCABULARY_SVG_CSS=`${primitiveCss}
-.mm-vocab__svg{display:block;max-width:100%;height:auto;overflow:visible;color:#18213a;font-family:Inter,system-ui,sans-serif}.mm-vocab__label{text-anchor:middle;fill:currentColor;font-size:10px;font-weight:650;letter-spacing:.02em}.mm-vocab__svg .mm-action path,.mm-vocab__svg .mm-primitive--interaction path{vector-effect:non-scaling-stroke}@media(prefers-color-scheme:dark){.mm-vocab__svg{color:#e7ecf6}.mm-modification rect{stroke:#dce4f2}}`;
+.mm-vocab__svg{display:block;max-width:100%;height:auto;overflow:visible;color:#18213a;font-family:Inter,system-ui,sans-serif}.mm-vocab__label{text-anchor:middle;fill:currentColor;font-size:10px;font-weight:650;letter-spacing:.02em}.mm-vocab__svg .mm-primitive--interaction:not(.mm-interaction--directed) path{vector-effect:non-scaling-stroke}@media(prefers-color-scheme:dark){.mm-vocab__svg{color:#e7ecf6}.mm-modification rect{stroke:#dce4f2}}`;
