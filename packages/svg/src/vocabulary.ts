@@ -1,7 +1,7 @@
 import {
   contactOffset, firstContact, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, proteinOutlineWidth, renderActionVisual,
   renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderNucleicAcidPrimitive,
-  renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
+  renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, renderUnitChainPrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
   type ActionVisualKind, type CompartmentVisualKind, type ContactShape, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
   type MoleculeRingSystem, type SmallMoleculeTopology,
 } from './primitives';
@@ -71,6 +71,12 @@ export const SMALL_MOLECULE_TOPOLOGIES: Readonly<Record<string, SmallMoleculeTop
   zinc: { kind: 'ion', symbol: 'Zn', charge: 2, size: .74 },
 };
 
+/** Events whose generic one-liner would not say what the card shows. */
+const EVENT_DESCRIPTIONS:Partial<Record<string,string>>={
+  polymerize:'Free identical monomers join into a growing chain.',
+  synthesize:'Precursors are consumed to make a new product that was not there before.',
+};
+
 export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   protein('protein-normal','Normal','A stable, conceptual protein surface.','#7774d8'),
   protein('protein-active','Active','A subtle halo communicates activity.','#7774d8'),
@@ -102,7 +108,7 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   modification('phosphorylation','Phosphorylation','P marker physically attached to its actor.'),
   modification('acetylation','Acetylation','Ac marker using the shared marker system.'),
   modification('methylation','Methylation','Me marker using the shared marker system.'),
-  modification('ubiquitination','Ubiquitination','Single ubiquitin or a connected chain.'),
+  modification('ubiquitination','Ubiquitination','Ubiquitin is a small protein: a chain of linked ubiquitins on the substrate surface.'),
   modification('sumoylation','SUMOylation','SUMO marker attached to a protein.'),
   modification('glycosylation','Glycosylation','A compact conceptual sugar marker.'),
   modification('parylation-linear','Linear PARylation','A connected linear PAR chain.'),
@@ -137,7 +143,7 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   receptor('rtk','Receptor tyrosine kinase','Ligand-driven dimerization and phosphorylation.'), receptor('gpcr','GPCR','A conceptual multi-pass receptor.'),
   receptor('ion-channel','Ion channel','A membrane pore with transported ions.'), receptor('proteasome','Proteasomal degradation','Ubiquitinated protein enters a proteolytic complex.'),
   ...(['bind','unbind','recruit','dimerize','activate','inhibit','phosphorylate','dephosphorylate','acetylate','ubiquitinate','parylate','cleave','ligate','polymerize','synthesize','degrade','translocate','unwind','elongate','conformational-change'] as const)
-    .map(id => event(`event-${id}`, id.split('-').map(word => word[0]!.toUpperCase()+word.slice(1)).join(' '), `Generic ${id.replace('-', ' ')} event.`)),
+    .map(id => event(`event-${id}`, id.split('-').map(word => word[0]!.toUpperCase()+word.slice(1)).join(' '), EVENT_DESCRIPTIONS[id] ?? `Generic ${id.replace('-', ' ')} event.`)),
   testScene('test-kinase','Kinase test','ATP + kinase + substrate → phosphorylated substrate + ADP.'),
   testScene('test-protease','Protease test','Protein substrate → peptide fragments.'),
   testScene('test-translocation','Translocation test','IRF3-P crosses the nuclear envelope.'),
@@ -360,6 +366,36 @@ function channelScene():string {
   return `${unit('channel',options)}${ions}`;
 }
 
+/**
+ * Polymerize: a short chain with free identical monomers beside its end → one longer chain made of
+ * the same units. Units are neutral; the context decides what they stand for.
+ */
+const POLYMER_UNIT=15;
+function polymerizeScene():string {
+  const seedChain=renderUnitChainPrimitive({count:3,x:28,y:110,spacing:19,wave:3,size:POLYMER_UNIT});
+  const monomers=renderUnitChainPrimitive({points:[{x:92,y:84},{x:110,y:112},{x:86,y:136}],size:POLYMER_UNIT,linked:false});
+  const polymer=renderUnitChainPrimitive({count:6,x:180,y:106,spacing:19,wave:5,size:POLYMER_UNIT});
+  return `${seedChain}${monomers}${actionArrow('polymerize',{x:124,y:108},{x:166,y:108})}${polymer}`;
+}
+
+/** A reaction plus between reactants. */
+const plus=(x:number,y:number)=>`<path class="mm-vocab__plus" d="M${x-6} ${y}h12M${x} ${y-6}v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".7" aria-hidden="true"/>`;
+
+/**
+ * Synthesize: A + B → AB. Two different small precursors on the left (a base-like ring and a sugar-like ring)
+ * are joined into one new molecule on the right, drawn with the same topology grammar at one shared scale,
+ * so the product is visibly made of both reactants and none of them reappears unchanged.
+ */
+const SYNTHESIS_BASE:MoleculeRingSystem={rings:[6],hetero:[{at:1,atom:'n'},{at:3,atom:'n'}]};
+const SYNTHESIS_SUGAR:MoleculeRingSystem={rings:[5],hetero:[{at:0,atom:'o'}],substituents:[{at:2,atom:'o'},{at:3,atom:'o'}]};
+function synthesizeScene():string {
+  const scale=1.3;
+  const molecule=(seed:string,topology:SmallMoleculeTopology,x:number,y:number)=>renderSmallMoleculePrimitive({visualSeed:seed,topology,x,y,scale});
+  const precursors=`<g data-precursors="">${molecule('precursor-a',{kind:'ring',ring:SYNTHESIS_BASE},66,62)}${plus(66,100)}${molecule('precursor-b',{kind:'ring',ring:SYNTHESIS_SUGAR},66,140)}</g>`;
+  const product={x:222,y:100};
+  return `${precursors}${actionArrow('synthesize',{x:112,y:100},{x:product.x-46,y:product.y})}<g data-product="">${molecule('event-product',{kind:'units',units:[{base:SYNTHESIS_BASE,phosphates:0}]},product.x,product.y)}</g>`;
+}
+
 function eventScene(rawId:string):string {
   const id=rawId.replace(/^event-/,''); const before=id==='dephosphorylate'?[{kind:'phosphorylation' as const}]:[];
   const map:Record<string,ModificationVisualKind>={phosphorylate:'phosphorylation',acetylate:'acetylation',ubiquitinate:'ubiquitination',parylate:'parylation'};
@@ -368,7 +404,8 @@ function eventScene(rawId:string):string {
   const action=(map[id]?'modify':id) as ActionVisualKind;
   if(id==='bind'||id==='unbind'||id==='dimerize'||id==='recruit') return interactionScene(id,24);
   if(id==='cleave'||id==='degrade') return `${proteinAt('event-actor',60,108,'#7774d8','normal',29)}${actionArrow(id as ActionVisualKind,{x:60,y:108,seed:'event-actor',radius:29},{x:238,y:108,seed:'event-fragments',radius:25,state:'degraded'})}${proteinAt('event-fragments',238,108,'#7774d8','degraded',25)}`;
-  if(id==='polymerize') return `${proteinAt('event-actor',72,108,'#7774d8','normal',29)}${actionArrow('polymerize',{x:72,y:108,seed:'event-actor',radius:29},{x:215,y:108,seed:'event-actor',radius:29})}${proteinAt('event-actor',215,108,'#7774d8','normal',29,[{kind:'parylation',length:7}])}`;
+  if(id==='polymerize') return polymerizeScene();
+  if(id==='synthesize') return synthesizeScene();
   if(id==='translocate') return `${label('CYTOPLASM',45,22)}${label('NUCLEUS',40,166)}${renderMembranePrimitive({x:20,y:92,length:260})}${proteinAt('event-actor',150,52,'#7774d8','active',24)}${proteinAt('event-actor',150,140,'#7774d8','active',24)}${actionArrow('translocate',{x:150,y:52,seed:'event-actor',radius:24,state:'active'},{x:150,y:140,seed:'event-actor',radius:24,state:'active'})}`;
   if(id==='elongate') {
     const dna={x:25,y:112,width:250,state:'elongating' as const,showDirectionality:true}; const {fivePrime,threePrime}=nascentStrandGeometry(dna);
