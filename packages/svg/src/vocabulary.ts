@@ -75,7 +75,7 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   modification('phosphorylation','Phosphorylation','P marker physically attached to its actor.'),
   modification('acetylation','Acetylation','Ac marker using the shared marker system.'),
   modification('methylation','Methylation','Me marker using the shared marker system.'),
-  modification('ubiquitination','Ubiquitination','Single ubiquitin or a connected chain.'),
+  modification('ubiquitination','Ubiquitination','Ubiquitin is a small protein: a chain of linked ubiquitins on the substrate surface.'),
   modification('sumoylation','SUMOylation','SUMO marker attached to a protein.'),
   modification('glycosylation','Glycosylation','A compact conceptual sugar marker.'),
   modification('parylation-linear','Linear PARylation','A connected linear PAR chain.'),

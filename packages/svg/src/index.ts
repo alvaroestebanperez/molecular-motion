@@ -18,6 +18,7 @@ export {
   proteinGeometry,
   proteinMorphology,
   proteinOutlineWidth,
+  proteinSurfacePoint,
   renderActionVisual,
   renderCompartmentPrimitive,
   renderInteractionPrimitive,
@@ -32,6 +33,8 @@ export {
   renderTransmembranePrimitive,
   shapesOverlap,
   transmembraneGeometry,
+  UBIQUITIN_RADIUS,
+  ubiquitinGeometry,
 } from './primitives';
 export type {
   ActionArrowEnd,
