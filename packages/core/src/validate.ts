@@ -66,6 +66,10 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     }
     if (typeof actor.type !== 'string' || !ACTOR_TYPES.has(actor.type)) issues.push(`${path}.type is not supported`);
     if (actor.compartment !== undefined && !refs.compartments.has(actor.compartment as string)) issues.push(`${path}.compartment references unknown compartment "${String(actor.compartment)}"`);
+    if (actor.molecule !== undefined) {
+      if (actor.type !== 'molecule') issues.push(`${path}.molecule is only allowed on molecule actors`);
+      else if (typeof actor.molecule !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(actor.molecule)) issues.push(`${path}.molecule must be a lowercase key such as "atp" or "nad-plus"`);
+    }
     if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, issues);
     if (Array.isArray(actor.sites)) actor.sites.forEach((site, siteIndex) => {
       if (!isObject(site) || typeof site.id !== 'string' || !site.id) issues.push(`${path}.sites[${siteIndex}].id must be a non-empty string`);

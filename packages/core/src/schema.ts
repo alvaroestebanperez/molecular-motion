@@ -126,6 +126,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           position: { $ref: '#/$defs/point' },
           sites: { type: 'array', items: { $ref: '#/$defs/site' } },
           compartment: { $ref: '#/$defs/id' },
+          molecule: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Molecule actors only: key of the small-molecule vocabulary naming its structure, e.g. atp or nad-plus.' },
           initial: {
             type: 'object',
             additionalProperties: false,

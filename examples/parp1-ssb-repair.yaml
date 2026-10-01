@@ -87,6 +87,7 @@ actors:
 
   - id: nad
     type: molecule
+    molecule: nad-plus
     label: NAD+
     description: Substrate from which PARP1 builds poly(ADP-ribose).
     color: "#4f8fd6"

@@ -25,6 +25,11 @@ export interface ActorDefinition {
   position?: Point;
   sites?: ActorSite[];
   compartment?: string;
+  /**
+   * Molecule actors only: key of the renderer's small-molecule vocabulary (e.g. `atp`, `nad-plus`) that
+   * names its structure. Opaque to the core; renderers fall back to a generic glyph for unknown keys.
+   */
+  molecule?: string;
   initial?: { present?: boolean; visible?: boolean; activity?: Activity };
 }
 

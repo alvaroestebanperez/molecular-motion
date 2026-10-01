@@ -30,6 +30,7 @@ export {
   renderProteinPrimitive,
   renderProteinSurface,
   renderSmallMoleculePrimitive,
+  smallMoleculeAtoms,
   renderTransmembranePrimitive,
   renderUnitChainPrimitive,
   shapesOverlap,

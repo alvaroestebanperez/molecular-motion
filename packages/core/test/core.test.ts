@@ -37,6 +37,15 @@ describe('mechanism compiler', () => {
     expect(mechanism.at(1).sites['dna.lesion']!.lesion).toBe('single-strand-break');
   });
 
+  it('accepts an optional molecule key on molecule actors only', () => {
+    const withMolecule = yaml.replace('  - id: sensor\n    type: protein', '  - id: sensor\n    type: protein\n  - id: cofactor\n    type: molecule\n    molecule: nad-plus');
+    expect(parseMechanism(withMolecule).actors.find(actor => actor.id === 'cofactor')!.molecule).toBe('nad-plus');
+    expect(() => parseMechanism(yaml.replace('    type: protein', '    type: protein\n    molecule: atp')))
+      .toThrow(/actors\[1\]\.molecule is only allowed on molecule actors/);
+    expect(() => parseMechanism(withMolecule.replace('molecule: nad-plus', 'molecule: NAD+')))
+      .toThrow(/actors\[2\]\.molecule must be a lowercase key/);
+  });
+
   it('reports semantic references with useful paths', () => {
     expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(MechanismValidationError);
     expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(/steps\[0\]\.actions\[0\]\.target references unknown site/);

@@ -1,6 +1,6 @@
 import type { LesionType } from '@molecular-motion/core';
-import { actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, moleculeAtoms, type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene } from './scene';
-import { mix, primitiveCss, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
+import { actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene } from './scene';
+import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
 
 export { mix };
 
@@ -202,7 +202,14 @@ function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string):
 function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, compact: boolean): string {
   // Small molecules stay ball-and-stick; proteins and complexes share the catalog's unified surface.
   let shape: string;
-  if (actor.type === 'molecule') {
+  const topology = actor.type === 'molecule' ? moleculeTopology(actor.molecule) : undefined;
+  if (topology) {
+    // A declared molecule is drawn with the catalog's topology glyph; an invisible outline group keeps the
+    // selection/focus hooks, sized from the same atoms the layout uses for contact.
+    const atoms = actorParticles(actor.id, actor.type, actor.radius, actor.molecule);
+    shape = `<g class="mm-shape__outline mm-shape__outline--molecule">${atoms.map(a => `<circle cx="${round(a.x)}" cy="${round(a.y)}" r="${round(a.r + 1.6)}"/>`).join('')}</g>`
+      + renderSmallMoleculePrimitive({ visualSeed: actor.id, topology, scale: MOLECULE_ACTOR_SCALE, fill: actor.color });
+  } else if (actor.type === 'molecule') {
     const atoms = moleculeAtoms(hashString(actor.id), actor.radius);
     const circles = (grow: number) => atoms.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r + grow)}"/>`).join('');
     shape = `<path class="mm-bonds" d="M${atoms.map(s => `${round(s.x)} ${round(s.y)}`).join('L')}"/><g class="mm-shape__outline">${circles(1.6)}</g><g class="mm-shape__body" fill="url(#${gradient})">${circles(0)}</g>`;
@@ -332,6 +339,7 @@ export const molecularMotionCss = `
 .mm-actor,.mm-label{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}
 .mm-actor{cursor:pointer;outline:none}.mm-actor--ghost,.mm-label--ghost{opacity:.26;cursor:default;pointer-events:none}
 .mm-shape__outline,.mm-actor .mm-surface__outline{fill:color-mix(in srgb,var(--mm-actor) 62%,var(--mm-ink))}
+.mm-shape__outline--molecule{fill:transparent}
 .mm-actor--inactive .mm-actor__inner{opacity:.82}.mm-actor--inhibited .mm-shape__body,.mm-actor--inhibited .mm-surface{filter:grayscale(.75)}.mm-actor--inhibited .mm-shape__outline,.mm-actor--inhibited .mm-surface__outline{fill:var(--mm-muted)}
 .mm-halo{animation:mm-breathe 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-inhibition circle{fill:none;stroke:var(--mm-alert);stroke-width:3}.mm-inhibition path{stroke:var(--mm-alert);stroke-width:4;stroke-linecap:round}
