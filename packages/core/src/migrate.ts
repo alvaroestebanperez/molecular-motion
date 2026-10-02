@@ -1,5 +1,7 @@
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const BREAKS = new Set(['single-strand-break', 'double-strand-break']);
+/** v2 layout keywords as v3 coordinates on the implicit 100-unit molecule (RFC 0004 §3). */
+const KEYWORD_COORDINATES: Record<string, number> = { start: 28, center: 50, end: 72 };
 
 /**
  * Convert a schemaVersion 1 document to schemaVersion 2. Best effort on malformed input:
@@ -40,4 +42,34 @@ function migrateAction(action: unknown): unknown {
     }
     default: return action;
   }
+}
+
+/**
+ * Convert a schemaVersion 2 document to schemaVersion 3 (RFC 0004). Sites on nucleic acids trade
+ * their layout keyword (or its absence, which meant `center`) for an interbase coordinate on the
+ * implicit 100-unit molecule; a `Point` position stays a layout override without a coordinate.
+ * Keywords on other actors' sites never had an effect and are dropped. Best effort on malformed input.
+ */
+export function migrateV2(document: unknown): unknown {
+  if (!isObject(document) || document.schemaVersion !== 2) return document;
+  return {
+    ...document,
+    schemaVersion: 3,
+    actors: Array.isArray(document.actors) ? document.actors.map(migrateSites) : document.actors,
+  };
+}
+
+function migrateSites(actor: unknown): unknown {
+  if (!isObject(actor) || !Array.isArray(actor.sites)) return actor;
+  const nucleic = actor.type === 'dna' || actor.type === 'rna';
+  return {
+    ...actor,
+    sites: actor.sites.map(site => {
+      if (!isObject(site) || isObject(site.position)) return site;
+      const { position, ...rest } = site;
+      if (!nucleic) return position === undefined ? site : rest;
+      const at = position === undefined ? KEYWORD_COORDINATES.center : KEYWORD_COORDINATES[position as string];
+      return at === undefined ? site : { ...rest, at };
+    }),
+  };
 }

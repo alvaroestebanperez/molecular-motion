@@ -1,4 +1,4 @@
-import type { Activity, ActorDefinition, ActorType, LesionType, MechanismSnapshot, Modification, Point } from '@molecular-motion/core';
+import { nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot, type Modification, type Point } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
 
@@ -253,7 +253,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       sites: (definition.sites ?? []).map(site => {
         const reference = `${definition.id}.${site.id}`;
         const lesion = snapshot.sites[reference]?.lesion;
-        return { reference, x: siteX(site.position, width), y: y - HELIX.amplitude, ...(lesion && { lesion }) };
+        return { reference, x: siteX(definition, site, width), y: y - HELIX.amplitude, ...(lesion && { lesion }) };
       }),
     };
   });
@@ -447,7 +447,12 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   };
 }
 
-function siteX(position: 'start' | 'center' | 'end' | Point | undefined, width: number): number {
-  if (typeof position === 'object') return position.x;
-  return position === 'start' ? width * .28 : position === 'end' ? width * .72 : width * .5;
+/**
+ * Renderer convention (RFC 0004 §7): the molecule spans the canvas and coordinates grow left to right,
+ * so `top` reads 5′→3′. A span anchors at its midpoint; a `Point` position is drawn where it says.
+ */
+function siteX(acid: ActorDefinition, site: ActorSite, width: number): number {
+  if (site.position) return site.position.x;
+  const interval = siteInterval(site);
+  return interval ? width * ((interval.from + interval.to) / 2) / nucleicLength(acid) : width * .5;
 }

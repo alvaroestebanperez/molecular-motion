@@ -40,13 +40,13 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://molecular-motion.dev/schema/v2.json',
+    $id: 'https://molecular-motion.dev/schema/v3.json',
     title: 'Molecular Motion mechanism',
     type: 'object',
     required: ['schemaVersion', 'mechanism', 'actors', 'steps'],
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: 2 },
+      schemaVersion: { const: 3 },
       mechanism: {
         type: 'object',
         required: ['id', 'name'],
@@ -110,7 +110,27 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           id: { $ref: '#/$defs/id' },
           type: { type: 'string' },
           label: { type: 'string' },
-          position: { oneOf: [{ enum: ['start', 'center', 'end'] }, { $ref: '#/$defs/point' }] },
+          at: { type: 'integer', minimum: 0, description: 'Nucleic acids: interbase coordinate, 0 … length. A nucleotide-level site at n is the nucleotide [n, n + 1).' },
+          span: { type: 'array', prefixItems: [{ type: 'integer', minimum: 0 }, { type: 'integer', minimum: 1 }], minItems: 2, maxItems: 2, description: 'Nucleic acids: interbase interval [from, to).' },
+          strand: { enum: ['top', 'bottom', 'both'], description: 'Nucleic acids: strand the site lies on; top runs 5′→3′ with increasing coordinate.' },
+          position: { $ref: '#/$defs/point', description: 'Layout override only; never a coordinate.' },
+        },
+        not: { anyOf: [{ required: ['at', 'span'] }, { required: ['at', 'position'] }, { required: ['span', 'position'] }] },
+      },
+      nucleic: {
+        type: 'object',
+        additionalProperties: false,
+        description: 'dna/rna actors only: biological geometry (RFC 0004).',
+        properties: {
+          length: { type: 'integer', minimum: 1, description: 'Nucleotides or base pairs. Defaults to 100.' },
+          form: { enum: ['duplex', 'single'], description: 'Defaults to duplex for dna and single for rna.' },
+          strands: {
+            type: 'object',
+            additionalProperties: false,
+            properties: Object.fromEntries(['top', 'bottom'].map(strand => [strand, {
+              type: 'object', additionalProperties: false, properties: { label: { type: 'string' } },
+            }])),
+          },
         },
       },
       actor: {
@@ -125,6 +145,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           color: { type: 'string' },
           position: { $ref: '#/$defs/point' },
           sites: { type: 'array', items: { $ref: '#/$defs/site' } },
+          nucleic: { $ref: '#/$defs/nucleic' },
           compartment: { $ref: '#/$defs/id' },
           molecule: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Molecule actors only: key of the small-molecule vocabulary naming its structure, e.g. atp or nad-plus.' },
           initial: {

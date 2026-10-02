@@ -9,11 +9,32 @@ export interface Point { x: number; y: number }
 
 // ---- Definition ----
 
+/** Strands of a nucleic acid: `top` runs 5′→3′ with increasing coordinate, `bottom` is antiparallel. */
+export type StrandId = 'top' | 'bottom';
+export type SiteStrand = StrandId | 'both';
+export type NucleicForm = 'duplex' | 'single';
+
+/** Biological geometry of a `dna`/`rna` actor (RFC 0004). Coordinates are interbase, 0 … length. */
+export interface NucleicDefinition {
+  /** Nucleotides (single) or base pairs (duplex). Defaults to `DEFAULT_NUCLEIC_LENGTH`. */
+  length?: number;
+  /** Defaults to `duplex` for dna and `single` for rna. */
+  form?: NucleicForm;
+  strands?: Partial<Record<StrandId, { label?: string }>>;
+}
+
 export interface ActorSite {
   id: string;
   type?: string;
   label?: string;
-  position?: 'start' | 'center' | 'end' | Point;
+  /** Nucleic acids: interbase coordinate; a nucleotide-level site at `n` is the nucleotide [n, n + 1). */
+  at?: number;
+  /** Nucleic acids: interbase interval [from, to), for footprints and patches. Exclusive with `at`. */
+  span?: [number, number];
+  /** Nucleic acids: strand the site lies on. Unset means the default for the lesion it receives. */
+  strand?: SiteStrand;
+  /** Layout override only; never a coordinate. */
+  position?: Point;
 }
 
 export interface ActorDefinition {
@@ -24,6 +45,8 @@ export interface ActorDefinition {
   color?: string;
   position?: Point;
   sites?: ActorSite[];
+  /** `dna`/`rna` actors only. */
+  nucleic?: NucleicDefinition;
   compartment?: string;
   /**
    * Molecule actors only: key of the renderer's small-molecule vocabulary (e.g. `atp`, `nad-plus`) that
@@ -75,7 +98,7 @@ export interface MechanismStep {
 }
 
 export interface MechanismDefinition {
-  schemaVersion: 2;
+  schemaVersion: 3;
   mechanism: { id: string; name: string; description?: string; references?: string[] };
   references: ReferenceDefinition[];
   compartments: CompartmentDefinition[];

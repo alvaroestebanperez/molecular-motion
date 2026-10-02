@@ -1,11 +1,14 @@
 import { builtinRegistry } from './actions';
 import { normalizeCompartments } from './compartments';
-import { migrateV1 } from './migrate';
+import { migrateV1, migrateV2 } from './migrate';
+import { nucleicForm, nucleicLength } from './nucleic';
 import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
-import type { ActionSpec, MechanismDefinition } from './types';
+import type { ActionSpec, ActorDefinition, MechanismDefinition } from './types';
 
 const ACTOR_TYPES = new Set(['dna', 'rna', 'protein', 'molecule', 'complex']);
 const ACTIVITIES = new Set(['active', 'inactive', 'inhibited']);
+const FORMS = new Set(['duplex', 'single']);
+const STRANDS = new Set(['top', 'bottom']);
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export class MechanismValidationError extends Error {
@@ -23,15 +26,15 @@ interface References {
 }
 
 /**
- * Structural and referential validation. Accepts v1 documents (migrated automatically) and returns
- * a normalised, deep-copied v2 definition. State-dependent checks happen later, during compilation.
+ * Structural and referential validation. Accepts v1 and v2 documents (migrated automatically) and
+ * returns a normalised, deep-copied v3 definition. State-dependent checks happen later, during compilation.
  */
 export function validateMechanism(input: unknown, options: ValidateOptions = {}): MechanismDefinition {
   const registry = options.registry ?? builtinRegistry;
-  const value = migrateV1(input);
+  const value = migrateV2(migrateV1(input));
   const issues: string[] = [];
   if (!isObject(value)) throw new MechanismValidationError(['root must be an object']);
-  if (value.schemaVersion !== 2) issues.push('schemaVersion must be 1 or 2');
+  if (value.schemaVersion !== 3) issues.push('schemaVersion must be 1, 2 or 3');
   if (!isObject(value.mechanism)) issues.push('mechanism must be an object');
   else {
     requiredString(value.mechanism.id, 'mechanism.id', issues);
@@ -71,10 +74,16 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
       else if (typeof actor.molecule !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(actor.molecule)) issues.push(`${path}.molecule must be a lowercase key such as "atp" or "nad-plus"`);
     }
     if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, issues);
+    const acid = nucleicDescriptor(actor);
+    if (actor.nucleic !== undefined) {
+      if (!acid) issues.push(`${path}.nucleic is only allowed on dna and rna actors`);
+      else validateNucleic(actor.nucleic, `${path}.nucleic`, issues);
+    }
     if (Array.isArray(actor.sites)) actor.sites.forEach((site, siteIndex) => {
       if (!isObject(site) || typeof site.id !== 'string' || !site.id) issues.push(`${path}.sites[${siteIndex}].id must be a non-empty string`);
       else if (sites.has(site.id)) issues.push(`${path}.sites duplicates "${site.id}"`);
       else sites.add(site.id);
+      if (isObject(site)) validateSiteGeometry(site, `${path}.sites[${siteIndex}]`, acid, issues);
     });
   });
 
@@ -168,6 +177,65 @@ function validateField(value: unknown, spec: FieldSpec, path: string, refs: Refe
       else if (spec.kind === 'site' && !siteId) issues.push(`${path} must reference a site (actor.site)`);
       else if (siteId && !sites.has(siteId)) issues.push(`${path} references unknown site "${value}"`);
     }
+  }
+}
+
+type NucleicDescriptor = Pick<ActorDefinition, 'type' | 'nucleic'>;
+
+/** The geometry a dna/rna actor's sites are checked against; invalid `nucleic` values fall back to the defaults. */
+function nucleicDescriptor(actor: Record<string, unknown>): NucleicDescriptor | undefined {
+  if (actor.type !== 'dna' && actor.type !== 'rna') return undefined;
+  const declared = isObject(actor.nucleic) ? actor.nucleic : {};
+  return {
+    type: actor.type,
+    nucleic: {
+      ...(Number.isInteger(declared.length) && (declared.length as number) >= 1 && { length: declared.length as number }),
+      ...(FORMS.has(declared.form as string) && { form: declared.form as 'duplex' | 'single' }),
+    },
+  };
+}
+
+function validateNucleic(nucleic: unknown, path: string, issues: string[]) {
+  if (!isObject(nucleic)) return issues.push(`${path} must be an object`);
+  for (const key of Object.keys(nucleic)) if (!['length', 'form', 'strands'].includes(key)) issues.push(`${path}.${key} is not supported`);
+  if (nucleic.length !== undefined && (!Number.isInteger(nucleic.length) || (nucleic.length as number) < 1)) issues.push(`${path}.length must be an integer ≥ 1`);
+  if (nucleic.form !== undefined && !FORMS.has(nucleic.form as string)) issues.push(`${path}.form must be one of: duplex, single`);
+  if (nucleic.strands === undefined) return;
+  if (!isObject(nucleic.strands)) return issues.push(`${path}.strands must be an object`);
+  for (const [strand, value] of Object.entries(nucleic.strands)) {
+    if (!STRANDS.has(strand)) issues.push(`${path}.strands.${strand} is not a strand (top, bottom)`);
+    else if (strand === 'bottom' && nucleic.form === 'single') issues.push(`${path}.strands.bottom is not allowed on a single-stranded molecule`);
+    if (!isObject(value) || Object.keys(value).some(key => key !== 'label') || (value.label !== undefined && typeof value.label !== 'string')) {
+      issues.push(`${path}.strands.${strand} must be an object with an optional string label`);
+    }
+  }
+}
+
+/**
+ * Coordinates are biology, `position` is layout (RFC 0004 §6). A nucleic-acid site has exactly one
+ * of `at`, `span` (a coordinate) or a `Point` position (none); other actors' sites have no geometry
+ * beyond an optional `Point`.
+ */
+function validateSiteGeometry(site: Record<string, unknown>, path: string, acid: NucleicDescriptor | undefined, issues: string[]) {
+  if (site.position !== undefined && !(isObject(site.position) && typeof site.position.x === 'number' && typeof site.position.y === 'number')) {
+    issues.push(`${path}.position must be a point { x, y }${typeof site.position === 'string' ? '; use `at` for a coordinate' : ''}`);
+  }
+  if (!acid) {
+    for (const key of ['at', 'span', 'strand']) if (site[key] !== undefined) issues.push(`${path}.${key} is only allowed on dna and rna sites`);
+    return;
+  }
+  const length = nucleicLength(acid);
+  const inRange = (value: unknown) => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= length;
+  const located = [site.at, site.span, site.position].filter(value => value !== undefined).length;
+  if (located === 0) issues.push(`${path} needs a coordinate (at or span) or a position`);
+  if (located > 1) issues.push(`${path} must use only one of at, span, position`);
+  if (site.at !== undefined && !inRange(site.at)) issues.push(`${path}.at must be an integer between 0 and ${length}`);
+  if (site.span !== undefined && !(Array.isArray(site.span) && site.span.length === 2 && site.span.every(inRange) && site.span[0] < site.span[1])) {
+    issues.push(`${path}.span must be [from, to] with 0 ≤ from < to ≤ ${length}`);
+  }
+  if (site.strand !== undefined) {
+    if (site.strand !== 'top' && site.strand !== 'bottom' && site.strand !== 'both') issues.push(`${path}.strand must be one of: top, bottom, both`);
+    else if (site.strand !== 'top' && nucleicForm(acid) === 'single') issues.push(`${path}.strand must be top on a single-stranded molecule`);
   }
 }
 
