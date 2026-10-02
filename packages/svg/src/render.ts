@@ -47,7 +47,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact)).join('');
   const labels = compact ? '' : [
-    ...actors.map(actor => actorLabel(actor)),
+    ...actors.filter(actor => actor.group?.lead !== false).map(actor => actorLabel(actor)),
     ...actors.filter(actor => actor.chain).map(actor => chainLabel(actor)),
     ...scene.lesions.map(lesion => lesionLabel(lesion, actors)),
   ].join('');
@@ -116,9 +116,11 @@ export function describeScene(scene: SvgScene): string {
     const [actor, site] = reference.split('.');
     return site ? `${labels.get(actor!) ?? actor} (${site})` : labels.get(actor!) ?? reference;
   };
-  const parts = scene.actors.filter(actor => !actor.ghost).map(actor => {
+  // Copies are described once, by their lead, with a count.
+  const parts = scene.actors.filter(actor => !actor.ghost && actor.group?.lead !== false).map(actor => {
     const facts = [actor.activity, actor.boundTo && `bound to ${target(actor.boundTo)}`, actor.chain && `carrying ${actor.chain.label}`].filter(Boolean);
-    return facts.length ? `${actor.label} (${facts.join(', ')})` : actor.label;
+    const name = calloutText(actor);
+    return facts.length ? `${name} (${facts.join(', ')})` : name;
   });
   const lesions = scene.lesions.map(lesion => `${LESION_LABELS[lesion.type]} at ${target(lesion.target)}${lesion.strand === 'bottom' ? ' on the bottom strand' : ''}`);
   const strands = scene.nucleicAcids.flatMap(acid => {
@@ -307,7 +309,7 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
     ? 'aria-hidden="true"'
     : `role="button" tabindex="0" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity].filter(Boolean).join(', '))}"`;
   return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
-    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${shape}${inhibition}${badges}</g></g>`;
+    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${actor.mirrored ? `<g transform="scale(-1 1)">${shape}</g>` : shape}${inhibition}${badges}</g></g>`;
 }
 
 /** Branched bead chain leaving the actor's surface along `chain.angle`. */
@@ -361,6 +363,9 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
   return `<g class="mm-label mm-label--alert" data-key="lesion:${escape(lesion.target)}" style="transform:translate(${round(lesion.x)}px,${round(lesion.y)}px)" aria-hidden="true">${markup}</g>`;
 }
 
+/** Callout text: the label, with the number of visible copies when it speaks for a group. */
+const calloutText = (actor: SceneActor) => actor.group && actor.group.size > 1 ? `${actor.label} ×${actor.group.size}` : actor.label;
+
 function actorLabel(actor: SceneActor): string {
   const side = actor.labelSide;
   const r = actor.radius;
@@ -373,7 +378,7 @@ function actorLabel(actor: SceneActor): string {
   const ty = -r * (small ? .6 : .72);
   const classes = ['mm-label', actor.ghost && 'mm-label--ghost'].filter(Boolean).join(' ');
   const scale = actor.ghost ? ' scale(.62)' : '';
-  return `<g class="${classes}" data-key="label:${escape(actor.id)}" style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}" aria-hidden="true">${pill(x, y, tx, ty, actor.label, side)}</g>`;
+  return `<g class="${classes}" data-key="label:${escape(actor.id)}" style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}" aria-hidden="true">${pill(x, y, tx, ty, calloutText(actor), side)}</g>`;
 }
 
 function chainLabel(actor: SceneActor): string {

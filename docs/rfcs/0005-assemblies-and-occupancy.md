@@ -165,6 +165,13 @@ RFC 0005 is validated on RPA→RAD51, EGFR dimerization and STING. The nucleosom
 - Scene actors become scene **instances**, keyed `actor:<instance>`. For single-copy actors this is the same key as today.
 - An occupant is laid out at its span on its strand: centred on the span, oriented by `orientation`, resting on the strand surface that RFC 0004 already computes. Adjacent occupants of the same definition read as a filament.
 - An interaction draws the existing contact (no line). A component is laid out by docking along edges, as `boundTo` children are now, generalised to more than one partner and to interface-specific docking directions.
+- **As implemented (PR 4):**
+  - **Docking parent.** The layout docks each instance against one parent: its legacy attachment, else the nucleic acid it occupies, else the first instance it binds. A symmetric edge docks only the higher id onto the lower, so a dimer has one anchor and no cycle.
+  - **Footprint scale.** A definition with a footprint is drawn so its outline spans the nucleotides it covers, on the scale of the first molecule shown. This is one scale per definition, so a free copy is the same size as one on the DNA.
+  - **Orientation.** `reverse` mirrors the shape only, never badges or text.
+  - **Avoidance.** Docking tilts towards "up" until it clears the DNA *and* every placed actor other than its partner. Anything docking onto a span occupant starts from straight up, because the occupant's neighbours lie along the DNA. The legacy baselines are unaffected.
+  - **Bridging.** An instance that binds two or more placed partners (cGAMP on both STING protomers) docks exactly onto the first one, heading for the point above the middle of all of them. It tilts up only if it would clip another, so it keeps a real contact and no line is drawn.
+  - **Callouts.** Visible copies share one callout ("RPA ×3") and one entry in the SVG description.
 - The modification chain stays for real polymers attached to one protein (PAR). RAD51 in the HR example moves from a chain to copies plus occupancy in a later example PR.
 
 **Delivery note.** Removing `boundTo` (PR 2) needs a home for legacy bindings to DNA sites, so PR 2 introduces the occupancy *record* (`instance`, `acid`, optional `site`). Spans, strands, footprints, orientation, `occupy`/`vacate`/`coat` and the exclusivity rule arrive in PR 3 as extensions of that record.
