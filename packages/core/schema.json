@@ -765,6 +765,142 @@
         },
         {
           "type": "object",
+          "description": "Remove nucleotides 5′→3′ from every 5′ end at a strand break, leaving 3′ overhangs.",
+          "required": [
+            "type",
+            "target",
+            "length"
+          ],
+          "properties": {
+            "type": {
+              "const": "resect"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+              "description": "Site with a break and a point coordinate (at)."
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Nucleotides removed from each 5′ end."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the opposite strand.",
+          "required": [
+            "type",
+            "target",
+            "length"
+          ],
+          "properties": {
+            "type": {
+              "const": "extend"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+              "description": "Site with a point coordinate (at) where the 3′ end sits."
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Nucleotides added."
+            },
+            "strand": {
+              "enum": [
+                "top",
+                "bottom"
+              ],
+              "description": "Strand to extend; needed only when both offer a 3′ end."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Separate both strands into an unpaired bubble around a site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "unwind"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+              "description": "Site with a coordinate; a span is the bubble itself."
+            },
+            "length": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Bubble length, centred on a point site (at). Not used with a span."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Re-pair the unwound bubble at a site.",
+          "required": [
+            "type",
+            "target"
+          ],
+          "properties": {
+            "type": {
+              "const": "anneal"
+            },
+            "duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duration in milliseconds (presentation only)."
+            },
+            "by": {
+              "$ref": "#/$defs/id",
+              "description": "Causal agent: enzyme, ligand, drug, or sensor."
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+              "description": "Site with a coordinate inside or at the edge of the bubble."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "description": "Bind an actor that is brought in by its target.",
           "required": [
             "type",

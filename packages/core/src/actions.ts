@@ -1,5 +1,9 @@
-import { ActionRegistry, defineAlias, definePrimitive, field } from './registry';
-import type { ActionSpec, Activity, LesionType } from './types';
+import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
+import {
+  lesionStrands, nucleicForm, nucleicLength, otherStrand, readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
+} from './nucleic';
+import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
+import type { ActionSpec, Activity, ActorDefinition, ActorSite, LesionType, MechanismDefinition, NucleicState, StrandId } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
 export const LESIONS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
@@ -159,7 +163,13 @@ export const cleave = definePrimitive<CleaveAction>({
   description: 'Break the backbone of a nucleic acid at a site.',
   fields: { target: field.site({ required: true }), lesion: field.enum(BREAKS) },
   presentation: { verb: 'cleaves' },
-  validate(action, ctx) { requireNucleicAcid(action.target, ctx); },
+  validate(action, ctx) {
+    requireNucleicAcid(action.target, ctx);
+    const site = locate(action.target, ctx.definition)?.site;
+    if (action.lesion === 'double-strand-break' && (site?.strand === 'top' || site?.strand === 'bottom')) {
+      ctx.issue(`a double-strand break cuts both strands, but site "${action.target}" is on the ${site.strand} strand`);
+    }
+  },
   apply(_state, action, ctx) { ctx.site(action.target).lesion = action.lesion ?? 'single-strand-break'; },
 });
 
@@ -173,7 +183,176 @@ export const ligate = definePrimitive<LigateAction>({
   apply(_state, action, ctx) {
     const site = ctx.site(action.target);
     if (!site.lesion || !BREAKS.includes(site.lesion)) ctx.fail(`no strand break to ligate at "${action.target}"`);
+    // A ligase seals adjacent ends only: a strand still missing nucleotides at the break has a gap, not a nick.
+    const located = locate(action.target, ctx.definition);
+    if (located?.site.at !== undefined) {
+      const state = readNucleicState(ctx.actor(located.acid.id));
+      for (const strand of lesionStrands(located.acid, located.site, site.lesion)) {
+        // Partial synthesis moves the gap away from the break, so look past the nascent stretch on either side.
+        const nascent = strandIntervals(state.nascent, strand);
+        const left = intervalAt(nascent, located.site.at - 1)?.from ?? located.site.at;
+        const right = intervalAt(nascent, located.site.at)?.to ?? located.site.at;
+        if (missingOn(state, strand).some(gap => gap.to === left || gap.from === right)) {
+          ctx.fail(`the ${strand} strand is missing nucleotides at "${action.target}"; fill the gap with extend before ligating`);
+        }
+      }
+    }
     delete site.lesion;
+  },
+});
+
+// ---- Strand geometry (RFC 0004 §5). Coordinates grow along top 5′→3′; bottom is antiparallel. ----
+
+function locate(reference: string, definition: MechanismDefinition): { acid: ActorDefinition; site: ActorSite } | undefined {
+  const [actorId, siteId] = reference.split('.');
+  const acid = definition.actors.find(actor => actor.id === actorId);
+  const site = acid?.sites?.find(item => item.id === siteId);
+  return acid && site ? { acid, site } : undefined;
+}
+
+/** Static checks shared by the strand primitives: a nucleic-acid site with the right kind of coordinate. */
+function requireCoordinate(reference: string, ctx: { definition: MechanismDefinition; issue(message: string): void }, options: { point?: boolean; duplex?: boolean }) {
+  const located = locate(reference, ctx.definition);
+  if (!located) return;
+  const { acid, site } = located;
+  if (acid.type !== 'dna' && acid.type !== 'rna') return ctx.issue(`"${acid.id}" is not a nucleic acid`);
+  if (!siteInterval(site)) return ctx.issue(`site "${reference}" has no coordinate (at or span); a position is layout only`);
+  if (options.point && site.at === undefined) ctx.issue(`site "${reference}" needs a point coordinate (at), not a span`);
+  if (options.duplex && nucleicForm(acid) !== 'duplex') ctx.issue(`"${acid.id}" is single-stranded; this action needs a duplex`);
+}
+
+/** Resolve a validated strand action: the molecule, its site, and its present actor state. */
+function strandTarget(reference: string, ctx: ApplyContext) {
+  const located = locate(reference, ctx.definition) ?? ctx.fail(`unknown site "${reference}"`);
+  const actor = ctx.requirePresent(located.acid.id);
+  return { ...located, actor, state: readNucleicState(actor), length: nucleicLength(located.acid) };
+}
+
+const missingOn = (state: NucleicState, strand: StrandId) => strandIntervals(state.missing, strand);
+const rangeLabel = (strand: StrandId, range: Interval) => `${strand} strand ${range.from}–${range.to}`;
+
+interface ResectAction extends ActionSpec { target: string; length: number }
+export const resect = definePrimitive<ResectAction>({
+  type: 'resect',
+  description: 'Remove nucleotides 5′→3′ from every 5′ end at a strand break, leaving 3′ overhangs.',
+  fields: {
+    target: field.site({ required: true, description: 'Site with a break and a point coordinate (at).' }),
+    length: field.integer({ required: true, min: 1, description: 'Nucleotides removed from each 5′ end.' }),
+  },
+  presentation: { verb: 'resects' },
+  validate(action, ctx) { requireCoordinate(action.target, ctx, { point: true }); },
+  apply(_state, action, ctx) {
+    const lesion = ctx.site(action.target).lesion;
+    if (!lesion || !BREAKS.includes(lesion)) ctx.fail(`no strand break to resect at "${action.target}"`);
+    const { acid, site, actor, state, length } = strandTarget(action.target, ctx);
+    const at = site.at!;
+    for (const strand of lesionStrands(acid, site, lesion)) {
+      // The 5′ end at the break: on top it faces increasing coordinates, on bottom decreasing ones.
+      // Earlier resection has already moved it away from the break, so continue from where it is now.
+      const missing = missingOn(state, strand);
+      const range = strand === 'top'
+        ? (end => ({ from: end, to: end + action.length }))(intervalAt(missing, at)?.to ?? at)
+        : (end => ({ from: end - action.length, to: end }))(intervalAt(missing, at - 1)?.from ?? at);
+      if (range.from < 0 || range.to > length) {
+        const room = strand === 'top' ? length - range.from : range.to;
+        ctx.fail(`resecting ${action.length} nt from the 5′ end on the ${strand} strand runs past the molecule end (${room} nt left)`);
+      }
+      if (overlapsInterval(state.open, range)) ctx.fail(`cannot resect into an unwound region (${rangeLabel(strand, range)}); anneal it first`);
+      state.missing = withStrandIntervals(state.missing, strand, addInterval(missing, range));
+      state.nascent = withStrandIntervals(state.nascent, strand, subtractInterval(strandIntervals(state.nascent, strand), range));
+    }
+    writeNucleicState(actor, state);
+  },
+});
+
+interface ExtendAction extends ActionSpec { target: string; length: number; strand?: StrandId }
+export const extend = definePrimitive<ExtendAction>({
+  type: 'extend',
+  description: 'Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the opposite strand.',
+  fields: {
+    target: field.site({ required: true, description: 'Site with a point coordinate (at) where the 3′ end sits.' }),
+    length: field.integer({ required: true, min: 1, description: 'Nucleotides added.' }),
+    strand: field.enum(['top', 'bottom'], { description: 'Strand to extend; needed only when both offer a 3′ end.' }),
+  },
+  presentation: { verb: 'extends', tone: 'activating' },
+  validate(action, ctx) { requireCoordinate(action.target, ctx, { point: true, duplex: true }); },
+  apply(_state, action, ctx) {
+    if (ctx.site(action.target).lesion === 'double-strand-break') {
+      ctx.fail(`extension at a double-strand break needs a template from another molecule, which this model does not represent ("${action.target}")`);
+    }
+    const { site, actor, state, length } = strandTarget(action.target, ctx);
+    const at = site.at!;
+    const nascentRun = (strand: StrandId) => strandIntervals(state.nascent, strand);
+    // The 3′ end that faces a gap at the site, past anything already synthesised from it.
+    const gapFrom = (strand: StrandId): Interval | undefined => {
+      const missing = missingOn(state, strand);
+      if (strand === 'top') {
+        const end = intervalAt(nascentRun('top'), at)?.to ?? at;
+        const gap = missing.find(item => item.from === end);
+        return gap && end > 0 ? gap : undefined;
+      }
+      const end = intervalAt(nascentRun('bottom'), at - 1)?.from ?? at;
+      const gap = missing.find(item => item.to === end);
+      return gap && end < length ? gap : undefined;
+    };
+    const candidates = (['top', 'bottom'] as const).filter(strand => (!action.strand || action.strand === strand) && gapFrom(strand));
+    if (!candidates.length) ctx.fail(`no 3′ end facing a gap${action.strand ? ` on the ${action.strand} strand` : ''} at "${action.target}"`);
+    if (candidates.length > 1) ctx.fail(`both strands have a 3′ end facing a gap at "${action.target}"; set strand`);
+    const strand = candidates[0]!;
+    const gap = gapFrom(strand)!;
+    if (action.length > gap.to - gap.from) ctx.fail(`extending ${action.length} nt overfills the ${gap.to - gap.from}-nt gap on the ${strand} strand`);
+    const range = strand === 'top' ? { from: gap.from, to: gap.from + action.length } : { from: gap.to - action.length, to: gap.to };
+    if (overlapsInterval(missingOn(state, otherStrand(strand)), range)) ctx.fail(`no template: the ${otherStrand(strand)} strand is missing across ${range.from}–${range.to}`);
+    state.missing = withStrandIntervals(state.missing, strand, subtractInterval(missingOn(state, strand), range));
+    state.nascent = withStrandIntervals(state.nascent, strand, addInterval(nascentRun(strand), range));
+    writeNucleicState(actor, state);
+  },
+});
+
+interface UnwindAction extends ActionSpec { target: string; length?: number }
+export const unwind = definePrimitive<UnwindAction>({
+  type: 'unwind',
+  description: 'Separate both strands into an unpaired bubble around a site.',
+  fields: {
+    target: field.site({ required: true, description: 'Site with a coordinate; a span is the bubble itself.' }),
+    length: field.integer({ min: 1, description: 'Bubble length, centred on a point site (at). Not used with a span.' }),
+  },
+  presentation: { verb: 'unwinds' },
+  validate(action, ctx) {
+    requireCoordinate(action.target, ctx, { duplex: true });
+    const site = locate(action.target, ctx.definition)?.site;
+    if (site?.at !== undefined && action.length === undefined) ctx.issue('length is required for a point site (at)');
+    if (site?.span && action.length !== undefined) ctx.issue(`length is not used with a span; "${action.target}" already gives the bubble`);
+  },
+  apply(_state, action, ctx) {
+    const { site, actor, state, length } = strandTarget(action.target, ctx);
+    const range = site.span
+      ? { from: site.span[0], to: site.span[1] }
+      : (from => ({ from, to: from + action.length! }))(site.at! - Math.floor(action.length! / 2));
+    if (range.from < 0 || range.to > length) ctx.fail(`a ${range.to - range.from}-nt bubble at "${action.target}" runs past the molecule ends (0–${length})`);
+    for (const strand of ['top', 'bottom'] as const) {
+      if (overlapsInterval(missingOn(state, strand), range)) ctx.fail(`cannot unwind ${range.from}–${range.to}: the ${strand} strand is missing there`);
+    }
+    if (overlapsInterval(state.open, range)) ctx.fail(`${range.from}–${range.to} is already unwound`);
+    state.open = addInterval(state.open, range);
+    writeNucleicState(actor, state);
+  },
+});
+
+interface AnnealAction extends ActionSpec { target: string }
+export const anneal = definePrimitive<AnnealAction>({
+  type: 'anneal',
+  description: 'Re-pair the unwound bubble at a site.',
+  fields: { target: field.site({ required: true, description: 'Site with a coordinate inside or at the edge of the bubble.' }) },
+  presentation: { verb: 'anneals' },
+  validate(action, ctx) { requireCoordinate(action.target, ctx, { duplex: true }); },
+  apply(_state, action, ctx) {
+    const { site, actor, state } = strandTarget(action.target, ctx);
+    const probe = siteInterval(site)!;
+    const bubble = state.open.find(region => region.from <= probe.to && probe.from <= region.to);
+    if (!bubble) ctx.fail(`no unwound region at "${action.target}" to anneal`);
+    state.open = state.open.filter(region => region !== bubble);
+    writeNucleicState(actor, state);
   },
 });
 
@@ -244,6 +423,7 @@ const siteLesion = (type: string, lesion: LesionType | 'none', verb: string, cho
 
 export const builtinActions = [
   bind, unbind, setState, modify, translocate, synthesize, degrade, cleave, ligate,
+  resect, extend, unwind, anneal,
   recruit,
   visibility('show', true, 'shows'),
   visibility('hide', false, 'hides'),

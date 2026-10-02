@@ -109,7 +109,10 @@ That leaves a **3′ overhang** on each side, which is where RAD51 and RPA load.
 ### Validation (compile-time, during the fold — RFC 0001 §9.4)
 
 - `resect` requires a break at the target (`single-strand-break`, `nick`, `double-strand-break`). It errors if `length` exceeds the distance to the molecule end. It never clamps silently.
-- `extend` requires missing nucleotides adjacent to a 3′ end at the site, and cannot extend past them.
+- `resect` continues from the current 5′ end. A second `resect` at the same break extends the existing overhang, so short-range (MRN) and long-range (EXO1) resection can be separate steps.
+- `extend` requires missing nucleotides adjacent to a 3′ end at the site (past any nucleotides already synthesised from it), and cannot extend past them. The opposite strand must be present across the range, because it is the template.
+- `extend` is rejected at a `double-strand-break`: the 3′ end and its template lie on different fragments, so filling in would pair two molecules (§2).
+- `ligate` is rejected while a broken strand still has missing nucleotides at the break, including a gap left behind by a partial `extend`. A ligase seals a nick, not a gap.
 - `unwind` requires a `duplex` molecule and both strands present in the range. `anneal` requires an existing `open` region.
 - At most one `open` region overlaps any site.
 
