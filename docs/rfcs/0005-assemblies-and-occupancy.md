@@ -95,7 +95,10 @@ interface Interaction {
 
 ### 4.2 What stays derived
 
-- **Complexes** are the connected components of the graph (D6). `translocate { includeBound: true }` becomes "move the component". `degrade` removes every edge touching the instance, as today, but now over the graph.
+- **Complexes** are the connected components of the graph (`componentOf`, D6). `degrade` removes every edge touching the instance and every occupancy by it or on it.
+- **`translocate { includeBound: true }`** carries what is bound *to* the instance, transitively: binders of directed edges that target it, partners through symmetric edges, and occupants of a nucleic acid. It is not the whole component, because RFC 0001 §9.7 still holds: the partner an instance itself binds does not move. A homodimer moves together because its edge is symmetric.
+- **`primaryPartner`** is the legacy one-partner view: what the instance binds, never what binds it. That is the anonymous attachment, otherwise the first outgoing or symmetric edge. **`partnersOf`** lists every binding in both directions.
+- **Interface bindings are strict.** A full interface fails, an identical edge fails, and nothing is replaced silently. Only anonymous bindings keep v3's "a new bind replaces the old" and "unbind without a target is silent".
 - **`state.interactions` is the only source of truth** for bindings (D5). `ActorState.boundTo` leaves the state *and* the snapshots. No derived copy is stored or exposed as a field. Consumers ask helpers (`partnersOf(snapshot, instance)`, `componentOf(snapshot, instance)`), which compute from the edges on demand.
 
 ## 5. Spatial occupancy on nucleic acids
@@ -157,6 +160,8 @@ RFC 0005 is validated on RPA→RAD51, EGFR dimerization and STING. The nucleosom
 - An occupant is laid out at its span on its strand: centred on the span, oriented by `orientation`, resting on the strand surface that RFC 0004 already computes. Adjacent occupants of the same definition read as a filament.
 - An interaction draws the existing contact (no line). A component is laid out by docking along edges, as `boundTo` children are now, generalised to more than one partner and to interface-specific docking directions.
 - The modification chain stays for real polymers attached to one protein (PAR). RAD51 in the HR example moves from a chain to copies plus occupancy in a later example PR.
+
+**Delivery note.** Removing `boundTo` (PR 2) needs a home for legacy bindings to DNA sites, so PR 2 introduces the occupancy *record* (`instance`, `acid`, optional `site`). Spans, strands, footprints, orientation, `occupy`/`vacate`/`coat` and the exclusivity rule arrive in PR 3 as extensions of that record.
 
 ## 8. Schema version and migration
 

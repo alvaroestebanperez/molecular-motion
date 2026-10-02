@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actorInstances, compileMechanism, instanceDefinition, migrateV3, parseMechanism, type ActionNode } from '../src';
+import { actorInstances, compileMechanism, instanceDefinition, migrateV3, parseMechanism, primaryPartner, type ActionNode } from '../src';
 
 const doc = (actors: Record<string, unknown>[], actions: ActionNode[] = []) => ({
   schemaVersion: 4, mechanism: { id: 'x', name: 'X' },
@@ -26,7 +26,7 @@ describe('actor instances (RFC 0005 §3)', () => {
     expect(snapshot.actors['egfr#2']!.modifications.map(item => item.id)).toEqual(['phosphorylation@Y1068']);
     expect(snapshot.actors['egfr#1']!.activity).toEqual({ state: 'active' });
     expect(snapshot.actors['egfr#2']!.activity).toBeUndefined();
-    expect(snapshot.actors.egf!.boundTo).toBe('egfr#1');
+    expect(primaryPartner(snapshot, 'egf')).toBe('egfr#1');
     expect(Object.keys(snapshot.sites)).toEqual(['egfr#1.y1068', 'egfr#2.y1068']);
     expect(snapshot.timeline[0]!.agent).toBe('egfr#1');
   });

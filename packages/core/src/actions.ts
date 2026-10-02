@@ -1,10 +1,13 @@
-import { instanceDefinition } from './instances';
+import {
+  addInteraction, addOccupancy, boundTo, detachAnonymous, interactionId, interfaceUse, partnersOf, releaseAll,
+} from './bindings';
+import { actorIdOf, instanceDefinition } from './instances';
 import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
-  lesionStrands, nucleicForm, nucleicLength, otherStrand, readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
+  isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
 } from './nucleic';
 import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
-import type { ActionSpec, Activity, ActorDefinition, ActorSite, LesionType, MechanismDefinition, NucleicState, StrandId } from './types';
+import type { ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, StrandId } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
 export const LESIONS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
@@ -15,31 +18,82 @@ const timing = ({ by, duration }: ActionSpec) => ({ by, duration });
 
 // ---- Primitives ----
 
-interface BindAction extends ActionSpec { actor: string; target: string }
+interface BindAction extends ActionSpec { actor: string; target: string; interface?: string; targetInterface?: string }
 export const bind = definePrimitive<BindAction>({
   type: 'bind',
-  description: 'Associate an actor with another actor or one of its sites.',
-  fields: { actor: field.actor({ required: true }), target: field.reference({ required: true }) },
+  description: 'Bind an instance to another instance (an interaction) or rest it on a nucleic acid (an occupancy).',
+  fields: {
+    actor: field.actor({ required: true }),
+    target: field.reference({ required: true }),
+    interface: field.string({ description: 'Interface of the actor used for this binding. Without one the binding is the anonymous legacy attachment, replaced by the next anonymous bind.' }),
+    targetInterface: field.string({ description: 'Interface of the target used for this binding.' }),
+  },
   presentation: { verb: 'binds' },
   validate(action, ctx) {
     if (actorOf(action.target) === action.actor) ctx.issue('an actor cannot bind itself');
+    const target = instanceDefinition(ctx.definition, actorOf(action.target));
+    if (target && isNucleicActor(target) && (action.interface || action.targetInterface)) {
+      ctx.issue(`binding a nucleic acid is an occupancy, which has no interfaces ("${action.target}")`);
+    }
+    requireInterface(action.actor, action.interface, ctx);
+    requireInterface(actorOf(action.target), action.targetInterface, ctx);
   },
-  apply(_state, action, ctx) {
+  apply(state, action, ctx) {
     const actor = ctx.requirePresent(action.actor);
-    ctx.requirePresent(actorOf(action.target));
-    actor.boundTo = action.target;
+    const [targetInstance, site] = action.target.split('.') as [string, string | undefined];
+    ctx.requirePresent(targetInstance);
     actor.visible = true;
+    if (isNucleicActor(instanceDefinition(ctx.definition, targetInstance)!)) {
+      detachAnonymous(state, actor.id);
+      addOccupancy(state, actor.id, targetInstance, site);
+      return;
+    }
+    if (!action.interface) detachAnonymous(state, actor.id);
+    const ends: [InteractionEnd, InteractionEnd] = [
+      { instance: actor.id, ...(action.interface && { interface: action.interface }) },
+      { instance: targetInstance, ...(site && { site }), ...(action.targetInterface && { interface: action.targetInterface }) },
+    ];
+    // Interface ends are strict: a full interface fails instead of silently dropping a partner.
+    for (const end of ends) if (end.interface) requireFreeInterface(state, ctx, end.instance, end.interface);
+    const symmetric = Boolean(action.interface) && action.interface === action.targetInterface && actorIdOf(actor.id) === actorIdOf(targetInstance);
+    if (state.interactions[interactionId(ends, symmetric)]) ctx.fail(`"${actor.id}" is already bound to "${action.target}" this way`);
+    addInteraction(state, ends, symmetric);
   },
 });
 
-interface UnbindAction extends ActionSpec { actor: string }
+interface UnbindAction extends ActionSpec { actor: string; target?: string; interface?: string }
 export const unbind = definePrimitive<UnbindAction>({
   type: 'unbind',
-  description: 'Release an actor from its binding partner.',
-  fields: { actor: field.actor({ required: true }) },
+  description: 'Release bindings of an instance: its anonymous attachment, or those to a given target or through a given interface.',
+  fields: {
+    actor: field.actor({ required: true }),
+    target: field.reference({ description: 'Release only bindings to this instance, site or nucleic acid.' }),
+    interface: field.string({ description: 'Release only bindings through this interface of the actor.' }),
+  },
   presentation: { verb: 'releases' },
-  apply(_state, action, ctx) { delete ctx.actor(action.actor).boundTo; },
+  validate(action, ctx) { requireInterface(action.actor, action.interface, ctx); },
+  apply(state, action, ctx) {
+    // Without a target or interface this is v3's unbind: drop the single attachment, if any.
+    if (!action.target && !action.interface) { detachAnonymous(state, action.actor); return; }
+    const matches = partnersOf(state, action.actor).filter(partner =>
+      (!action.target || partner.reference === action.target || (partner.via === 'occupancy' && partner.reference.split('.')[0] === action.target))
+      && (!action.interface || partner.interface === action.interface));
+    if (!matches.length) ctx.fail(`"${action.actor}" is not bound${action.target ? ` to "${action.target}"` : ''}${action.interface ? ` through "${action.interface}"` : ''}`);
+    for (const match of matches) delete (match.via === 'interaction' ? state.interactions : state.occupancy)[match.id];
+  },
 });
+
+/** Static check: an interface named in an action must be declared by that instance's actor. */
+function requireInterface(instance: string, name: string | undefined, ctx: { definition: MechanismDefinition; issue(message: string): void }) {
+  if (!name) return;
+  const actor = instanceDefinition(ctx.definition, instance);
+  if (actor && !actor.interfaces?.some(item => item.id === name)) ctx.issue(`"${actor.id}" declares no interface "${name}"`);
+}
+
+function requireFreeInterface(state: MechanismState, ctx: ApplyContext, instance: string, name: string) {
+  const valence = instanceDefinition(ctx.definition, instance)!.interfaces!.find(item => item.id === name)!.valence ?? 1;
+  if (interfaceUse(state, instance, name) >= valence) ctx.fail(`"${instance}" has no free "${name}" interface (valence ${valence})`);
+}
 
 interface SetStateAction extends ActionSpec { target: string; visible?: boolean; activity?: Activity; lesion?: LesionType | 'none' }
 export const setState = definePrimitive<SetStateAction>({
@@ -117,12 +171,8 @@ export const translocate = definePrimitive<TranslocateAction>({
     const actor = ctx.requirePresent(action.actor);
     if (actor.compartment === action.to) ctx.fail(`"${action.actor}" is already in "${action.to}"`);
     const moving = new Set([actor.id]);
-    for (let grew = Boolean(action.includeBound); grew;) {
-      grew = false;
-      for (const other of Object.values(state.actors)) {
-        if (!moving.has(other.id) && other.boundTo && moving.has(actorOf(other.boundTo))) { moving.add(other.id); grew = true; }
-      }
-    }
+    const queue = action.includeBound ? [actor.id] : [];
+    while (queue.length) for (const other of boundTo(state, queue.shift()!)) if (!moving.has(other)) { moving.add(other); queue.push(other); }
     for (const id of moving) ctx.actor(id).compartment = action.to;
   },
 });
@@ -153,8 +203,7 @@ export const degrade = definePrimitive<DegradeAction>({
     const actor = ctx.requirePresent(action.actor);
     actor.present = false;
     actor.visible = false;
-    delete actor.boundTo;
-    for (const other of Object.values(state.actors)) if (other.boundTo && actorOf(other.boundTo) === actor.id) delete other.boundTo;
+    releaseAll(state, actor.id);
   },
 });
 

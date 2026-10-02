@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism, type MechanismDefinition } from '../src';
+import { compileMechanism, parseMechanism, primaryPartner, type MechanismDefinition } from '../src';
 import { MECHANISMS, allStates, readExample } from './helpers';
 
 /** Deterministic permutation (no Math.random) so failures are reproducible. */
@@ -87,9 +87,10 @@ describe('determinism: parallel groups', () => {
   it('branch order does not change the resulting state', () => {
     const a = compileMechanism(withBranches([ligate, release])).at('seal');
     const b = compileMechanism(withBranches([release, ligate])).at('seal');
-    expect({ actors: a.actors, sites: a.sites }).toEqual({ actors: b.actors, sites: b.sites });
+    expect({ actors: a.actors, sites: a.sites, interactions: a.interactions, occupancy: a.occupancy })
+      .toEqual({ actors: b.actors, sites: b.sites, interactions: b.interactions, occupancy: b.occupancy });
     expect(a.sites['dna.g8']!.lesion).toBeUndefined();
-    expect(a.actors.polb!.boundTo).toBeUndefined();
+    expect(primaryPartner(a, 'polb')).toBeUndefined();
   });
 
   it('assigns offsets: sequences add up, parallel blocks take the longest branch', () => {

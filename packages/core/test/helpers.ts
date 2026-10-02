@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { CompiledMechanism } from '../src';
+import { primaryPartner, type CompiledMechanism } from '../src';
 
 export const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
 
@@ -17,7 +17,7 @@ export function projectToV1(mechanism: CompiledMechanism) {
         const chain = actor.modifications.find(modification => modification.length);
         return [actor.id, {
           visible: actor.present && actor.visible,
-          boundTo: actor.boundTo ?? null,
+          boundTo: primaryPartner(snapshot, actor.id) ?? null,
           polymer: chain ? { product: chain.label, length: chain.length } : null,
         }];
       })),
@@ -29,8 +29,8 @@ export function projectToV1(mechanism: CompiledMechanism) {
 /** Every snapshot of a mechanism as plain JSON (drops the shared definition). */
 export const allStates = (mechanism: CompiledMechanism) =>
   Array.from({ length: mechanism.length }, (_, index) => {
-    const { actors, sites, timeline, duration } = mechanism.at(index);
-    return JSON.parse(JSON.stringify({ actors, sites, timeline, duration }));
+    const { actors, sites, interactions, occupancy, timeline, duration } = mechanism.at(index);
+    return JSON.parse(JSON.stringify({ actors, sites, interactions, occupancy, timeline, duration }));
   });
 
 /**
@@ -49,7 +49,8 @@ export function semanticProjection(mechanism: CompiledMechanism) {
         visible: actor.visible,
         compartment: actor.compartment ?? null,
         activity: actor.activity ?? null,
-        partner: actor.boundTo ?? null,
+        // v4: rebuilt from the interaction graph and occupancy, never stored on the actor.
+        partner: primaryPartner(snapshot, actor.id) ?? null,
         modifications: actor.modifications,
         nucleic: actor.nucleic ?? null,
       }])),

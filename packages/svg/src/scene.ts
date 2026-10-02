@@ -1,6 +1,6 @@
 import { hashString } from './primitives/shared';
 import {
-  actorInstances, lesionStrands, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
+  actorInstances, lesionStrands, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
   type Modification, type Point, type SiteStrand, type StrandId,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
@@ -315,6 +315,9 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // One view per instance: the definition, with the instance id as `id` and the definition id kept as
   // `visual`, so copies are laid out and keyed separately but share one silhouette and colour.
   const views: InstanceView[] = actorInstances(snapshot.definition).map(({ id, actor }) => ({ ...actor, id, visual: actor.id }));
+  // Layout docks each instance against one partner: the one it binds, derived from the interaction graph
+  // and occupancy (RFC 0005 D5). Multi-partner layout comes with occupancy rendering.
+  const attachedTo = (instance: string) => primaryPartner(snapshot, instance);
   const shown = views.filter(definition => {
     const state = snapshot.actors[definition.id]!;
     return state.present && state.visible;
@@ -356,7 +359,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const placed = new Map<string, SceneActor>();
   const children = new Map<string, InstanceView[]>();
   for (const definition of proteins) {
-    const partner = snapshot.actors[definition.id]!.boundTo?.split('.')[0];
+    const partner = attachedTo(definition.id)?.split('.')[0];
     if (partner && byId.has(partner)) children.set(partner, [...(children.get(partner) ?? []), definition]);
   }
 
@@ -374,7 +377,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       ...(definition.type === 'molecule' && definition.molecule && { molecule: definition.molecule }),
       ...(state.compartment && { compartment: state.compartment }),
       ...(state.activity && { activity: state.activity.state }),
-      ...(state.boundTo && !ghost && { boundTo: state.boundTo }),
+      ...(attachedTo(definition.id) && !ghost && { boundTo: attachedTo(definition.id) }),
       ghost,
       labelSide,
       ...(chain && !ghost && { chain: { label: chain.label, length: chain.length!, angle: CHAIN_ANGLE } }),
@@ -390,7 +393,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // 1. Actors bound to a nucleic acid rest on the helix at their site: first centred, then left, right, left…
   const onAcid = new Map<string, InstanceView[]>();
   for (const definition of proteins) {
-    const boundTo = snapshot.actors[definition.id]!.boundTo;
+    const boundTo = attachedTo(definition.id);
     if (boundTo && acidIndex.has(boundTo.split('.')[0]!)) onAcid.set(boundTo, [...(onAcid.get(boundTo) ?? []), definition]);
   }
   for (const [reference, group] of onAcid) {
@@ -429,7 +432,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // along that stretch instead of leaving towards the free side: it takes the stretch under or nearest
   // the actor (right on ties) and heads for its distal end, away from the crowded site.
   for (const actor of placed.values()) {
-    const reference = snapshot.actors[actor.id]!.boundTo;
+    const reference = attachedTo(actor.id);
     const acid = reference ? acidIndex.get(reference.split('.')[0]!) : undefined;
     const site = reference ? siteIndex.get(reference) : undefined;
     if (!actor.chain || !acid?.missing || !site) continue;
@@ -457,7 +460,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   }
 
   // 2. Free actors (visible, unbound) line up across the top.
-  const free = proteins.filter(definition => !placed.has(definition.id) && !snapshot.actors[definition.id]!.boundTo);
+  const free = proteins.filter(definition => !placed.has(definition.id) && !attachedTo(definition.id));
   free.forEach((definition, index) => {
     const x = free.length === 1 ? width * .5 : width * (.22 + .56 * index / (free.length - 1));
     placed.set(definition.id, make(definition, definition.position ?? { x, y: height * .26 }, -1));
@@ -469,7 +472,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const place = (definition: InstanceView): SceneActor => {
     const existing = placed.get(definition.id);
     if (existing) return existing;
-    const partnerId = snapshot.actors[definition.id]!.boundTo?.split('.')[0];
+    const partnerId = attachedTo(definition.id)?.split('.')[0];
     const partnerDefinition = partnerId ? byId.get(partnerId) : undefined;
     if (!partnerDefinition || resolving.has(definition.id)) {
       const fallback = make(definition, definition.position ?? { x: width * .5, y: height * .26 }, -1);

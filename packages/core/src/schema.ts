@@ -149,6 +149,11 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           position: { $ref: '#/$defs/point' },
           sites: { type: 'array', items: { $ref: '#/$defs/site' } },
           nucleic: { $ref: '#/$defs/nucleic' },
+          interfaces: {
+            type: 'array',
+            description: 'Binding interfaces; valence (default 1) caps simultaneous partners per instance.',
+            items: { type: 'object', required: ['id'], additionalProperties: false, properties: { id: { $ref: '#/$defs/id' }, valence: { type: 'integer', minimum: 1 } } },
+          },
           copies: { type: 'integer', minimum: 2, description: 'Number of copies; compiles to instances id#1 … id#n, each with its own state. Not allowed on dna/rna.' },
           compartment: { $ref: '#/$defs/id' },
           molecule: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Molecule actors only: key of the small-molecule vocabulary naming its structure, e.g. atp or nad-plus.' },

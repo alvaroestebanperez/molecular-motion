@@ -349,6 +349,26 @@
         "nucleic": {
           "$ref": "#/$defs/nucleic"
         },
+        "interfaces": {
+          "type": "array",
+          "description": "Binding interfaces; valence (default 1) caps simultaneous partners per instance.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "valence": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
         "copies": {
           "type": "integer",
           "minimum": 2,
@@ -471,7 +491,7 @@
       "oneOf": [
         {
           "type": "object",
-          "description": "Associate an actor with another actor or one of its sites.",
+          "description": "Bind an instance to another instance (an interaction) or rest it on a nucleic acid (an occupancy).",
           "required": [
             "type",
             "actor",
@@ -496,13 +516,23 @@
             "target": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$"
+            },
+            "interface": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Interface of the actor used for this binding. Without one the binding is the anonymous legacy attachment, replaced by the next anonymous bind."
+            },
+            "targetInterface": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Interface of the target used for this binding."
             }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
-          "description": "Release an actor from its binding partner.",
+          "description": "Release bindings of an instance: its anonymous attachment, or those to a given target or through a given interface.",
           "required": [
             "type",
             "actor"
@@ -522,6 +552,16 @@
             },
             "actor": {
               "$ref": "#/$defs/instance"
+            },
+            "target": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$",
+              "description": "Release only bindings to this instance, site or nucleic acid."
+            },
+            "interface": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Release only bindings through this interface of the actor."
             }
           },
           "additionalProperties": false
@@ -936,6 +976,16 @@
             "target": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$"
+            },
+            "interface": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Interface of the actor used for this binding. Without one the binding is the anonymous legacy attachment, replaced by the next anonymous bind."
+            },
+            "targetInterface": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Interface of the target used for this binding."
             }
           },
           "additionalProperties": false
