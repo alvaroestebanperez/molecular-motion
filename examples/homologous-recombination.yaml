@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 3
 
 mechanism:
   id: homologous-recombination
@@ -15,6 +15,7 @@ actors:
     sites:
       - id: break
         type: double-strand-break
+        at: 50
   - id: mrn
     type: complex
     label: MRN

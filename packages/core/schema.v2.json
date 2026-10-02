@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.dev/schema/v3.json",
+  "$id": "https://molecular-motion.dev/schema/v2.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
   "required": [
@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": 3
+      "const": 2
     },
     "mechanism": {
       "type": "object",
@@ -203,103 +203,19 @@
         "label": {
           "type": "string"
         },
-        "at": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Nucleic acids: interbase coordinate, 0 … length. A nucleotide-level site at n is the nucleotide [n, n + 1)."
-        },
-        "span": {
-          "type": "array",
-          "prefixItems": [
-            {
-              "type": "integer",
-              "minimum": 0
-            },
-            {
-              "type": "integer",
-              "minimum": 1
-            }
-          ],
-          "minItems": 2,
-          "maxItems": 2,
-          "description": "Nucleic acids: interbase interval [from, to)."
-        },
-        "strand": {
-          "enum": [
-            "top",
-            "bottom",
-            "both"
-          ],
-          "description": "Nucleic acids: strand the site lies on; top runs 5′→3′ with increasing coordinate."
-        },
         "position": {
-          "$ref": "#/$defs/point",
-          "description": "Layout override only; never a coordinate."
-        }
-      },
-      "not": {
-        "anyOf": [
-          {
-            "required": [
-              "at",
-              "span"
-            ]
-          },
-          {
-            "required": [
-              "at",
-              "position"
-            ]
-          },
-          {
-            "required": [
-              "span",
-              "position"
-            ]
-          }
-        ]
-      }
-    },
-    "nucleic": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "dna/rna actors only: biological geometry (RFC 0004).",
-      "properties": {
-        "length": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Nucleotides or base pairs. Defaults to 100."
-        },
-        "form": {
-          "enum": [
-            "duplex",
-            "single"
-          ],
-          "description": "Defaults to duplex for dna and single for rna."
-        },
-        "strands": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "top": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "label": {
-                  "type": "string"
-                }
-              }
+          "oneOf": [
+            {
+              "enum": [
+                "start",
+                "center",
+                "end"
+              ]
             },
-            "bottom": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "label": {
-                  "type": "string"
-                }
-              }
+            {
+              "$ref": "#/$defs/point"
             }
-          }
+          ]
         }
       }
     },
@@ -340,9 +256,6 @@
           "items": {
             "$ref": "#/$defs/site"
           }
-        },
-        "nucleic": {
-          "$ref": "#/$defs/nucleic"
         },
         "compartment": {
           "$ref": "#/$defs/id"

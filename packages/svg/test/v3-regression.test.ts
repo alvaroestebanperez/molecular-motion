@@ -24,4 +24,10 @@ describe('schema v2 → v3 regression (UPDATE_GOLDEN=1 to regenerate)', () => {
     if (process.env.UPDATE_GOLDEN) writeFileSync(golden(name), `${JSON.stringify(rendered, null, 2)}\n`);
     expect(rendered).toEqual(JSON.parse(readFileSync(golden(name), 'utf8')));
   });
+
+  it.each(['parp1-ssb-repair', 'homologous-recombination'])('%s: the example rewritten in v3 renders like its v2 original', name => {
+    const source = read(`../../../examples/${name}.yaml`);
+    expect(source).toMatch(/^schemaVersion: 3/);
+    expect(renderAll(source)).toEqual(JSON.parse(readFileSync(golden(name), 'utf8')));
+  });
 });

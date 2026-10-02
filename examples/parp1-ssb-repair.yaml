@@ -1,4 +1,4 @@
-schemaVersion: 2
+schemaVersion: 3
 
 mechanism:
   id: parp1-ssb-repair
@@ -61,7 +61,7 @@ actors:
     sites:
       - id: lesion
         type: guanine
-        position: center
+        at: 50
 
   - id: ogg1
     type: protein
