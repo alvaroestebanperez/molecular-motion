@@ -1,0 +1,424 @@
+[
+  {
+    "step": "break",
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "mrn": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[0].actions[0]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "sensing",
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[1].actions[0]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "mrn",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "short-range",
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 46
+            },
+            {
+              "strand": "bottom",
+              "from": 34,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "mrn",
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[2].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "brca1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[2].actions[1]",
+        "type": "resect",
+        "primitive": "resect",
+        "subject": "dna.break",
+        "agent": "mrn",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "long-range",
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "mrn",
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[3].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "exo1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[1]",
+        "type": "resect",
+        "primitive": "resect",
+        "subject": "dna.break",
+        "agent": "exo1",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "filament",
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "mrn",
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [
+          {
+            "id": "polymer",
+            "kind": "polymer",
+            "label": "RAD51",
+            "length": 11
+          }
+        ],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[4].actions[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "exo1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "exo1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[2]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "rad51",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[3]",
+        "type": "polymerize",
+        "primitive": "modify",
+        "subject": "rad51",
+        "agent": null,
+        "start": 1800,
+        "duration": 600
+      }
+    ],
+    "duration": 2400
+  }
+]

@@ -32,3 +32,30 @@ export const allStates = (mechanism: CompiledMechanism) =>
     const { actors, sites, timeline, duration } = mechanism.at(index);
     return JSON.parse(JSON.stringify({ actors, sites, timeline, duration }));
   });
+
+/**
+ * Meaning of every step, independent of how state is stored (RFC 0005 §8). Schema v4 moves bindings
+ * out of `ActorState.boundTo` into an interaction graph; later PRs rebuild this exact projection from
+ * the v4 API and must match the baseline recorded from v3. Timing and subjects are included, the
+ * per-action change keys are not (they name storage, which is allowed to change).
+ */
+export function semanticProjection(mechanism: CompiledMechanism) {
+  return Array.from({ length: mechanism.length }, (_, index) => {
+    const snapshot = mechanism.at(index);
+    return {
+      step: snapshot.step.id,
+      actors: Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, {
+        present: actor.present,
+        visible: actor.visible,
+        compartment: actor.compartment ?? null,
+        activity: actor.activity ?? null,
+        partner: actor.boundTo ?? null,
+        modifications: actor.modifications,
+        nucleic: actor.nucleic ?? null,
+      }])),
+      lesions: Object.fromEntries(Object.entries(snapshot.sites).flatMap(([reference, site]) => site.lesion ? [[reference, site.lesion]] : [])),
+      timeline: snapshot.timeline.map(({ path, type, primitive, subject, agent, start, duration }) => ({ path, type, primitive, subject: subject ?? null, agent: agent ?? null, start, duration })),
+      duration: snapshot.duration,
+    };
+  });
+}
