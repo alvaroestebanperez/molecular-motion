@@ -44,6 +44,9 @@ describe('strand state in the scene (RFC 0004 §7)', () => {
     expect(top).toEqual([[14, '5'], [458, '3'], [655, '5'], [946, '3']]);
     expect(bottom).toEqual([[14, '3'], [305, '5'], [502, '3'], [946, '5']]);
     expect(renderSvg(scene(dsb, null))).not.toContain('mm-dna__polarity');
+    // A nick or SSB keeps its strand continuous for labelling: only the molecule's ends are labelled.
+    expect(polarity(renderSvg(scene([{ type: 'cleave', target: 'dna.gap' }]))).map(([x, , end]) => [x, end]))
+      .toEqual([[14, '5'], [946, '3'], [14, '3'], [946, '5']]);
   });
 
   it('draws nascent DNA and puts a lesion on its declared strand', () => {
