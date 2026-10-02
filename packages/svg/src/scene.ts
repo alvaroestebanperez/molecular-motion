@@ -1,6 +1,6 @@
 import { hashString } from './primitives/shared';
 import {
-  actorInstances, lesionStrands, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
+  actorInstances, anonymousAttachment, lesionStrands, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
   type Modification, type Point, type SiteStrand, type StrandId,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
@@ -62,6 +62,10 @@ export interface SceneActor extends Point {
   chain?: { label: string; length: number; angle: number };
   /** Modifications without a length, drawn as small badges. */
   badges: Modification[];
+  /** Occupies its span in reverse orientation (relative to top 5′→3′): the shape is drawn mirrored. */
+  mirrored?: true;
+  /** Visible copies of one definition share a callout: `lead` carries "label ×size", the others none. */
+  group?: { size: number; lead: boolean };
 }
 
 /**
@@ -286,6 +290,12 @@ function extentX(actor: Shaped): [number, number] {
   return [Math.min(...xs), Math.max(...xs)];
 }
 
+/** True when two actors' bodies would interpenetrate (particles closer than 90% of their radii). */
+function bodiesOverlap(actor: SceneActor, x: number, y: number, other: SceneActor): boolean {
+  const own = actorContactShape(actor).particles; const theirs = actorContactShape(other).particles;
+  return own.some(a => theirs.some(b => Math.hypot(x + a.x - other.x - b.x, y + a.y - other.y - b.y) < (Math.max(a.rx, a.ry) + Math.max(b.rx, b.ry)) * .9));
+}
+
 /** Smallest vertical gap between an actor's outline (origin at x, y) and the helix surface below it. */
 function clearance(actor: Shaped, x: number, y: number, acid: SceneNucleicAcid, width: number): number {
   return Math.min(...contactOutline(actorContactShape(actor)).map(point => helixTop(acid, x + point.x, width) - (y + point.y)));
@@ -315,9 +325,21 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // One view per instance: the definition, with the instance id as `id` and the definition id kept as
   // `visual`, so copies are laid out and keyed separately but share one silhouette and colour.
   const views: InstanceView[] = actorInstances(snapshot.definition).map(({ id, actor }) => ({ ...actor, id, visual: actor.id }));
-  // Layout docks each instance against one partner: the one it binds, derived from the interaction graph
-  // and occupancy (RFC 0005 D5). Multi-partner layout comes with occupancy rendering.
-  const attachedTo = (instance: string) => primaryPartner(snapshot, instance);
+  // Layout docks each instance against one parent, derived from the interaction graph and occupancy
+  // (RFC 0005 D5): its legacy attachment, else the nucleic acid it occupies, else the first instance it
+  // binds. A symmetric edge only docks the higher id onto the lower, so a dimer has one anchor, not a cycle.
+  const attachedTo = (instance: string): string | undefined => {
+    if (anonymousAttachment(snapshot, instance)) return primaryPartner(snapshot, instance);
+    const resting = Object.values(snapshot.occupancy).find(item => item.instance === instance);
+    if (resting) return resting.site ? `${resting.acid}.${resting.site}` : resting.acid;
+    const edges = Object.values(snapshot.interactions).sort((a, b) => a.id < b.id ? -1 : 1);
+    const outgoing = edges.find(edge => !edge.symmetric && edge.ends[0].instance === instance);
+    if (outgoing) return outgoing.ends[1].site ? `${outgoing.ends[1].instance}.${outgoing.ends[1].site}` : outgoing.ends[1].instance;
+    const pair = edges.find(edge => edge.symmetric && edge.ends.some(end => end.instance === instance) && edge.ends.some(end => end.instance < instance));
+    return pair?.ends.find(end => end.instance !== instance)!.instance;
+  };
+  /** The span an instance covers on a nucleic acid, if it occupies one by span (RFC 0005 §5). */
+  const spanOf = (instance: string) => Object.values(snapshot.occupancy).find(item => item.instance === instance && item.span);
   const shown = views.filter(definition => {
     const state = snapshot.actors[definition.id]!;
     return state.present && state.visible;
@@ -354,6 +376,24 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const siteIndex = new Map(nucleicAcids.flatMap(acid => acid.sites.map(site => [site.reference, site] as const)));
   const acidIndex = new Map(nucleicAcids.map(acid => [acid.id, acid]));
 
+  // A definition with a footprint is drawn at the size of the nucleotides it covers, on the scale of the
+  // first molecule shown, so adjacent copies abut. It is one scale per definition: every copy keeps the
+  // same silhouette and size whether it is on the DNA or not (RFC 0005 §3.3).
+  const scaleAcid = nucleicAcids[0];
+  const radii = new Map<string, number>();
+  const radiusOf = (definition: InstanceView): number => {
+    const base = RADIUS[definition.type];
+    if (!definition.footprint || !scaleAcid) return base;
+    let radius = radii.get(definition.visual);
+    if (radius === undefined) {
+      const [minX, maxX] = extentX({ actor: definition.visual, type: definition.type, radius: base, molecule: definition.molecule });
+      const covered = width * definition.footprint.length / (scaleAcid.length ?? 100);
+      radius = Math.max(12, Math.min(base, Math.round(base * covered / (maxX - minX) * 10) / 10));
+      radii.set(definition.visual, radius);
+    }
+    return radius;
+  };
+
   const proteins = shown.filter(definition => !isNucleic(definition.type));
   const byId = new Map(proteins.map(definition => [definition.id, definition]));
   const placed = new Map<string, SceneActor>();
@@ -373,8 +413,9 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       label: definition.label ?? definition.visual,
       ...(definition.description && { description: definition.description }),
       color: definition.color ?? defaultColor(definition.visual),
-      radius: RADIUS[definition.type],
+      radius: radiusOf(definition),
       ...(definition.type === 'molecule' && definition.molecule && { molecule: definition.molecule }),
+      ...(!ghost && spanOf(definition.id)?.orientation === 'reverse' && { mirrored: true }),
       ...(state.compartment && { compartment: state.compartment }),
       ...(state.activity && { activity: state.activity.state }),
       ...(attachedTo(definition.id) && !ghost && { boundTo: attachedTo(definition.id) }),
@@ -390,11 +431,23 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // Where each bound actor touches its partner (or the backbone), when the layout placed it in contact.
   const contacts = new Map<string, Point>();
 
+  // 0. Span occupants sit at the middle of their span, resting on the strand that is present there.
+  for (const definition of proteins) {
+    const occupancy = spanOf(definition.id);
+    const acid = occupancy && acidIndex.get(occupancy.acid);
+    if (!occupancy || !acid || definition.position) continue;
+    const x = width * ((occupancy.span!.from + occupancy.span!.to) / 2) / (acid.length ?? 100);
+    const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule };
+    const rest = restOnHelix(body, x, acid, width);
+    placed.set(definition.id, make(definition, { x, y: rest.y }, -1));
+    contacts.set(definition.id, rest.contact);
+  }
+
   // 1. Actors bound to a nucleic acid rest on the helix at their site: first centred, then left, right, left…
   const onAcid = new Map<string, InstanceView[]>();
   for (const definition of proteins) {
     const boundTo = attachedTo(definition.id);
-    if (boundTo && acidIndex.has(boundTo.split('.')[0]!)) onAcid.set(boundTo, [...(onAcid.get(boundTo) ?? []), definition]);
+    if (boundTo && !placed.has(definition.id) && acidIndex.has(boundTo.split('.')[0]!)) onAcid.set(boundTo, [...(onAcid.get(boundTo) ?? []), definition]);
   }
   for (const [reference, group] of onAcid) {
     const acid = acidIndex.get(reference.split('.')[0]!)!;
@@ -403,7 +456,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     let right = anchor.x;
     group.forEach((definition, index) => {
       // Neighbours on the same site are spaced by their visible outlines, not by bounding circles.
-      const body = { actor: definition.visual, type: definition.type, radius: RADIUS[definition.type], molecule: definition.molecule };
+      const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule };
       const [minX, maxX] = extentX(body);
       let x = anchor.x;
       if (index === 0) { left = x + minX; right = x + maxX; }
@@ -494,11 +547,15 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
         angle = SLOTS[slot % SLOTS.length]!;
       }
     }
+    // A span occupant's neighbours lie along the DNA, so whatever docks onto it starts from straight up.
+    if (spanOf(partner.id)) angle = -Math.PI / 2;
     const actor = make(definition, { x: partner.x, y: partner.y }, Math.cos(angle) >= 0 ? 1 : -1);
     if (definition.position) Object.assign(actor, { x: definition.position.x, y: definition.position.y });
     else {
-      // A docked actor must not sink into a nucleic acid: tilt its slot towards "up" until it clears.
-      const clears = (fit: FirstContact) => nucleicAcids.every(acid => clearance(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, acid, width) >= 0);
+      // A docked actor must not sink into a nucleic acid nor into an actor already placed (other than its
+      // partner): tilt its slot towards "up" until it clears.
+      const clears = (fit: FirstContact) => nucleicAcids.every(acid => clearance(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, acid, width) >= 0)
+        && [...placed.values()].every(other => other === partner || other.ghost || !bodiesOverlap(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, other));
       let fit = contactAlong(partner, actor, angle);
       for (let step = 0; step < 10 && !clears(fit); step++) {
         angle += Math.sign(Math.atan2(Math.sin(-Math.PI / 2 - angle), Math.cos(-Math.PI / 2 - angle))) * .15;
@@ -507,6 +564,25 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       actor.x = Math.round((partner.x + fit.offset.x) * 10) / 10;
       actor.y = Math.round((partner.y + fit.offset.y) * 10) / 10;
       contacts.set(actor.id, { x: Math.round((partner.x + fit.point.x) * 10) / 10, y: Math.round((partner.y + fit.point.y) * 10) / 10 });
+      // An instance that binds several placed partners (cGAMP bridging two STING protomers) sits above
+      // them, between the positions it would take docking straight up onto each one.
+      const bridged = Object.values(snapshot.interactions).filter(edge => !edge.symmetric && edge.ends[0].instance === definition.id)
+        .map(edge => placed.get(edge.ends[1].instance)).filter((other): other is SceneActor => Boolean(other) && !other!.ghost);
+      if (bridged.length > 1) {
+        // Dock exactly onto the first partner, heading for the point above the middle of all of them, and
+        // tilt up only if it would clip another: it touches its partners rather than floating over them.
+        const [first, ...rest] = bridged as [SceneActor, ...SceneActor[]];
+        const middle = bridged.reduce((sum, other) => sum + other.x, 0) / bridged.length;
+        let bridgeAngle = Math.atan2(-first.radius, middle - first.x);
+        let bridgeFit = contactAlong(first, actor, bridgeAngle);
+        for (let step = 0; step < 12 && rest.some(other => bodiesOverlap(actor, first.x + bridgeFit.offset.x, first.y + bridgeFit.offset.y, other)); step++) {
+          bridgeAngle += Math.sign(Math.atan2(Math.sin(-Math.PI / 2 - bridgeAngle), Math.cos(-Math.PI / 2 - bridgeAngle))) * .1;
+          bridgeFit = contactAlong(first, actor, bridgeAngle);
+        }
+        actor.x = Math.round((first.x + bridgeFit.offset.x) * 10) / 10;
+        actor.y = Math.round((first.y + bridgeFit.offset.y) * 10) / 10;
+        contacts.set(actor.id, { x: Math.round((first.x + bridgeFit.point.x) * 10) / 10, y: Math.round((first.y + bridgeFit.point.y) * 10) / 10 });
+      }
     }
     placed.set(definition.id, actor);
     resolving.delete(definition.id);
@@ -554,6 +630,12 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   }
 
   const actors = views.flatMap(definition => placed.get(definition.id) ?? []);
+  // Copies are one molecule species on screen: one callout for all visible copies (renderer decision).
+  for (const definition of snapshot.definition.actors) {
+    if (definition.copies === undefined) continue;
+    const copies = actors.filter(actor => actor.actor === definition.id && !actor.ghost);
+    copies.forEach((actor, index) => { actor.group = { size: copies.length, lead: index === 0 }; });
+  }
   const actorIndex = new Map(actors.map(actor => [actor.id, actor]));
   const connections = actors.filter(actor => !actor.ghost && actor.boundTo).flatMap((actor): SceneConnection[] => {
     const reference = actor.boundTo!;
