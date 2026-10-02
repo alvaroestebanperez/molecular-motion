@@ -47,6 +47,11 @@ export interface ActorDefinition {
   sites?: ActorSite[];
   /** `dna`/`rna` actors only. */
   nucleic?: NucleicDefinition;
+  /**
+   * Number of copies (RFC 0005 §3). `copies: n` compiles to instances `id#1 … id#n`, each with its own
+   * state; without it the actor is one instance whose id is the actor id. Not allowed on dna/rna.
+   */
+  copies?: number;
   compartment?: string;
   /**
    * Molecule actors only: key of the renderer's small-molecule vocabulary (e.g. `atp`, `nad-plus`) that
@@ -98,7 +103,7 @@ export interface MechanismStep {
 }
 
 export interface MechanismDefinition {
-  schemaVersion: 3;
+  schemaVersion: 4;
   mechanism: { id: string; name: string; description?: string; references?: string[] };
   references: ReferenceDefinition[];
   compartments: CompartmentDefinition[];
@@ -111,6 +116,9 @@ export interface MechanismInput extends Omit<MechanismDefinition, 'compartments'
   compartments?: (string | CompartmentDefinition)[];
   references?: ReferenceDefinition[];
 }
+
+/** One copy of an actor. Its state lives in `MechanismState.actors[id]`; identity comes from `actor`. */
+export interface ActorInstance { id: string; actor: ActorDefinition }
 
 // ---- Resolved state ----
 

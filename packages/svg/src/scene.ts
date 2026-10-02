@@ -1,10 +1,13 @@
 import { hashString } from './primitives/shared';
 import {
-  lesionStrands, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
+  actorInstances, lesionStrands, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
   type Modification, type Point, type SiteStrand, type StrandId,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
+
+/** An actor definition seen as one instance: `id` is the instance id, `visual` the definition id. */
+type InstanceView = ActorDefinition & { visual: string };
 
 export interface SceneSite extends Point {
   reference: string;
@@ -37,7 +40,10 @@ export interface SceneNucleicAcid {
 }
 
 export interface SceneActor extends Point {
+  /** Instance id (`rad51#3`); the actor id for single-copy actors. Keys the DOM. */
   id: string;
+  /** Definition id: the visual identity every copy shares (silhouette seed, default colour). */
+  actor: string;
   type: ActorType;
   label: string;
   description?: string;
@@ -225,8 +231,9 @@ export function chainGeometry(radius: number, angle: number, length: number, bas
 const BEAD_OUTLINE = .6;
 const SHAPES = new Map<string, ContactShape>();
 const CONTACTS = new Map<string, FirstContact>();
-type Shaped = Pick<SceneActor, 'id' | 'type' | 'radius' | 'chain' | 'molecule'>;
-const shapeKey = (actor: Shaped) => `${actor.id}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}` : ''}`;
+/** Geometry depends on the definition, never on which copy it is (RFC 0005 §3.3). */
+type Shaped = Pick<SceneActor, 'actor' | 'type' | 'radius' | 'chain' | 'molecule'>;
+const shapeKey = (actor: Shaped) => `${actor.actor}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}` : ''}`;
 
 /** Everything visible of an actor that a partner can touch: its body plus its chain, outlines included. */
 export function actorContactShape(actor: Shaped): ContactShape {
@@ -234,7 +241,7 @@ export function actorContactShape(actor: Shaped): ContactShape {
   let shape = SHAPES.get(key);
   if (!shape) {
     const margin = actorOutline(actor.type, actor.radius);
-    const body = actorParticles(actor.id, actor.type, actor.radius, actor.molecule).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
+    const body = actorParticles(actor.actor, actor.type, actor.radius, actor.molecule).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
     const beads = actor.chain ? chainGeometry(actor.radius, actor.chain.angle, actor.chain.length, chainBase(actor)).beads
       .map(bead => ({ x: bead.x, y: bead.y, r: bead.r + BEAD_OUTLINE, rx: bead.r + BEAD_OUTLINE, ry: bead.r + BEAD_OUTLINE, rotation: 0, depth: 1 })) : [];
     shape = { particles: [...body, ...beads] };
@@ -251,7 +258,7 @@ export function chainBase(actor: Shaped): number {
   const key = `${shapeKey(actor)}`;
   let base = BASES.get(key);
   if (base === undefined) {
-    const body = actorContactShape({ id: actor.id, type: actor.type, radius: actor.radius, molecule: actor.molecule });
+    const body = actorContactShape({ actor: actor.actor, type: actor.type, radius: actor.radius, molecule: actor.molecule });
     const d = { x: Math.cos(actor.chain.angle), y: Math.sin(actor.chain.angle) };
     const along = contactOutline(body).filter(point => Math.abs(point.x * d.y - point.y * d.x) < 3).map(point => point.x * d.x + point.y * d.y);
     base = Math.round(Math.max(actor.radius * .3, ...along) * 10) / 10;
@@ -305,7 +312,10 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const width = options.width ?? 960;
   const height = options.height ?? 540;
   const ghosts = new Set(options.ghosts ?? []);
-  const shown = snapshot.definition.actors.filter(definition => {
+  // One view per instance: the definition, with the instance id as `id` and the definition id kept as
+  // `visual`, so copies are laid out and keyed separately but share one silhouette and colour.
+  const views: InstanceView[] = actorInstances(snapshot.definition).map(({ id, actor }) => ({ ...actor, id, visual: actor.id }));
+  const shown = views.filter(definition => {
     const state = snapshot.actors[definition.id]!;
     return state.present && state.visible;
   });
@@ -344,21 +354,22 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const proteins = shown.filter(definition => !isNucleic(definition.type));
   const byId = new Map(proteins.map(definition => [definition.id, definition]));
   const placed = new Map<string, SceneActor>();
-  const children = new Map<string, ActorDefinition[]>();
+  const children = new Map<string, InstanceView[]>();
   for (const definition of proteins) {
     const partner = snapshot.actors[definition.id]!.boundTo?.split('.')[0];
     if (partner && byId.has(partner)) children.set(partner, [...(children.get(partner) ?? []), definition]);
   }
 
-  const make = (definition: ActorDefinition, point: Point, labelSide: -1 | 1, ghost = false): SceneActor => {
+  const make = (definition: InstanceView, point: Point, labelSide: -1 | 1, ghost = false): SceneActor => {
     const state = snapshot.actors[definition.id]!;
     const chain = state.modifications.find(modification => modification.length);
     return {
       id: definition.id,
+      actor: definition.visual,
       type: definition.type,
-      label: definition.label ?? definition.id,
+      label: definition.label ?? definition.visual,
       ...(definition.description && { description: definition.description }),
-      color: definition.color ?? defaultColor(definition.id),
+      color: definition.color ?? defaultColor(definition.visual),
       radius: RADIUS[definition.type],
       ...(definition.type === 'molecule' && definition.molecule && { molecule: definition.molecule }),
       ...(state.compartment && { compartment: state.compartment }),
@@ -377,7 +388,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const contacts = new Map<string, Point>();
 
   // 1. Actors bound to a nucleic acid rest on the helix at their site: first centred, then left, right, left…
-  const onAcid = new Map<string, ActorDefinition[]>();
+  const onAcid = new Map<string, InstanceView[]>();
   for (const definition of proteins) {
     const boundTo = snapshot.actors[definition.id]!.boundTo;
     if (boundTo && acidIndex.has(boundTo.split('.')[0]!)) onAcid.set(boundTo, [...(onAcid.get(boundTo) ?? []), definition]);
@@ -389,7 +400,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     let right = anchor.x;
     group.forEach((definition, index) => {
       // Neighbours on the same site are spaced by their visible outlines, not by bounding circles.
-      const body = { id: definition.id, type: definition.type, radius: RADIUS[definition.type], molecule: definition.molecule };
+      const body = { actor: definition.visual, type: definition.type, radius: RADIUS[definition.type], molecule: definition.molecule };
       const [minX, maxX] = extentX(body);
       let x = anchor.x;
       if (index === 0) { left = x + minX; right = x + maxX; }
@@ -455,7 +466,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // 3. Actors bound to other actors dock against their partner (body or chain) by first contact along a
   //    slot direction; the first one docks at the tip of a chain.
   const resolving = new Set<string>();
-  const place = (definition: ActorDefinition): SceneActor => {
+  const place = (definition: InstanceView): SceneActor => {
     const existing = placed.get(definition.id);
     if (existing) return existing;
     const partnerId = snapshot.actors[definition.id]!.boundTo?.split('.')[0];
@@ -501,7 +512,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   proteins.forEach(place);
 
   // 4. Upcoming actors wait out of focus in the upper background, away from the action.
-  const upcoming = snapshot.definition.actors.filter(definition => ghosts.has(definition.id) && !placed.has(definition.id) && !isNucleic(definition.type));
+  const upcoming = views.filter(definition => ghosts.has(definition.id) && !placed.has(definition.id) && !isNucleic(definition.type));
   upcoming.forEach((definition, index) => {
     // Staggered diagonal so their callouts (always on the left) never overlap.
     const x = width * (.79 + .075 * (index % 3));
@@ -539,7 +550,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (score(other) < score(actor.labelSide)) actor.labelSide = other;
   }
 
-  const actors = snapshot.definition.actors.flatMap(definition => placed.get(definition.id) ?? []);
+  const actors = views.flatMap(definition => placed.get(definition.id) ?? []);
   const actorIndex = new Map(actors.map(actor => [actor.id, actor]));
   const connections = actors.filter(actor => !actor.ghost && actor.boundTo).flatMap((actor): SceneConnection[] => {
     const reference = actor.boundTo!;

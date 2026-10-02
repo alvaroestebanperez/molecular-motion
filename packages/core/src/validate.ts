@@ -1,6 +1,7 @@
 import { builtinRegistry } from './actions';
 import { normalizeCompartments } from './compartments';
-import { migrateV1, migrateV2 } from './migrate';
+import { instanceIds, INSTANCE_SEPARATOR } from './instances';
+import { migrateV1, migrateV2, migrateV3 } from './migrate';
 import { nucleicForm, nucleicLength } from './nucleic';
 import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
 import type { ActionSpec, ActorDefinition, MechanismDefinition } from './types';
@@ -21,20 +22,23 @@ export class MechanismValidationError extends Error {
 export interface ValidateOptions { registry?: ActionRegistry }
 
 interface References {
+  /** Instance id (the actor id for single-copy actors) → the actor's site ids. */
   actors: Map<string, Set<string>>;
+  /** Actors declared with `copies`, so a bare id or an out-of-range copy gets a precise message. */
+  copies: Map<string, number>;
   compartments: Set<string>;
 }
 
 /**
- * Structural and referential validation. Accepts v1 and v2 documents (migrated automatically) and
- * returns a normalised, deep-copied v3 definition. State-dependent checks happen later, during compilation.
+ * Structural and referential validation. Accepts v1–v3 documents (migrated automatically) and
+ * returns a normalised, deep-copied v4 definition. State-dependent checks happen later, during compilation.
  */
 export function validateMechanism(input: unknown, options: ValidateOptions = {}): MechanismDefinition {
   const registry = options.registry ?? builtinRegistry;
-  const value = migrateV2(migrateV1(input));
+  const value = migrateV3(migrateV2(migrateV1(input)));
   const issues: string[] = [];
   if (!isObject(value)) throw new MechanismValidationError(['root must be an object']);
-  if (value.schemaVersion !== 3) issues.push('schemaVersion must be 1, 2 or 3');
+  if (value.schemaVersion !== 4) issues.push('schemaVersion must be 1, 2, 3 or 4');
   if (!isObject(value.mechanism)) issues.push('mechanism must be an object');
   else {
     requiredString(value.mechanism.id, 'mechanism.id', issues);
@@ -56,16 +60,23 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     });
   };
   if (isObject(value.mechanism)) checkReferenceIds(value.mechanism.references, 'mechanism.references');
-  const refs: References = { actors: new Map(), compartments: new Set(compartments.map(compartment => compartment.id)) };
+  const refs: References = { actors: new Map(), copies: new Map(), compartments: new Set(compartments.map(compartment => compartment.id)) };
+  const actorIds = new Set<string>();
 
   if (Array.isArray(value.actors)) value.actors.forEach((actor, index) => {
     const path = `actors[${index}]`;
     if (!isObject(actor)) return issues.push(`${path} must be an object`);
     requiredString(actor.id, `${path}.id`, issues);
     const sites = new Set<string>();
+    const copies = validateCopies(actor, path, issues);
     if (typeof actor.id === 'string') {
-      if (refs.actors.has(actor.id)) issues.push(`${path}.id duplicates "${actor.id}"`);
-      else refs.actors.set(actor.id, sites);
+      if (actor.id.includes(INSTANCE_SEPARATOR)) issues.push(`${path}.id must not contain "${INSTANCE_SEPARATOR}", which separates copy numbers`);
+      else if (actorIds.has(actor.id)) issues.push(`${path}.id duplicates "${actor.id}"`);
+      else {
+        actorIds.add(actor.id);
+        if (copies !== undefined) refs.copies.set(actor.id, copies);
+        for (const id of instanceIds({ id: actor.id, copies })) refs.actors.set(id, sites);
+      }
     }
     if (typeof actor.type !== 'string' || !ACTOR_TYPES.has(actor.type)) issues.push(`${path}.type is not supported`);
     if (actor.compartment !== undefined && !refs.compartments.has(actor.compartment as string)) issues.push(`${path}.compartment references unknown compartment "${String(actor.compartment)}"`);
@@ -162,7 +173,7 @@ function validateField(value: unknown, spec: FieldSpec, path: string, refs: Refe
       if (!spec.values.includes(value as string)) issues.push(`${path} must be one of: ${spec.values.join(', ')}`);
       break;
     case 'actor':
-      if (typeof value !== 'string' || !refs.actors.has(value)) issues.push(`${path} references unknown actor "${String(value)}"`);
+      if (typeof value !== 'string' || !refs.actors.has(value)) issues.push(`${path} ${unknownActor(String(value), refs)}`);
       break;
     case 'compartment':
       if (typeof value !== 'string' || !refs.compartments.has(value)) issues.push(`${path} references unknown compartment "${String(value)}"`);
@@ -172,7 +183,7 @@ function validateField(value: unknown, spec: FieldSpec, path: string, refs: Refe
       if (typeof value !== 'string') { issues.push(`${path} must be a string`); break; }
       const [actorId, siteId, ...extra] = value.split('.');
       const sites = actorId ? refs.actors.get(actorId) : undefined;
-      if (!sites) issues.push(`${path} references unknown actor "${actorId}"`);
+      if (!sites) issues.push(`${path} ${unknownActor(String(actorId), refs)}`);
       else if (extra.length) issues.push(`${path} must use actor or actor.site syntax`);
       else if (spec.kind === 'site' && !siteId) issues.push(`${path} must reference a site (actor.site)`);
       else if (siteId && !sites.has(siteId)) issues.push(`${path} references unknown site "${value}"`);
@@ -237,6 +248,23 @@ function validateSiteGeometry(site: Record<string, unknown>, path: string, acid:
     if (site.strand !== 'top' && site.strand !== 'bottom' && site.strand !== 'both') issues.push(`${path}.strand must be one of: top, bottom, both`);
     else if (site.strand !== 'top' && nucleicForm(acid) === 'single') issues.push(`${path}.strand must be top on a single-stranded molecule`);
   }
+}
+
+/** `copies` is an integer ≥ 2 (omit it for one copy) and is not allowed on nucleic acids (RFC 0005 §6). */
+function validateCopies(actor: Record<string, unknown>, path: string, issues: string[]): number | undefined {
+  if (actor.copies === undefined) return undefined;
+  if (!Number.isInteger(actor.copies) || (actor.copies as number) < 2) { issues.push(`${path}.copies must be an integer ≥ 2 (omit it for a single copy)`); return undefined; }
+  if (actor.type === 'dna' || actor.type === 'rna') { issues.push(`${path}.copies is not allowed on dna and rna: pairing nucleic-acid molecules is out of scope`); return undefined; }
+  return actor.copies as number;
+}
+
+/** Message for a reference that names no instance, explaining copies when that is the cause. */
+function unknownActor(value: string, refs: References): string {
+  const [actorId, copy] = value.split(INSTANCE_SEPARATOR);
+  const copies = refs.copies.get(actorId!);
+  if (copies !== undefined && copy === undefined) return `references "${actorId}", which has ${copies} copies; name one instance such as "${actorId}${INSTANCE_SEPARATOR}1"`;
+  if (copies !== undefined) return `references unknown instance "${value}" ("${actorId}" has ${copies} copies)`;
+  return `references unknown actor "${value}"`;
 }
 
 function validateInitial(initial: unknown, path: string, issues: string[]) {

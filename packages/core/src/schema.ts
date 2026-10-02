@@ -5,13 +5,15 @@ import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
 type JsonSchema = Record<string, unknown>;
 
 const ID = '^[a-z][a-z0-9-]*$';
-const REFERENCE = '^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$';
-const SITE = '^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$';
+/** An actor id, or one copy of it (`rad51#3`, RFC 0005). */
+const INSTANCE = '[a-z][a-z0-9-]*(#[1-9][0-9]*)?';
+const REFERENCE = `^${INSTANCE}(\\.[a-z][a-z0-9-]*)?$`;
+const SITE = `^${INSTANCE}\\.[a-z][a-z0-9-]*$`;
 
 function fieldSchema(spec: FieldSpec): JsonSchema {
   const description = spec.description ? { description: spec.description } : {};
   switch (spec.kind) {
-    case 'actor':
+    case 'actor': return { $ref: '#/$defs/instance', ...description };
     case 'compartment': return { $ref: '#/$defs/id', ...description };
     case 'reference': return { type: 'string', pattern: REFERENCE, ...description };
     case 'site': return { type: 'string', pattern: SITE, ...description };
@@ -40,13 +42,13 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://molecular-motion.dev/schema/v3.json',
+    $id: 'https://molecular-motion.dev/schema/v4.json',
     title: 'Molecular Motion mechanism',
     type: 'object',
     required: ['schemaVersion', 'mechanism', 'actors', 'steps'],
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: 3 },
+      schemaVersion: { const: 4 },
       mechanism: {
         type: 'object',
         required: ['id', 'name'],
@@ -65,6 +67,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
     },
     $defs: {
       id: { type: 'string', pattern: ID },
+      instance: { type: 'string', pattern: `^${INSTANCE}$`, description: 'An actor id, or one of its copies: rad51#3.' },
       referenceIds: { type: 'array', items: { type: 'string', minLength: 1 } },
       reference: {
         type: 'object',
@@ -146,6 +149,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           position: { $ref: '#/$defs/point' },
           sites: { type: 'array', items: { $ref: '#/$defs/site' } },
           nucleic: { $ref: '#/$defs/nucleic' },
+          copies: { type: 'integer', minimum: 2, description: 'Number of copies; compiles to instances id#1 … id#n, each with its own state. Not allowed on dna/rna.' },
           compartment: { $ref: '#/$defs/id' },
           molecule: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$', description: 'Molecule actors only: key of the small-molecule vocabulary naming its structure, e.g. atp or nad-plus.' },
           initial: {

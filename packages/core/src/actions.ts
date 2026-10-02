@@ -1,3 +1,4 @@
+import { instanceDefinition } from './instances';
 import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
   lesionStrands, nucleicForm, nucleicLength, otherStrand, readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
@@ -205,7 +206,7 @@ export const ligate = definePrimitive<LigateAction>({
 
 function locate(reference: string, definition: MechanismDefinition): { acid: ActorDefinition; site: ActorSite } | undefined {
   const [actorId, siteId] = reference.split('.');
-  const acid = definition.actors.find(actor => actor.id === actorId);
+  const acid = instanceDefinition(definition, actorId!);
   const site = acid?.sites?.find(item => item.id === siteId);
   return acid && site ? { acid, site } : undefined;
 }
@@ -356,8 +357,8 @@ export const anneal = definePrimitive<AnnealAction>({
   },
 });
 
-function requireNucleicAcid(reference: string, ctx: { definition: { actors: { id: string; type: string }[] }; issue(message: string): void }) {
-  const actor = ctx.definition.actors.find(item => item.id === actorOf(reference));
+function requireNucleicAcid(reference: string, ctx: { definition: MechanismDefinition; issue(message: string): void }) {
+  const actor = instanceDefinition(ctx.definition, actorOf(reference));
   if (actor && actor.type !== 'dna' && actor.type !== 'rna') ctx.issue(`"${actor.id}" is not a nucleic acid`);
 }
 

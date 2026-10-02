@@ -54,7 +54,7 @@ The aim is not to reproduce atomistic simulations. Molecular Motion communicates
 ## A mechanism in YAML
 
 ```yaml
-schemaVersion: 3
+schemaVersion: 4
 
 mechanism:
   id: parp1-ssb-repair
@@ -118,7 +118,9 @@ steps:
 
 Targets use `actor.site` references. Sites on DNA and RNA have an interbase coordinate (`at`, or `span: [from, to]`) and a `strand`: `top` runs 5′→3′ as the coordinate grows, and `bottom` is antiparallel. The validator catches unknown actors, sites, compartments, and actions, as well as misspelled fields, before the renderer runs. The compiler also rejects biologically impossible sequences, such as ligating a site that has no break or binding an actor that was degraded.
 
-`schemaVersion: 1` and `2` documents are still accepted and migrated automatically. The design of the schema is described in [RFC 0001](docs/rfcs/0001-schema-v2.md), and nucleic-acid geometry (v3) in [RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md).
+`schemaVersion: 1`, `2` and `3` documents are still accepted and migrated automatically. The design of the schema is described in [RFC 0001](docs/rfcs/0001-schema-v2.md), and nucleic-acid geometry (v3) in [RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md).
+
+Several copies of one molecule are declared with `copies: n` and addressed as `id#1 … id#n`. Each copy has its own state but the same silhouette and colour ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md)).
 
 ## React
 

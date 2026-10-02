@@ -45,6 +45,16 @@ function migrateAction(action: unknown): unknown {
 }
 
 /**
+ * Convert a schemaVersion 3 document to schemaVersion 4 (RFC 0005). Without `copies` every actor is
+ * one instance whose id is the actor id, so references, sites and keys are unchanged: only the
+ * version moves. Best effort on malformed input.
+ */
+export function migrateV3(document: unknown): unknown {
+  if (!isObject(document) || document.schemaVersion !== 3) return document;
+  return { ...document, schemaVersion: 4 };
+}
+
+/**
  * Convert a schemaVersion 2 document to schemaVersion 3 (RFC 0004). Sites on nucleic acids trade
  * their layout keyword (or its absence, which meant `center`) for an interbase coordinate on the
  * implicit 100-unit molecule; a `Point` position stays a layout override without a coordinate.
