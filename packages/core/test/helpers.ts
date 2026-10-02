@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { primaryPartner, type CompiledMechanism } from '../src';
 
 export const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
+/** Every shipped example, including those with no legacy fixture. */
+export const EXAMPLES = [...MECHANISMS, 'egfr-dimerization'] as const;
 
 export const readExample = (name: string) => readFileSync(new URL(`../../../examples/${name}.yaml`, import.meta.url), 'utf8');
 export const readV1Fixture = (name: string) => readFileSync(new URL(`./fixtures/v1/${name}.yaml`, import.meta.url), 'utf8');

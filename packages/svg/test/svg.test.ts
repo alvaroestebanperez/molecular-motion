@@ -82,8 +82,9 @@ describe('SVG renderer', () => {
     // On an intact molecule (the frozen v2 HR) the filament leaves towards the free side…
     const intact = compileMechanism(parseMechanism(read('./fixtures/v2/homologous-recombination.yaml')));
     expect(Math.cos(buildSvgScene(intact.at('filament')).actors.find(actor => actor.id === 'rad51')!.chain!.angle)).toBeLessThan(0);
-    // …and on the resected example it runs down along the 3′ overhang beneath RAD51, away from the break.
-    const hr = compileMechanism(parseMechanism(read('../../../examples/homologous-recombination.yaml')));
+    // …and on a resected molecule (the frozen v3 HR, which still draws RAD51 as a chain) it runs down along
+    // the 3′ overhang beneath RAD51, away from the break.
+    const hr = compileMechanism(parseMechanism(read('../../core/test/fixtures/v3/homologous-recombination.yaml')));
     const rad51 = buildSvgScene(hr.at('filament')).actors.find(actor => actor.id === 'rad51')!;
     expect(Math.cos(rad51.chain!.angle)).toBeLessThan(0);
     expect(Math.sin(rad51.chain!.angle)).toBeGreaterThan(0);

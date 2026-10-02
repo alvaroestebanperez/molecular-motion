@@ -6,12 +6,13 @@ import {
 } from '@molecular-motion/react';
 import parpSource from '../../../examples/parp1-ssb-repair.yaml?raw';
 import hrSource from '../../../examples/homologous-recombination.yaml?raw';
+import egfrSource from '../../../examples/egfr-dimerization.yaml?raw';
 import './styles.css';
 
 const REPOSITORY = 'https://github.com/alvaroestebanperez/molecular-motion';
 
 interface Example { id: string; source: string; definition: MechanismDefinition }
-const EXAMPLES: Example[] = [parpSource, hrSource].map(source => {
+const EXAMPLES: Example[] = [parpSource, hrSource, egfrSource].map(source => {
   const definition = parseMechanism(source);
   return { id: definition.mechanism.id, source, definition };
 });

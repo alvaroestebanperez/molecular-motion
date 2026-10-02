@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileMechanism, parseMechanism, primaryPartner, type MechanismDefinition } from '../src';
-import { MECHANISMS, allStates, readExample } from './helpers';
+import { EXAMPLES, allStates, readExample } from './helpers';
 
 /** Deterministic permutation (no Math.random) so failures are reproducible. */
 function shuffled(length: number, seed: number): number[] {
@@ -14,7 +14,7 @@ function shuffled(length: number, seed: number): number[] {
   return order;
 }
 
-describe.each(MECHANISMS)('determinism: %s', name => {
+describe.each(EXAMPLES)('determinism: %s', name => {
   const definition = parseMechanism(readExample(name));
   const mechanism = compileMechanism(definition);
   const forward = allStates(mechanism);

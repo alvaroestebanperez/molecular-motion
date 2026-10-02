@@ -11,11 +11,14 @@ const TOUCH = 2;
 const DEPTH = 3;
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
-const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
+const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination', 'egfr-dimerization'] as const;
+const compiled = (name: string) => compileMechanism(parseMechanism(read(`../../../examples/${name}.yaml`)));
 const scenes = (name: string) => {
-  const mechanism = compileMechanism(parseMechanism(read(`../../../examples/${name}.yaml`)));
+  const mechanism = compiled(name);
   return Array.from({ length: mechanism.length }, (_, index) => buildSvgScene(mechanism.at(index)));
 };
+/** Resting on a nucleic acid: bound to one of its sites, or occupying it (a span without a site binds the molecule). */
+const onAcid = (actor: SvgScene['actors'][number], acid: string) => actor.boundTo === acid || Boolean(actor.boundTo?.startsWith(`${acid}.`));
 /** Upper surface of the backbone tubes that are present at `x` (a resected strand is not there to rest on). */
 const surface = (acid: SceneNucleicAcid, x: number, width: number) => Math.min(
   ...([0, 1] as const).filter(strand => !strandMissingAt(acid, strand, x)).map(strand => helixY(acid, strand, x, width) - (strand === 0 ? HELIX.tube : HELIX.backTube) / 2),
@@ -56,10 +59,13 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
 
   it('every protein bound to a DNA site rests on the backbone, the first one at the site itself', () => {
     let checked = 0;
-    for (const scene of steps) {
-      const acid = scene.nucleicAcids[0]!;
+    const mechanism = compiled(name);
+    steps.forEach((scene, index) => {
+      const acid = scene.nucleicAcids[0];
+      if (!acid) return;
       const top = (x: number) => surface(acid, x, scene.width);
-      const onSite = scene.actors.filter(actor => actor.boundTo?.startsWith(`${acid.id}.`));
+      const occupancy = Object.values(mechanism.at(index).occupancy);
+      const onSite = scene.actors.filter(actor => onAcid(actor, acid.id));
       for (const actor of onSite) {
         // Signed clearance between the actor's outline and the backbone surface below it.
         const clearance = Math.min(...outline(placed(actor)).map(point => top(point.x) - point.y));
@@ -67,7 +73,16 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
         expect(clearance, `${scene.title}: ${actor.id}`).toBeGreaterThanOrEqual(-DEPTH);
         checked++;
       }
-      const first = onSite[0];
+      // A span occupant touches the DNA within the nucleotides it covers (allowing its outline's edge).
+      for (const actor of onSite) {
+        const span = occupancy.find(item => item.instance === actor.id)?.span;
+        if (!span) continue;
+        const contact = scene.connections.find(connection => connection.source === actor.id)!;
+        const [x0, x1] = [span.from, span.to].map(coordinate => scene.width * coordinate / acid.length!);
+        expect(contact.from.x, `${scene.title}: ${actor.id}`).toBeGreaterThanOrEqual(x0! - TOUCH);
+        expect(contact.from.x, `${scene.title}: ${actor.id}`).toBeLessThanOrEqual(x1! + TOUCH);
+      }
+      const first = onSite.find(actor => !occupancy.find(item => item.instance === actor.id)?.span);
       if (first) {
         const site = acid.sites.find(item => item.reference === first.boundTo)!;
         const contact = scene.connections.find(connection => connection.source === first.id)!;
@@ -77,15 +92,16 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
         if (resected.length) expect(contact.from.x, `${scene.title}: ${first.id}`).toBeLessThanOrEqual(Math.max(...resected.map(range => range.x1)));
         else expect(Math.abs(contact.from.x - site.x), `${scene.title}: ${first.id}`).toBeLessThanOrEqual(30);
       }
-    }
-    expect(checked).toBeGreaterThan(0);
+    });
+    if (steps.some(scene => scene.nucleicAcids.length)) expect(checked).toBeGreaterThan(0);
   });
 
   it('actors docked to another actor never sink into the DNA', () => {
     for (const scene of steps) {
-      const acid = scene.nucleicAcids[0]!;
+      const acid = scene.nucleicAcids[0];
+      if (!acid) continue;
       const top = (x: number) => surface(acid, x, scene.width);
-      for (const actor of scene.actors.filter(item => !item.ghost && !item.boundTo?.startsWith(`${acid.id}.`))) {
+      for (const actor of scene.actors.filter(item => !item.ghost && !onAcid(item, acid.id))) {
         expect(Math.min(...outline(placed(actor)).map(point => top(point.x) - point.y)), `${scene.title}: ${actor.id}`).toBeGreaterThanOrEqual(0);
       }
     }
@@ -110,10 +126,22 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
       const before = new Map(steps[index - 1]!.actors.filter(actor => !actor.ghost).map(actor => [actor.id, actor]));
       // Resection or unwinding reshapes the backbone, so actors resting on it may settle with it.
       const reshaped = shape(steps[index - 1]!) !== shape(steps[index]!);
-      for (const actor of steps[index]!.actors.filter(item => !item.ghost)) {
+      // Actors travel with what they rest on: once an actor moves, those docked on it may move too.
+      const moved = new Set<string>();
+      const now = steps[index]!.actors.filter(item => !item.ghost);
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const actor of now) {
+          const previous = before.get(actor.id);
+          const carried = actor.boundTo !== undefined && moved.has(actor.boundTo.split('.')[0]!);
+          // New, rebound, or carried along by a partner that moved.
+          if (!moved.has(actor.id) && (!previous || previous.boundTo !== actor.boundTo || carried)) { moved.add(actor.id); grew = true; }
+        }
+      }
+      for (const actor of now) {
         const previous = before.get(actor.id);
-        // An actor whose binding (and footing) did not change stays where it was (same data-key, no jump).
-        if (previous && previous.boundTo === actor.boundTo && !reshaped) expect(Math.hypot(actor.x - previous.x, actor.y - previous.y), `${actor.id} step ${index + 1}`).toBeLessThanOrEqual(1);
+        // An actor whose binding (and footing) did not change, and whose partner stayed, stays where it was.
+        if (previous && previous.boundTo === actor.boundTo && !reshaped && !moved.has(actor.id)) expect(Math.hypot(actor.x - previous.x, actor.y - previous.y), `${actor.id} step ${index + 1}`).toBeLessThanOrEqual(1);
       }
     }
   });

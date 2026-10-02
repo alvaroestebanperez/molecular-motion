@@ -513,10 +513,21 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   }
 
   // 2. Free actors (visible, unbound) line up across the top.
+  // Each free definition reserves one slot per declared copy, and a copy keeps its own slot, so a copy
+  // does not slide across the row when a sibling docks elsewhere. Single-copy actors take one slot each.
   const free = proteins.filter(definition => !placed.has(definition.id) && !attachedTo(definition.id));
-  free.forEach((definition, index) => {
-    const x = free.length === 1 ? width * .5 : width * (.22 + .56 * index / (free.length - 1));
-    placed.set(definition.id, make(definition, definition.position ?? { x, y: height * .26 }, -1));
+  // Above the DNA when there is one; with no nucleic acid the assemblies get the middle of the canvas,
+  // so partners docked above them stay on screen.
+  const freeRowY = nucleicAcids.length ? height * .26 : height * .5;
+  const freeDefinitions = [...new Set(free.map(definition => definition.visual))];
+  const slotsOf = (visual: string) => snapshot.definition.actors.find(actor => actor.id === visual)!.copies ?? 1;
+  const slotCount = freeDefinitions.reduce((sum, visual) => sum + slotsOf(visual), 0);
+  free.forEach(definition => {
+    const block = freeDefinitions.slice(0, freeDefinitions.indexOf(definition.visual)).reduce((sum, visual) => sum + slotsOf(visual), 0);
+    const copy = definition.id === definition.visual ? 0 : Number(definition.id.slice(definition.visual.length + 1)) - 1;
+    const slot = block + copy;
+    const x = slotCount === 1 ? width * .5 : width * (.22 + .56 * slot / (slotCount - 1));
+    placed.set(definition.id, make(definition, definition.position ?? { x, y: freeRowY }, -1));
   });
 
   // 3. Actors bound to other actors dock against their partner (body or chain) by first contact along a
