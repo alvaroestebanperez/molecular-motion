@@ -418,18 +418,34 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   }
 
   // A chain on an actor bound to a site next to single-stranded DNA (a filament on an overhang) runs
-  // towards the middle of that stretch instead of leaving towards the free side. The nearest stretch wins; right on ties.
+  // along that stretch instead of leaving towards the free side: it takes the stretch under or nearest
+  // the actor (right on ties) and heads for its distal end, away from the crowded site.
   for (const actor of placed.values()) {
     const reference = snapshot.actors[actor.id]!.boundTo;
     const acid = reference ? acidIndex.get(reference.split('.')[0]!) : undefined;
     const site = reference ? siteIndex.get(reference) : undefined;
     if (!actor.chain || !acid?.missing || !site) continue;
-    const distance = (range: SceneRange) => Math.max(0, range.x0 - site.x, site.x - range.x1);
+    const distance = (range: SceneRange) => Math.max(0, range.x0 - actor.x, actor.x - range.x1);
     const stretch = [...acid.missing].sort((a, b) => distance(a) - distance(b) || b.x1 - a.x1)[0]!;
-    const strand = strandIndex(stretch.strand) === 0 ? 1 : 0;
-    const x = (stretch.x0 + stretch.x1) / 2;
-    const target = { x, y: helixY(acid, strand, x, width) };
-    actor.chain.angle = Math.atan2(target.y - actor.y, target.x - actor.x);
+    const distal = Math.abs(stretch.x0 - site.x) > Math.abs(stretch.x1 - site.x) ? stretch.x0 : stretch.x1;
+    // Aim where the chain's own reach meets the backbone surface on the way to the distal end, so the
+    // filament comes to rest on the strand instead of running on through it.
+    const reach = chainBase(actor) + chainReach(actor.chain.length);
+    const rest = (x: number) => ({ x, y: helixTop(acid, x, width) - 14 });
+    const direction = Math.sign(distal - actor.x) || 1;
+    let target = rest(distal);
+    for (let x = actor.x; direction * (distal - x) >= 0; x += direction * 3) {
+      const point = rest(x);
+      if (Math.hypot(point.x - actor.x, point.y - actor.y) >= reach) { target = point; break; }
+    }
+    let angle = Math.atan2(target.y - actor.y, target.x - actor.x);
+    // Like docked actors, tilt towards "up" until no bead dips into the backbone.
+    const sinks = (candidate: number) => chainGeometry(actor.radius, candidate, actor.chain!.length, chainBase({ ...actor, chain: { ...actor.chain!, angle: candidate } })).beads
+      .some(bead => actor.y + bead.y + bead.r + BEAD_OUTLINE > helixTop(acid, actor.x + bead.x, width) + 1);
+    for (let step = 0; step < 30 && sinks(angle); step++) {
+      angle += Math.sign(Math.atan2(Math.sin(-Math.PI / 2 - angle), Math.cos(-Math.PI / 2 - angle))) * .05;
+    }
+    actor.chain.angle = angle;
   }
 
   // 2. Free actors (visible, unbound) line up across the top.

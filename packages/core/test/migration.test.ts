@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileMechanism, migrateV1, migrateV2, parseMechanism } from '../src';
-import { MECHANISMS, projectToV1, readExample, readGolden, readV1Fixture } from './helpers';
+import { MECHANISMS, projectToV1, readGolden, readV1Fixture } from './helpers';
 
 describe('v1 → v2 migration', () => {
   it.each(MECHANISMS)('%s: migrated v1 document reproduces the v1 engine exactly', name => {
@@ -9,11 +9,8 @@ describe('v1 → v2 migration', () => {
     expect(projectToV1(compileMechanism(definition))).toEqual(readGolden(name));
   });
 
-  // PARP1 was expanded to the full 11-step BER → SSBR story, so only HR still mirrors its v1 original.
-  it('homologous-recombination: hand-written v2 example keeps the same scenes as v1', () => {
-    const name = 'homologous-recombination';
-    expect(projectToV1(compileMechanism(parseMechanism(readExample(name))))).toEqual(readGolden(name));
-  });
+  // Neither example mirrors its v1 original any more: PARP1 became the full BER → SSBR story and HR now
+  // models resection up to the RAD51 filament (RFC 0004). The migrated v1 fixtures above stay locked.
 
   it('maps every v1 action to its v2 equivalent', () => {
     const migrated = migrateV1({

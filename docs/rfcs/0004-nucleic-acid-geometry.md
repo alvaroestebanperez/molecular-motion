@@ -182,4 +182,6 @@ PR 1 changes no output. PR 4 is the first PR that intentionally changes an examp
 5. **`fill-gap` keeps its v2 semantics** *(accepted)*. Long-patch synthesis needs an explicit `extend`.
 6. **Semantics and rendering are separate** *(accepted)*, as described in §6.
 7. **Multi-molecule pairing stays out** *(accepted)*. Strand invasion, D-loops, and Holliday junctions are not approximated with this model, for example by faking a second molecule as `open` or `nascent` ranges on the first.
-8. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.
+8. **No `restore` shortcut** *(accepted)*. There is no action that returns a molecule to an intact duplex without the transformations that would produce it. Every state is the consequence of explicit actions, so the model never claims an outcome it cannot represent. In particular, `extend` cannot cross a DSB and `ligate` cannot seal a gap.
+9. **HR stops at the RAD51 filament** *(accepted)*. The example covers DSB → resection → 3′ ssDNA overhang → RAD51 filament, which is the part the single-molecule model represents correctly. Strand invasion, D-loop formation, synthesis on the sister chromatid and resolution wait for multi-molecule support (roadmap).
+10. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.

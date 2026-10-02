@@ -156,6 +156,12 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     if (site.lesion === 'double-strand-break') for (const strand of strands) gaps.push([strand, site.x - 15, site.x + 15]);
   }
   for (const range of acid.missing ?? []) gaps.push([strandIndex(range.strand), range.x0, range.x1]);
+  // Polarity is labelled where it tells the story: the molecule's ends, resected ends and the two sides
+  // of a DSB. A nick or SSB keeps its strand continuous for labelling, so no 5′/3′ crowds the lesion.
+  const polarityCuts: [0 | 1, number, number][] = [
+    ...acid.sites.filter(site => site.lesion === 'double-strand-break').flatMap(site => [[0, site.x - 15, site.x + 15], [1, site.x - 15, site.x + 15]] as [0 | 1, number, number][]),
+    ...(acid.missing ?? []).map((range): [0 | 1, number, number] => [strandIndex(range.strand), range.x0, range.x1]),
+  ];
   const inGap = (strand: 0 | 1, x: number) => gaps.some(([s, from, to]) => s === strand && x > from && x < to);
   // Base pairs need both strands, paired: none across a gap in either strand or inside a bubble.
   const unpaired = (x: number) => strandState && (strandMissingAt(acid, 0, x) || strandMissingAt(acid, 1, x) || (acid.open ?? []).some(range => x > range.x0 && x < range.x1));
@@ -215,22 +221,22 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     + `<path class="mm-dna__rungs" d="${rungs.join('')}"/>`
     + (damaged.length ? `<path class="mm-dna__rungs mm-dna__rungs--damaged" d="${damaged.join('')}"/>` : '')
     + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${segments.front.join('')}"/><path class="mm-dna__shine" d="${segments.front.join('')}"/></g>`
-    + nascentPath('front') + markers + (acid.polarity ? polarityLabels(acid, width, gaps) : '');
+    + nascentPath('front') + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts) : '');
 }
 
 /**
  * 5′/3′ at both ends of every strand fragment. Top runs 5′→3′ left to right and bottom the other way,
- * so a fragment of top reads 5′ … 3′ and a fragment of bottom 3′ … 5′. Fragments are what the
- * canvas shows between gaps (breaks and missing nucleotides), so overhang ends are labelled too.
+ * so a fragment of top reads 5′ … 3′ and a fragment of bottom 3′ … 5′. Fragments are delimited by
+ * `cuts` (DSBs and missing nucleotides), so overhang ends are labelled too.
  */
-function polarityLabels(acid: SceneNucleicAcid, width: number, gaps: [0 | 1, number, number][]): string {
+function polarityLabels(acid: SceneNucleicAcid, width: number, cuts: [0 | 1, number, number][]): string {
   const edge = 14;
   const labels: string[] = [];
   for (const strand of [0, 1] as const) {
-    const cuts = gaps.filter(([s]) => s === strand).map(([, from, to]) => [Math.max(0, from), Math.min(width, to)] as const).filter(([from, to]) => to > from).sort((a, b) => a[0] - b[0]);
+    const strandCuts = cuts.filter(([s]) => s === strand).map(([, from, to]) => [Math.max(0, from), Math.min(width, to)] as const).filter(([from, to]) => to > from).sort((a, b) => a[0] - b[0]);
     const fragments: [number, number][] = [];
     let start = 0;
-    for (const [from, to] of cuts) { if (from > start) fragments.push([start, from]); start = Math.max(start, to); }
+    for (const [from, to] of strandCuts) { if (from > start) fragments.push([start, from]); start = Math.max(start, to); }
     if (start < width) fragments.push([start, width]);
     // One lane per strand, outside the helix envelope, so the two strands' labels never collide.
     const lane = acid.y + (strand === 0 ? -(HELIX.amplitude + 16) : HELIX.amplitude + 24);

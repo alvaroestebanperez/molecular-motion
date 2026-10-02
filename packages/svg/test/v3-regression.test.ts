@@ -17,17 +17,12 @@ const renderAll = (source: string) => {
   });
 };
 
-// RFC 0004 §8: schema v3 must not change a single byte of what v2 documents render.
+// RFC 0004 §8: schema v3 must not change a single byte of what v2 documents render. The examples
+// themselves now use v3 geometry on purpose, so the frozen v2 copies in fixtures/v2 carry the guarantee.
 describe('schema v2 → v3 regression (UPDATE_GOLDEN=1 to regenerate)', () => {
   it.each(['parp1-ssb-repair', 'homologous-recombination'])('%s: the v2 document renders byte-identically', name => {
     const rendered = renderAll(read(`./fixtures/v2/${name}.yaml`));
     if (process.env.UPDATE_GOLDEN) writeFileSync(golden(name), `${JSON.stringify(rendered, null, 2)}\n`);
     expect(rendered).toEqual(JSON.parse(readFileSync(golden(name), 'utf8')));
-  });
-
-  it.each(['parp1-ssb-repair', 'homologous-recombination'])('%s: the example rewritten in v3 renders like its v2 original', name => {
-    const source = read(`../../../examples/${name}.yaml`);
-    expect(source).toMatch(/^schemaVersion: 3/);
-    expect(renderAll(source)).toEqual(JSON.parse(readFileSync(golden(name), 'utf8')));
   });
 });
