@@ -10,3 +10,4 @@ coverage
 
 # Private notes and prompts (never committed)
 .private/
+.claude/
