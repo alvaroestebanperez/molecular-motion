@@ -1,6 +1,7 @@
 import { hashString } from './primitives/shared';
-import type { Activity, ActorDefinition, ActorType, LesionType, MechanismSnapshot, Modification, Point } from '@molecular-motion/core';
-import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, type ContactShape, type FirstContact, type ProteinSphere } from './primitives';
+import { nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot, type Modification, type Point } from '@molecular-motion/core';
+import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
+import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
 
 export interface SceneSite extends Point { reference: string; lesion?: LesionType }
 
@@ -21,6 +22,8 @@ export interface SceneActor extends Point {
   color: string;
   radius: number;
   compartment?: string;
+  /** Declared small-molecule vocabulary key (molecule actors only); unknown keys fall back to the generic glyph. */
+  molecule?: string;
   activity?: Activity;
   boundTo?: string;
   /** Upcoming actor drawn out of focus; not part of the current state. */
@@ -98,10 +101,20 @@ export function moleculeAtoms(seed: number, radius: number): { x: number; y: num
 /** Width of the outline drawn around an actor's body (part of its visible surface). */
 export const actorOutline = (type: ActorType, radius: number) => type === 'molecule' ? 1.6 : proteinOutlineWidth(radius);
 
+/** One scale for every declared molecule in the viewer, so atoms and bonds read alike across molecules. */
+export const MOLECULE_ACTOR_SCALE = .6;
+
+/** Topology of a declared molecule key, or undefined (unknown key or none): the renderer then uses the generic glyph. */
+export function moleculeTopology(key: string | undefined): SmallMoleculeTopology | undefined {
+  return key && Object.prototype.hasOwnProperty.call(SMALL_MOLECULE_TOPOLOGIES, key) ? SMALL_MOLECULE_TOPOLOGIES[key as keyof typeof SMALL_MOLECULE_TOPOLOGIES] : undefined;
+}
+
 /** Particles of an actor's body in local coordinates; the renderer draws exactly these. */
-export function actorParticles(id: string, type: ActorType, radius: number): ProteinSphere[] {
+export function actorParticles(id: string, type: ActorType, radius: number, molecule?: string): ProteinSphere[] {
   if (type !== 'molecule') return proteinGeometry(id, radius, type === 'complex' ? 32 : 28);
-  return moleculeAtoms(hashString(id), radius).map(atom => ({ ...atom, rx: atom.r, ry: atom.r, rotation: 0, depth: 0 }));
+  const topology = moleculeTopology(molecule);
+  const atoms = topology ? smallMoleculeAtoms(topology, MOLECULE_ACTOR_SCALE) : moleculeAtoms(hashString(id), radius);
+  return atoms.map(atom => ({ ...atom, rx: atom.r, ry: atom.r, rotation: 0, depth: 0 }));
 }
 
 /**
@@ -141,8 +154,8 @@ export function chainGeometry(radius: number, angle: number, length: number, bas
 const BEAD_OUTLINE = .6;
 const SHAPES = new Map<string, ContactShape>();
 const CONTACTS = new Map<string, FirstContact>();
-type Shaped = Pick<SceneActor, 'id' | 'type' | 'radius' | 'chain'>;
-const shapeKey = (actor: Shaped) => `${actor.id}|${actor.type}|${actor.radius}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}` : ''}`;
+type Shaped = Pick<SceneActor, 'id' | 'type' | 'radius' | 'chain' | 'molecule'>;
+const shapeKey = (actor: Shaped) => `${actor.id}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}` : ''}`;
 
 /** Everything visible of an actor that a partner can touch: its body plus its chain, outlines included. */
 export function actorContactShape(actor: Shaped): ContactShape {
@@ -150,7 +163,7 @@ export function actorContactShape(actor: Shaped): ContactShape {
   let shape = SHAPES.get(key);
   if (!shape) {
     const margin = actorOutline(actor.type, actor.radius);
-    const body = actorParticles(actor.id, actor.type, actor.radius).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
+    const body = actorParticles(actor.id, actor.type, actor.radius, actor.molecule).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
     const beads = actor.chain ? chainGeometry(actor.radius, actor.chain.angle, actor.chain.length, chainBase(actor)).beads
       .map(bead => ({ x: bead.x, y: bead.y, r: bead.r + BEAD_OUTLINE, rx: bead.r + BEAD_OUTLINE, ry: bead.r + BEAD_OUTLINE, rotation: 0, depth: 1 })) : [];
     shape = { particles: [...body, ...beads] };
@@ -167,7 +180,7 @@ export function chainBase(actor: Shaped): number {
   const key = `${shapeKey(actor)}`;
   let base = BASES.get(key);
   if (base === undefined) {
-    const body = actorContactShape({ id: actor.id, type: actor.type, radius: actor.radius });
+    const body = actorContactShape({ id: actor.id, type: actor.type, radius: actor.radius, molecule: actor.molecule });
     const d = { x: Math.cos(actor.chain.angle), y: Math.sin(actor.chain.angle) };
     const along = contactOutline(body).filter(point => Math.abs(point.x * d.y - point.y * d.x) < 3).map(point => point.x * d.x + point.y * d.y);
     base = Math.round(Math.max(actor.radius * .3, ...along) * 10) / 10;
@@ -237,7 +250,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       sites: (definition.sites ?? []).map(site => {
         const reference = `${definition.id}.${site.id}`;
         const lesion = snapshot.sites[reference]?.lesion;
-        return { reference, x: siteX(site.position, width), y: y - HELIX.amplitude, ...(lesion && { lesion }) };
+        return { reference, x: siteX(definition, site, width), y: y - HELIX.amplitude, ...(lesion && { lesion }) };
       }),
     };
   });
@@ -263,6 +276,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       ...(definition.description && { description: definition.description }),
       color: definition.color ?? defaultColor(definition.id),
       radius: RADIUS[definition.type],
+      ...(definition.type === 'molecule' && definition.molecule && { molecule: definition.molecule }),
       ...(state.compartment && { compartment: state.compartment }),
       ...(state.activity && { activity: state.activity.state }),
       ...(state.boundTo && !ghost && { boundTo: state.boundTo }),
@@ -291,7 +305,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     let right = anchor.x;
     group.forEach((definition, index) => {
       // Neighbours on the same site are spaced by their visible outlines, not by bounding circles.
-      const body = { id: definition.id, type: definition.type, radius: RADIUS[definition.type] };
+      const body = { id: definition.id, type: definition.type, radius: RADIUS[definition.type], molecule: definition.molecule };
       const [minX, maxX] = extentX(body);
       let x = anchor.x;
       if (index === 0) { left = x + minX; right = x + maxX; }
@@ -430,7 +444,12 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   };
 }
 
-function siteX(position: 'start' | 'center' | 'end' | Point | undefined, width: number): number {
-  if (typeof position === 'object') return position.x;
-  return position === 'start' ? width * .28 : position === 'end' ? width * .72 : width * .5;
+/**
+ * Renderer convention (RFC 0004 §7): the molecule spans the canvas and coordinates grow left to right,
+ * so `top` reads 5′→3′. A span anchors at its midpoint; a `Point` position is drawn where it says.
+ */
+function siteX(acid: ActorDefinition, site: ActorSite, width: number): number {
+  if (site.position) return site.position.x;
+  const interval = siteInterval(site);
+  return interval ? width * ((interval.from + interval.to) / 2) / nucleicLength(acid) : width * .5;
 }

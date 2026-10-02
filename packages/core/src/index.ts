@@ -3,10 +3,15 @@ export type { CompiledMechanism, CompileOptions } from './engine';
 export { parseMechanism } from './parse';
 export { MechanismValidationError, validateMechanism } from './validate';
 export type { ValidateOptions } from './validate';
-export { migrateV1 } from './migrate';
+export { migrateV1, migrateV2 } from './migrate';
 export { ActionFailure, ActionRegistry, BASE_FIELDS, defineAlias, definePrimitive, field } from './registry';
 export type { ActionDefinition, AliasDefinition, ApplyContext, FieldSpec, PrimitiveDefinition, ResolvedAction, ValidationContext } from './registry';
 export { ACTIVITIES, LESIONS, builtinActions, builtinRegistry } from './actions';
 export { COMPARTMENT_KINDS, STANDARD_COMPARTMENTS } from './compartments';
 export { toJsonSchema } from './schema';
 export type * from './types';
+export {
+  DEFAULT_NUCLEIC_LENGTH, isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, siteInterval, strandIntervals,
+} from './nucleic';
+export { addInterval, intervalAt, normalizeIntervals, overlapsInterval, subtractInterval } from './intervals';
+export type { Interval } from './intervals';

@@ -21,7 +21,7 @@ export {
   proteinSurfacePoint, type ContactSide, contactOffset, type ContactShape, type FirstContact, contactOutline, shapesOverlap, firstContact,
 } from './primitives/contact';
 export {
-  type MoleculeElement, type MoleculeSubstituent, type MoleculeMark, type MoleculeRingSystem, type MoleculeUnit, type SmallMoleculeTopology, type SmallMoleculeOptions, renderSmallMoleculePrimitive, moleculeCss,
+  type MoleculeElement, type MoleculeSubstituent, type MoleculeMark, type MoleculeRingSystem, type MoleculeUnit, type SmallMoleculeTopology, type SmallMoleculeOptions, renderSmallMoleculePrimitive, smallMoleculeAtoms, moleculeCss,
 } from './primitives/molecules';
 export {
   type MembranePoint, type MembraneShape, type MembraneOptions, type MembraneLipid, type MembraneLeaflet, type MembraneGeometry, membraneGeometry, renderMembranePrimitive, membraneCss,

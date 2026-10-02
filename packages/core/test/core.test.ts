@@ -37,6 +37,15 @@ describe('mechanism compiler', () => {
     expect(mechanism.at(1).sites['dna.lesion']!.lesion).toBe('single-strand-break');
   });
 
+  it('accepts an optional molecule key on molecule actors only', () => {
+    const withMolecule = yaml.replace('  - id: sensor\n    type: protein', '  - id: sensor\n    type: protein\n  - id: cofactor\n    type: molecule\n    molecule: nad-plus');
+    expect(parseMechanism(withMolecule).actors.find(actor => actor.id === 'cofactor')!.molecule).toBe('nad-plus');
+    expect(() => parseMechanism(yaml.replace('    type: protein', '    type: protein\n    molecule: atp')))
+      .toThrow(/actors\[1\]\.molecule is only allowed on molecule actors/);
+    expect(() => parseMechanism(withMolecule.replace('molecule: nad-plus', 'molecule: NAD+')))
+      .toThrow(/actors\[2\]\.molecule must be a lowercase key/);
+  });
+
   it('reports semantic references with useful paths', () => {
     expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(MechanismValidationError);
     expect(() => parseMechanism(yaml.replace('dna.lesion', 'dna.missing'))).toThrow(/steps\[0\]\.actions\[0\]\.target references unknown site/);
@@ -282,5 +291,45 @@ describe('references and step metadata', () => {
     expect(() => compileMechanism(doc({ references: [{ id: 'r', citation: 'Someone (2020)' }], mechanism: { id: 'x', name: 'X' } }, { references: [] })))
       .toThrow(/needs at least one of: pmid, doi, reactome, url/);
     expect(() => compileMechanism(doc({}, { keyEvents: ['ok', ''] }))).toThrow(/keyEvents must be an array of non-empty strings/);
+  });
+});
+
+describe('nucleic-acid geometry (RFC 0004)', () => {
+  const doc = (actor: Record<string, unknown>) => ({
+    schemaVersion: 3, mechanism: { id: 'x', name: 'X' },
+    actors: [{ id: 'dna', type: 'dna', ...actor }],
+    steps: [{ id: 's', title: 'S', actions: [] }],
+  });
+
+  it('keeps declared coordinates, strands and the nucleic block', () => {
+    const definition = parseMechanism(doc({
+      nucleic: { length: 80, form: 'duplex', strands: { top: { label: 'Watson' }, bottom: {} } },
+      sites: [{ id: 'break', at: 40 }, { id: 'oxog', at: 23, strand: 'bottom' }, { id: 'patch', span: [30, 42], strand: 'both' }, { id: 'free', position: { x: 10, y: 0 } }],
+    }));
+    expect(definition.schemaVersion).toBe(3);
+    expect(definition.actors[0]!.nucleic).toEqual({ length: 80, form: 'duplex', strands: { top: { label: 'Watson' }, bottom: {} } });
+    expect(definition.actors[0]!.sites!.map(site => site.at ?? site.span ?? site.position)).toEqual([40, 23, [30, 42], { x: 10, y: 0 }]);
+  });
+
+  it('checks coordinates against the declared or implicit length', () => {
+    expect(() => parseMechanism(doc({ nucleic: { length: 20 }, sites: [{ id: 'a', at: 21 }] }))).toThrow(/at must be an integer between 0 and 20/);
+    expect(() => parseMechanism(doc({ sites: [{ id: 'a', at: 101 }] }))).toThrow(/between 0 and 100/);
+    expect(() => parseMechanism(doc({ sites: [{ id: 'a', span: [12, 12] }] }))).toThrow(/span must be \[from, to\] with 0 ≤ from < to ≤ 100/);
+    expect(() => parseMechanism(doc({ sites: [{ id: 'a', at: 3, span: [1, 4] }] }))).toThrow(/only one of at, span, position/);
+    expect(() => parseMechanism(doc({ sites: [{ id: 'a' }] }))).toThrow(/needs a coordinate \(at or span\) or a position/);
+    expect(() => parseMechanism(doc({ sites: [{ id: 'a', position: 'center' }] }))).toThrow(/position must be a point \{ x, y \}; use `at`/);
+  });
+
+  it('keeps strands consistent with the form', () => {
+    expect(() => parseMechanism(doc({ nucleic: { form: 'single' }, sites: [{ id: 'a', at: 3, strand: 'bottom' }] }))).toThrow(/strand must be top on a single-stranded molecule/);
+    expect(() => parseMechanism({ ...doc({}), actors: [{ id: 'mrna', type: 'rna', sites: [{ id: 'a', at: 3, strand: 'both' }] }] })).toThrow(/single-stranded/);
+    expect(() => parseMechanism(doc({ nucleic: { form: 'single', strands: { bottom: {} } } }))).toThrow(/strands.bottom is not allowed/);
+    expect(() => parseMechanism(doc({ nucleic: { strands: { watson: {} } } }))).toThrow(/watson is not a strand/);
+    expect(() => parseMechanism(doc({ nucleic: { length: 0, form: 'triplex' } }))).toThrow(/length must be an integer ≥ 1[\s\S]*form must be one of: duplex, single/);
+  });
+
+  it('rejects nucleic geometry on other actors', () => {
+    const protein = { ...doc({}), actors: [{ id: 'egfr', type: 'protein', nucleic: { length: 3 }, sites: [{ id: 'y1068', at: 4, strand: 'top' }] }] };
+    expect(() => parseMechanism(protein)).toThrow(/nucleic is only allowed on dna and rna actors[\s\S]*at is only allowed on dna and rna sites[\s\S]*strand is only allowed/);
   });
 });

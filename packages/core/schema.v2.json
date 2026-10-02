@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.dev/schema/v3.json",
+  "$id": "https://molecular-motion.dev/schema/v2.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
   "required": [
@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": 3
+      "const": 2
     },
     "mechanism": {
       "type": "object",
@@ -203,103 +203,19 @@
         "label": {
           "type": "string"
         },
-        "at": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Nucleic acids: interbase coordinate, 0 … length. A nucleotide-level site at n is the nucleotide [n, n + 1)."
-        },
-        "span": {
-          "type": "array",
-          "prefixItems": [
-            {
-              "type": "integer",
-              "minimum": 0
-            },
-            {
-              "type": "integer",
-              "minimum": 1
-            }
-          ],
-          "minItems": 2,
-          "maxItems": 2,
-          "description": "Nucleic acids: interbase interval [from, to)."
-        },
-        "strand": {
-          "enum": [
-            "top",
-            "bottom",
-            "both"
-          ],
-          "description": "Nucleic acids: strand the site lies on; top runs 5′→3′ with increasing coordinate."
-        },
         "position": {
-          "$ref": "#/$defs/point",
-          "description": "Layout override only; never a coordinate."
-        }
-      },
-      "not": {
-        "anyOf": [
-          {
-            "required": [
-              "at",
-              "span"
-            ]
-          },
-          {
-            "required": [
-              "at",
-              "position"
-            ]
-          },
-          {
-            "required": [
-              "span",
-              "position"
-            ]
-          }
-        ]
-      }
-    },
-    "nucleic": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "dna/rna actors only: biological geometry (RFC 0004).",
-      "properties": {
-        "length": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Nucleotides or base pairs. Defaults to 100."
-        },
-        "form": {
-          "enum": [
-            "duplex",
-            "single"
-          ],
-          "description": "Defaults to duplex for dna and single for rna."
-        },
-        "strands": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "top": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "label": {
-                  "type": "string"
-                }
-              }
+          "oneOf": [
+            {
+              "enum": [
+                "start",
+                "center",
+                "end"
+              ]
             },
-            "bottom": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "label": {
-                  "type": "string"
-                }
-              }
+            {
+              "$ref": "#/$defs/point"
             }
-          }
+          ]
         }
       }
     },
@@ -340,9 +256,6 @@
           "items": {
             "$ref": "#/$defs/site"
           }
-        },
-        "nucleic": {
-          "$ref": "#/$defs/nucleic"
         },
         "compartment": {
           "$ref": "#/$defs/id"
@@ -759,142 +672,6 @@
             "target": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Remove nucleotides 5′→3′ from every 5′ end at a strand break, leaving 3′ overhangs.",
-          "required": [
-            "type",
-            "target",
-            "length"
-          ],
-          "properties": {
-            "type": {
-              "const": "resect"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/id",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
-              "description": "Site with a break and a point coordinate (at)."
-            },
-            "length": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Nucleotides removed from each 5′ end."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the opposite strand.",
-          "required": [
-            "type",
-            "target",
-            "length"
-          ],
-          "properties": {
-            "type": {
-              "const": "extend"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/id",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
-              "description": "Site with a point coordinate (at) where the 3′ end sits."
-            },
-            "length": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Nucleotides added."
-            },
-            "strand": {
-              "enum": [
-                "top",
-                "bottom"
-              ],
-              "description": "Strand to extend; needed only when both offer a 3′ end."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Separate both strands into an unpaired bubble around a site.",
-          "required": [
-            "type",
-            "target"
-          ],
-          "properties": {
-            "type": {
-              "const": "unwind"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/id",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
-              "description": "Site with a coordinate; a span is the bubble itself."
-            },
-            "length": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Bubble length, centred on a point site (at). Not used with a span."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Re-pair the unwound bubble at a site.",
-          "required": [
-            "type",
-            "target"
-          ],
-          "properties": {
-            "type": {
-              "const": "anneal"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/id",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
-              "description": "Site with a coordinate inside or at the edge of the bubble."
             }
           },
           "additionalProperties": false
