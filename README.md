@@ -196,6 +196,19 @@ const mechanism = compileMechanism(parseMechanism(yaml));
 const state = mechanism.at('recruitment');
 ```
 
+## Export
+
+Any step can be saved as a figure for a manuscript, slide or poster. `exportSvg` produces a standalone file: styles embedded, the theme resolved (`light` or `dark`, never the viewer's OS preference), an explicit pixel size, no interactive roles, and every animation frozen in its final state. Callouts that the interactive viewer lets overflow the canvas are kept by growing the `viewBox`. In the browser, `exportPng` rasterises that file.
+
+```ts
+import { buildSvgScene, exportPng, exportSvg } from '@molecular-motion/svg';
+
+const svg = exportSvg(buildSvgScene(mechanism.at('filament')), { theme: 'light', scale: 2 });
+const png = await exportPng(svg, { pixelRatio: 2 });   // Blob, browser only
+```
+
+Pass `compact: true` for a thumbnail cropped to the action, and `background: false` for a transparent figure. The demo offers both downloads for the current step.
+
 ## Architecture
 
 ```text
@@ -272,7 +285,8 @@ examples/     # complete mechanism definitions
 - [ ] Camera actions, scene-anchored annotations, and deep links
 - [ ] Themes and renderer/action plugin APIs
 - [ ] Framework-agnostic Web Component
-- [ ] Export to standalone SVG, PNG, and video
+- [x] Export to standalone SVG and PNG
+- [ ] Export to video
 - [ ] Visual editor and schema-aware YAML language service
 - [ ] Published npm packages and stable `1.0` schema
 

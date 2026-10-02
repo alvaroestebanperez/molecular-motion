@@ -13,6 +13,8 @@ export interface RenderOptions {
   selectedActor?: string | null;
   /** Thumbnail mode: no labels, no out-of-focus actors, not interactive. */
   compact?: boolean;
+  /** Actors are focusable buttons (default). False for static output such as exported files. */
+  interactive?: boolean;
 }
 
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({
@@ -45,7 +47,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
   const acids = scene.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, scene.width, prefix)}</g>`).join('');
   const connections = scene.connections.map(bindingConnection).join('');
-  const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact)).join('');
+  const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false)).join('');
   const labels = compact ? '' : [
     ...actors.filter(actor => actor.group?.lead !== false).map(actor => actorLabel(actor)),
     ...actors.filter(actor => actor.chain).map(actor => chainLabel(actor)),
@@ -273,7 +275,7 @@ function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string):
 
 // ---- Actors ----
 
-function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, compact: boolean): string {
+function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, inert: boolean): string {
   // Small molecules stay ball-and-stick; proteins and complexes share the catalog's unified surface.
   let shape: string;
   const topology = actor.type === 'molecule' ? moleculeTopology(actor.molecule) : undefined;
@@ -305,7 +307,7 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
   }).join('');
   const classes = ['mm-actor', `mm-actor--${actor.type}`, actor.ghost && 'mm-actor--ghost', actor.activity && `mm-actor--${actor.activity}`].filter(Boolean).join(' ');
   const scale = actor.ghost ? ' scale(.62)' : '';
-  const interactive = actor.ghost || compact
+  const interactive = actor.ghost || inert
     ? 'aria-hidden="true"'
     : `role="button" tabindex="0" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity].filter(Boolean).join(', '))}"`;
   return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
@@ -401,10 +403,16 @@ function haloGradient(id: string, color: string): string {
   return `<radialGradient id="${id}"><stop offset=".55" style="stop-color:${escape(color)}" stop-opacity=".28"/><stop offset="1" style="stop-color:${escape(color)}" stop-opacity="0"/></radialGradient>`;
 }
 
+/** Theme tokens (`--mm-*`), light and dark. Hosts theme the figure through these; export resolves one. */
+export const THEME_TOKENS = {
+  light: '--mm-ink:#15213b;--mm-muted:#4f5d75;--mm-surface:#ffffff;--mm-canvas:#f5f7fb;--mm-line:#dfe4ee;--mm-alert:#e5484d;--mm-dna:#3f63c4;--mm-dna-back:#a9b9e4;--mm-dna-rung:#8ea3dc;--mm-dna-new:#e0607a;--mm-chain:#b44fb0;--mm-accent:#2563eb',
+  dark: '--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-dna-new:#f08aa0;--mm-chain:#d77ad3;--mm-accent:#6ea0ff',
+} as const;
+
 export const molecularMotionCss = `
-.mm-svg{--mm-ink:#15213b;--mm-muted:#4f5d75;--mm-surface:#ffffff;--mm-canvas:#f5f7fb;--mm-line:#dfe4ee;--mm-alert:#e5484d;--mm-dna:#3f63c4;--mm-dna-back:#a9b9e4;--mm-dna-rung:#8ea3dc;--mm-dna-new:#e0607a;--mm-chain:#b44fb0;--mm-accent:#2563eb;display:block;width:100%;height:auto;overflow:visible;font-family:var(--mm-font,Inter,system-ui,sans-serif)}
-:where([data-theme=dark],.mm-theme-dark) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-dna-new:#f08aa0;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}
-@media(prefers-color-scheme:dark){:where(:root:not([data-theme=light])) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-dna-new:#f08aa0;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}}
+.mm-svg{${THEME_TOKENS.light};display:block;width:100%;height:auto;overflow:visible;font-family:var(--mm-font,Inter,system-ui,sans-serif)}
+:where([data-theme=dark],.mm-theme-dark) .mm-svg{${THEME_TOKENS.dark}}
+@media(prefers-color-scheme:dark){:where(:root:not([data-theme=light])) .mm-svg{${THEME_TOKENS.dark}}}
 .mm-dna__back path{fill:none;stroke:var(--mm-dna-back);stroke-width:${HELIX.backTube};stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__rungs{fill:none;stroke:var(--mm-dna-rung);stroke-width:4.2;stroke-linecap:round;opacity:.85}
 .mm-dna__rungs--damaged{stroke:var(--mm-alert);opacity:1}
