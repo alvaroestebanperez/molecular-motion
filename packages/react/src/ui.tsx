@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import type { MechanismSnapshot, ReferenceDefinition } from '@molecular-motion/core';
+import { actorInstances, type MechanismSnapshot, type ReferenceDefinition } from '@molecular-motion/core';
 import { LESION_LABELS } from '@molecular-motion/svg';
 import { ExitFullscreenIcon, ExternalIcon, FullscreenIcon, NextIcon, PauseIcon, PlayIcon, PreviousIcon, ResetIcon } from './icons';
 import { MechanismThumbnail } from './MechanismStage';
@@ -180,26 +180,28 @@ export function ReferenceList({ references, compact = false }: { references: Ref
 }
 
 function MolecularDetails({ snapshot, selectedActor }: { snapshot: MechanismSnapshot; selectedActor?: string | null }) {
-  const labels = new Map(snapshot.definition.actors.map(actor => [actor.id, actor.label ?? actor.id]));
+  // One entry per instance; copies are told apart by their number ("RAD51 #3").
+  const instances = actorInstances(snapshot.definition).map(({ id, actor }) => ({ id, definition: actor, label: `${actor.label ?? actor.id}${id === actor.id ? '' : ` ${id.slice(actor.id.length)}`}` }));
+  const labels = new Map(instances.map(instance => [instance.id, instance.label]));
   const compartments = new Map(snapshot.definition.compartments.map(compartment => [compartment.id, compartment.label ?? compartment.id]));
   const describeTarget = (reference: string) => {
     const [actor, site] = reference.split('.');
     return site ? `${labels.get(actor!)} (${site})` : labels.get(actor!) ?? reference;
   };
-  const shown = snapshot.definition.actors.filter(actor => snapshot.actors[actor.id]!.present && snapshot.actors[actor.id]!.visible);
+  const shown = instances.filter(instance => snapshot.actors[instance.id]!.present && snapshot.actors[instance.id]!.visible);
   const lesions = Object.entries(snapshot.sites).filter(([, site]) => site.lesion);
   return <>
     <ul className="mm-actors">
-      {shown.map(definition => {
-        const state = snapshot.actors[definition.id]!;
+      {shown.map(({ id, definition, label }) => {
+        const state = snapshot.actors[id]!;
         const facts = [
           state.activity && <span key="a" className={`mm-chip mm-chip--${state.activity.state}`}>{state.activity.state}</span>,
           state.boundTo && <span key="b" className="mm-chip">bound to {describeTarget(state.boundTo)}</span>,
           ...state.modifications.map(modification => <span key={modification.id} className="mm-chip">{modification.label}{modification.site ? ` @ ${modification.site}` : ''}{modification.length ? ` ×${modification.length}` : ''}</span>),
           state.compartment && <span key="c" className="mm-chip mm-chip--muted">{compartments.get(state.compartment) ?? state.compartment}</span>,
         ].filter(Boolean);
-        return <li key={definition.id} className={selectedActor === definition.id ? 'is-selected' : ''} style={{ ['--mm-actor' as string]: definition.color ?? 'var(--mm-accent)' }}>
-          <strong><i aria-hidden="true" />{definition.label ?? definition.id}</strong>
+        return <li key={id} className={selectedActor === id ? 'is-selected' : ''} style={{ ['--mm-actor' as string]: definition.color ?? 'var(--mm-accent)' }}>
+          <strong><i aria-hidden="true" />{label}</strong>
           {definition.description && <p>{definition.description}</p>}
           {facts.length > 0 && <div className="mm-chips">{facts}</div>}
         </li>;

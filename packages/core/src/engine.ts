@@ -1,4 +1,5 @@
 import { builtinRegistry } from './actions';
+import { actorInstances } from './instances';
 import { ActionFailure, type ActionRegistry, type ApplyContext } from './registry';
 import type {
   ActionNode, ActionSpec, ActorState, MechanismDefinition, MechanismSnapshot, MechanismState, NucleicState, StateChange, TimedAction,
@@ -108,16 +109,16 @@ export function compileMechanism(input: unknown, options: CompileOptions = {}): 
 export function initialState(definition: MechanismDefinition): MechanismState {
   const actors: Record<string, ActorState> = {};
   const sites: MechanismState['sites'] = {};
-  for (const actor of definition.actors) {
-    actors[actor.id] = {
-      id: actor.id,
+  for (const { id, actor } of actorInstances(definition)) {
+    actors[id] = {
+      id,
       present: actor.initial?.present ?? true,
       visible: actor.initial?.visible ?? (actor.type === 'dna' || actor.type === 'rna'),
       ...(actor.compartment && { compartment: actor.compartment }),
       ...(actor.initial?.activity && { activity: { state: actor.initial.activity } }),
       modifications: [],
     };
-    for (const site of actor.sites ?? []) sites[`${actor.id}.${site.id}`] = {};
+    for (const site of actor.sites ?? []) sites[`${id}.${site.id}`] = {};
   }
   return { actors, sites };
 }

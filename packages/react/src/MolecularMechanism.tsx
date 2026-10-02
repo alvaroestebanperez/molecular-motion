@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import type { MechanismDefinition, MechanismSnapshot } from '@molecular-motion/core';
+import { instanceDefinition, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
 import { MechanismStage } from './MechanismStage';
 import { useMechanismPlayer } from './player';
 import { PlaybackControls } from './ui';
@@ -37,7 +37,7 @@ export function MolecularMechanism({
     setSelectedActor(actorId);
     onActorSelect?.(actorId, snapshot);
   };
-  const selected = selectedActor ? snapshot.definition.actors.find(actor => actor.id === selectedActor) : undefined;
+  const selected = selectedActor ? instanceDefinition(snapshot.definition, selectedActor) : undefined;
 
   return <section className={`mm-player ${className}`.trim()} style={style} aria-label={definition.mechanism.name}>
     <header className="mm-player__header" aria-live="polite">

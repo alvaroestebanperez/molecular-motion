@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.dev/schema/v4.json",
+  "$id": "https://molecular-motion.dev/schema/v3.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
   "required": [
@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": 4
+      "const": 3
     },
     "mechanism": {
       "type": "object",
@@ -68,11 +68,6 @@
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$"
-    },
-    "instance": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?$",
-      "description": "An actor id, or one of its copies: rad51#3."
     },
     "referenceIds": {
       "type": "array",
@@ -349,11 +344,6 @@
         "nucleic": {
           "$ref": "#/$defs/nucleic"
         },
-        "copies": {
-          "type": "integer",
-          "minimum": 2,
-          "description": "Number of copies; compiles to instances id#1 … id#n, each with its own state. Not allowed on dna/rna."
-        },
         "compartment": {
           "$ref": "#/$defs/id"
         },
@@ -487,15 +477,15 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$"
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
             }
           },
           "additionalProperties": false
@@ -517,11 +507,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -543,12 +533,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$"
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
             },
             "visible": {
               "type": "boolean"
@@ -592,11 +582,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "kind": {
               "type": "string",
@@ -641,11 +631,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "to": {
               "$ref": "#/$defs/id"
@@ -674,11 +664,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "product": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "compartment": {
               "$ref": "#/$defs/id"
@@ -703,11 +693,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -729,12 +719,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$"
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
             },
             "lesion": {
               "enum": [
@@ -763,12 +753,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$"
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
             }
           },
           "additionalProperties": false
@@ -791,12 +781,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
               "description": "Site with a break and a point coordinate (at)."
             },
             "length": {
@@ -825,12 +815,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
               "description": "Site with a point coordinate (at) where the 3′ end sits."
             },
             "length": {
@@ -865,12 +855,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
               "description": "Site with a coordinate; a span is the bubble itself."
             },
             "length": {
@@ -898,12 +888,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
               "description": "Site with a coordinate inside or at the edge of the bubble."
             }
           },
@@ -927,15 +917,15 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$"
+              "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)?$"
             }
           },
           "additionalProperties": false
@@ -957,11 +947,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -983,11 +973,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -1009,11 +999,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -1035,11 +1025,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -1061,11 +1051,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             }
           },
           "additionalProperties": false
@@ -1087,11 +1077,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "site": {
               "type": "string",
@@ -1121,11 +1111,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "site": {
               "type": "string",
@@ -1155,11 +1145,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "site": {
               "type": "string",
@@ -1189,11 +1179,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "length": {
               "type": "integer",
@@ -1220,11 +1210,11 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "actor": {
-              "$ref": "#/$defs/instance"
+              "$ref": "#/$defs/id"
             },
             "product": {
               "type": "string",
@@ -1254,12 +1244,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$"
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
             },
             "lesion": {
               "enum": [
@@ -1287,12 +1277,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$"
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
             }
           },
           "additionalProperties": false
@@ -1314,12 +1304,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$"
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
             }
           },
           "additionalProperties": false
@@ -1341,12 +1331,12 @@
               "description": "Duration in milliseconds (presentation only)."
             },
             "by": {
-              "$ref": "#/$defs/instance",
+              "$ref": "#/$defs/id",
               "description": "Causal agent: enzyme, ligand, drug, or sensor."
             },
             "target": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$"
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
             }
           },
           "additionalProperties": false

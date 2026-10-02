@@ -306,7 +306,7 @@ describe('nucleic-acid geometry (RFC 0004)', () => {
       nucleic: { length: 80, form: 'duplex', strands: { top: { label: 'Watson' }, bottom: {} } },
       sites: [{ id: 'break', at: 40 }, { id: 'oxog', at: 23, strand: 'bottom' }, { id: 'patch', span: [30, 42], strand: 'both' }, { id: 'free', position: { x: 10, y: 0 } }],
     }));
-    expect(definition.schemaVersion).toBe(3);
+    expect(definition.schemaVersion).toBe(4);
     expect(definition.actors[0]!.nucleic).toEqual({ length: 80, form: 'duplex', strands: { top: { label: 'Watson' }, bottom: {} } });
     expect(definition.actors[0]!.sites!.map(site => site.at ?? site.span ?? site.position)).toEqual([40, 23, [30, 42], { x: 10, y: 0 }]);
   });
