@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Status: experimental](https://img.shields.io/badge/status-experimental-f59e0b.svg)](#roadmap)
 
-[Demo](https://alvaroestebanperez.github.io/molecular-motion/) · [Visual language](https://alvaroestebanperez.github.io/molecular-motion/#/visual-language) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
+[Demo](https://molecular-motion.alvaroesteban.dev/) · [Visual language](https://molecular-motion.alvaroesteban.dev/#/visual-language) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -20,7 +20,7 @@ Molecular Motion turns a YAML or JSON description of **actors, molecular sites, 
 
 ## Demo
 
-The [demo](https://alvaroestebanperez.github.io/molecular-motion/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [visual language](https://alvaroestebanperez.github.io/molecular-motion/#/visual-language) documents the reusable programmatic primitives for proteins, molecules, nucleic acids, lesions, modifications, membranes, compartments and molecular events. The [playground](https://alvaroestebanperez.github.io/molecular-motion/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
+The [demo](https://molecular-motion.alvaroesteban.dev/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [visual language](https://molecular-motion.alvaroesteban.dev/#/visual-language) documents the reusable programmatic primitives for proteins, molecules, nucleic acids, lesions, modifications, membranes, compartments and molecular events. The [playground](https://molecular-motion.alvaroesteban.dev/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
@@ -217,7 +217,7 @@ framework-neutral scene graph     @molecular-motion/svg
 | `@molecular-motion/react` | Player state, controls, selection, autoplay, React lifecycle | Yes |
 | `@molecular-motion/demo` | Editable playground and integration example | Yes |
 
-Every visual frame is derived by replaying actions from the initial definition to the selected step. This event-sourced model makes seeking deterministic and keeps scientific state independent from transient animation state.
+During compilation, actions are applied once in step order and an immutable snapshot is stored at each step boundary. Seeking retrieves the precomputed snapshot in O(1), and the renderer derives the scene from that state. This makes navigation deterministic and keeps scientific state independent from transient animation state.
 
 ### Vocabulary
 

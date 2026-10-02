@@ -16,7 +16,7 @@ const EXAMPLES: Example[] = [parpSource, hrSource].map(source => {
   return { id: definition.mechanism.id, source, definition };
 });
 
-// ---- Routing (hash based so it works on GitHub Pages) ----
+// ---- Hash routing ----
 
 type Route = { page: 'mechanism'; id: string } | { page: 'playground' } | { page: 'visual-language' };
 

@@ -1,3 +1,4 @@
+import { hashString } from './primitives/shared';
 import type { Activity, ActorDefinition, ActorType, LesionType, MechanismSnapshot, Modification, Point } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, type ContactShape, type FirstContact, type ProteinSphere } from './primitives';
 
@@ -82,11 +83,7 @@ const SIDE_GAP = 8;
 
 const isNucleic = (type: ActorType) => type === 'dna' || type === 'rna';
 
-export function hashString(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index++) hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
-  return hash >>> 0;
-}
+export { hashString } from './primitives/shared';
 
 export const defaultColor = (id: string) => PALETTE[hashString(id) % PALETTE.length]!;
 export const chainReach = (length: number) => Math.min(length, 16) * 12;
