@@ -122,6 +122,22 @@ export interface Modification {
   length?: number;
 }
 
+/** Nucleotides of one strand, as an interbase interval [from, to). */
+export interface StrandRange { strand: StrandId; from: number; to: number }
+
+/**
+ * Strand-level state of a dna/rna actor (RFC 0004 §4). Ranges are normalised: per strand sorted and
+ * merged, top before bottom. Single-stranded regions and base pairs are derived, never stored.
+ */
+export interface NucleicState {
+  /** Nucleotides absent from one strand (resected, excised gap). */
+  missing: StrandRange[];
+  /** Nucleotides synthesised during the mechanism. */
+  nascent: StrandRange[];
+  /** Regions where both strands are present but unpaired (bubble). */
+  open: Array<{ from: number; to: number }>;
+}
+
 export interface ActorState {
   id: string;
   present: boolean;
@@ -130,6 +146,8 @@ export interface ActorState {
   boundTo?: string;
   activity?: { state: Activity; by?: string };
   modifications: Modification[];
+  /** dna/rna only; absent while the molecule is intact. */
+  nucleic?: NucleicState;
 }
 
 export interface SiteState { lesion?: LesionType }

@@ -1,7 +1,7 @@
 import { builtinRegistry } from './actions';
 import { ActionFailure, type ActionRegistry, type ApplyContext } from './registry';
 import type {
-  ActionNode, ActionSpec, ActorState, MechanismDefinition, MechanismSnapshot, MechanismState, StateChange, TimedAction,
+  ActionNode, ActionSpec, ActorState, MechanismDefinition, MechanismSnapshot, MechanismState, NucleicState, StateChange, TimedAction,
 } from './types';
 import { MechanismValidationError, validateMechanism } from './validate';
 
@@ -138,13 +138,17 @@ function applyContext(state: MechanismState, definition: MechanismDefinition): A
   };
 }
 
-/** Flatten state into comparable keys; modifications are keyed by id so diffs are stable. */
+/**
+ * Flatten state into comparable keys. Modifications are keyed by id so diffs are stable; strand
+ * state is keyed per list (`actors.dna.nucleic.missing`) so parallel branches conflict per list.
+ */
 function flatten(state: MechanismState): Map<string, unknown> {
   const out = new Map<string, unknown>();
   for (const actor of Object.values(state.actors)) {
     for (const [key, value] of Object.entries(actor)) {
       if (key === 'id' || value === undefined) continue;
       if (key === 'modifications') for (const modification of value as ActorState['modifications']) out.set(`actors.${actor.id}.modifications.${modification.id}`, modification);
+      else if (key === 'nucleic') for (const [list, ranges] of Object.entries(value as NucleicState)) { if (ranges.length) out.set(`actors.${actor.id}.nucleic.${list}`, ranges); }
       else out.set(`actors.${actor.id}.${key}`, value);
     }
   }

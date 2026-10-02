@@ -10,4 +10,8 @@ export { ACTIVITIES, LESIONS, builtinActions, builtinRegistry } from './actions'
 export { COMPARTMENT_KINDS, STANDARD_COMPARTMENTS } from './compartments';
 export { toJsonSchema } from './schema';
 export type * from './types';
-export { DEFAULT_NUCLEIC_LENGTH, isNucleicActor, nucleicForm, nucleicLength, siteInterval } from './nucleic';
+export {
+  DEFAULT_NUCLEIC_LENGTH, isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, siteInterval, strandIntervals,
+} from './nucleic';
+export { addInterval, intervalAt, normalizeIntervals, overlapsInterval, subtractInterval } from './intervals';
+export type { Interval } from './intervals';
