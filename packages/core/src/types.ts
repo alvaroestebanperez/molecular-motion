@@ -39,6 +39,13 @@ export interface ActorSite {
 
 export interface InterfaceDefinition { id: string; valence?: number }
 
+/**
+ * Nucleotides one copy covers on a nucleic acid, and what the covered strand(s) must be (RFC 0005 §5):
+ * `single` needs its strand present and the partner missing, `duplex` both present and paired, `any`
+ * only the occupied strand present. Authored data: the core knows no protein's footprint.
+ */
+export interface FootprintDefinition { length: number; form?: FootprintForm }
+
 export interface ActorDefinition {
   id: string;
   type: ActorType;
@@ -51,6 +58,8 @@ export interface ActorDefinition {
   nucleic?: NucleicDefinition;
   /** Binding interfaces (RFC 0005 §4.1); `valence` (default 1) caps simultaneous partners per instance. */
   interfaces?: InterfaceDefinition[];
+  /** Nucleotides covered by one copy when it occupies a nucleic acid (`occupy`, `coat`). */
+  footprint?: FootprintDefinition;
   /**
    * Number of copies (RFC 0005 §3). `copies: n` compiles to instances `id#1 … id#n`, each with its own
    * state; without it the actor is one instance whose id is the actor id. Not allowed on dna/rna.
@@ -173,11 +182,24 @@ export interface InteractionEnd { instance: string; interface?: string; site?: s
  */
 export interface Interaction { id: string; ends: [InteractionEnd, InteractionEnd]; symmetric?: boolean }
 
+export type FootprintForm = 'single' | 'duplex' | 'any';
+export type Orientation = 'forward' | 'reverse';
+
 /**
- * An instance resting on a nucleic acid (RFC 0005 §5), optionally at a declared site. Spans,
- * strands, footprints and orientation arrive with occupancy proper; this is the record they extend.
+ * An instance resting on a nucleic acid (RFC 0005 §5). A *point* occupancy (legacy `bind` to a
+ * molecule or site) claims no nucleotides. A *span* occupancy (`occupy`, `coat`) covers `span` on
+ * `strand`, oriented relative to top 5′→3′; only span occupancies take part in occupancy rules.
+ * Records are flat and independent: exclusivity is a validation rule, not part of the storage.
  */
-export interface Occupancy { id: string; instance: string; acid: string; site?: string }
+export interface Occupancy {
+  id: string;
+  instance: string;
+  acid: string;
+  site?: string;
+  span?: { from: number; to: number };
+  strand?: SiteStrand;
+  orientation?: Orientation;
+}
 
 export interface MechanismState {
   actors: Record<string, ActorState>;

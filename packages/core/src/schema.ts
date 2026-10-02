@@ -14,6 +14,8 @@ function fieldSchema(spec: FieldSpec): JsonSchema {
   const description = spec.description ? { description: spec.description } : {};
   switch (spec.kind) {
     case 'actor': return { $ref: '#/$defs/instance', ...description };
+    case 'actors': return { type: 'array', minItems: 1, uniqueItems: true, items: { $ref: '#/$defs/instance' }, ...description };
+    case 'interval': return { type: 'array', prefixItems: [{ type: 'integer', minimum: 0 }, { type: 'integer', minimum: 1 }], minItems: 2, maxItems: 2, ...description };
     case 'compartment': return { $ref: '#/$defs/id', ...description };
     case 'reference': return { type: 'string', pattern: REFERENCE, ...description };
     case 'site': return { type: 'string', pattern: SITE, ...description };
@@ -153,6 +155,11 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
             type: 'array',
             description: 'Binding interfaces; valence (default 1) caps simultaneous partners per instance.',
             items: { type: 'object', required: ['id'], additionalProperties: false, properties: { id: { $ref: '#/$defs/id' }, valence: { type: 'integer', minimum: 1 } } },
+          },
+          footprint: {
+            type: 'object', required: ['length'], additionalProperties: false,
+            description: 'Nucleotides one copy covers when it occupies a nucleic acid, and the form the covered strands must have.',
+            properties: { length: { type: 'integer', minimum: 1 }, form: { enum: ['single', 'duplex', 'any'] } },
           },
           copies: { type: 'integer', minimum: 2, description: 'Number of copies; compiles to instances id#1 … id#n, each with its own state. Not allowed on dna/rna.' },
           compartment: { $ref: '#/$defs/id' },

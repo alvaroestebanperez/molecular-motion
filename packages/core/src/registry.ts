@@ -4,12 +4,16 @@ import type { ActionSpec, ActorState, MechanismDefinition, MechanismState, Prese
 
 interface FieldOptions { required?: boolean; description?: string }
 export type FieldSpec =
-  | (FieldOptions & { kind: 'actor' | 'reference' | 'site' | 'compartment' | 'string' | 'boolean' })
+  | (FieldOptions & { kind: 'actor' | 'actors' | 'reference' | 'site' | 'compartment' | 'string' | 'boolean' | 'interval' })
   | (FieldOptions & { kind: 'integer'; min?: number })
   | (FieldOptions & { kind: 'enum'; values: readonly string[] });
 
 export const field = {
   actor: (options: FieldOptions = {}): FieldSpec => ({ kind: 'actor', ...options }),
+  /** A non-empty list of distinct instances. */
+  actors: (options: FieldOptions = {}): FieldSpec => ({ kind: 'actors', ...options }),
+  /** An interbase interval `[from, to]` with integers 0 ≤ from < to. */
+  interval: (options: FieldOptions = {}): FieldSpec => ({ kind: 'interval', ...options }),
   reference: (options: FieldOptions = {}): FieldSpec => ({ kind: 'reference', ...options }),
   site: (options: FieldOptions = {}): FieldSpec => ({ kind: 'site', ...options }),
   compartment: (options: FieldOptions = {}): FieldSpec => ({ kind: 'compartment', ...options }),

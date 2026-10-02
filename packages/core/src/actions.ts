@@ -1,13 +1,16 @@
 import {
-  addInteraction, addOccupancy, boundTo, detachAnonymous, interactionId, interfaceUse, partnersOf, releaseAll,
+  addInteraction, addOccupancy, boundTo, detachAnonymous, interactionId, interfaceUse, occupancyId, partnersOf, releaseAll,
 } from './bindings';
+import { defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
 import { actorIdOf, instanceDefinition } from './instances';
 import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
   isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
 } from './nucleic';
 import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
-import type { ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, StrandId } from './types';
+import type {
+  ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId,
+} from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
 export const LESIONS: readonly LesionType[] = ['single-strand-break', 'nick', 'double-strand-break', 'base-damage', 'abasic-site', 'adduct'];
@@ -44,6 +47,7 @@ export const bind = definePrimitive<BindAction>({
     ctx.requirePresent(targetInstance);
     actor.visible = true;
     if (isNucleicActor(instanceDefinition(ctx.definition, targetInstance)!)) {
+      if (state.occupancy[occupancyId(actor.id, targetInstance)]?.span) ctx.fail(`"${actor.id}" already occupies ${targetInstance}; vacate it first`);
       detachAnonymous(state, actor.id);
       addOccupancy(state, actor.id, targetInstance, site);
       return;
@@ -80,6 +84,122 @@ export const unbind = definePrimitive<UnbindAction>({
       && (!action.interface || partner.interface === action.interface));
     if (!matches.length) ctx.fail(`"${action.actor}" is not bound${action.target ? ` to "${action.target}"` : ''}${action.interface ? ` through "${action.interface}"` : ''}`);
     for (const match of matches) delete (match.via === 'interaction' ? state.interactions : state.occupancy)[match.id];
+  },
+});
+
+// ---- Occupancy (RFC 0005 §5): instances claiming nucleotides on a nucleic acid ----
+
+/** Static checks shared by occupy and coat: the target is a nucleic acid, optionally one of its sites. */
+function requireOccupancyTarget(target: string, ctx: { definition: MechanismDefinition; issue(message: string): void }) {
+  const acid = instanceDefinition(ctx.definition, actorOf(target));
+  if (acid && !isNucleicActor(acid)) ctx.issue(`"${acid.id}" is not a nucleic acid; bind to it instead`);
+}
+
+/** The molecule, its optional site and its length, for an occupancy target `acid` or `acid.site`. */
+function occupancyTarget(target: string, ctx: ApplyContext) {
+  const [acidId, siteId] = target.split('.') as [string, string | undefined];
+  ctx.requirePresent(acidId);
+  const acid = instanceDefinition(ctx.definition, acidId)!;
+  return { acid: acidId, site: siteId ? acid.sites!.find(item => item.id === siteId)! : undefined, length: nucleicLength(acid) };
+}
+
+interface OccupyAction extends ActionSpec { actor: string; target: string; span?: [number, number]; strand?: SiteStrand; orientation?: Orientation }
+export const occupy = definePrimitive<OccupyAction>({
+  type: 'occupy',
+  description: 'Rest one instance on a nucleic acid, covering a span of nucleotides on a strand.',
+  fields: {
+    actor: field.actor({ required: true }),
+    target: field.reference({ required: true, description: 'The nucleic acid, or one of its sites; a span site gives the span, a point site anchors the footprint.' }),
+    span: field.interval({ description: 'Nucleotides covered, overriding the site and the footprint length.' }),
+    strand: field.enum(['top', 'bottom', 'both'], { description: 'Defaults to the strand the footprint form allows.' }),
+    orientation: field.enum(['forward', 'reverse'], { description: 'Relative to top 5′→3′. At a point site, forward covers [at, at + length), reverse [at − length, at).' }),
+  },
+  presentation: { verb: 'occupies' },
+  validate(action, ctx) {
+    requireOccupancyTarget(action.target, ctx);
+    const actor = instanceDefinition(ctx.definition, action.actor);
+    const site = locate(action.target, ctx.definition)?.site;
+    if (!action.span && !site?.span && !actor?.footprint) ctx.issue(`"${action.actor}" has no footprint: give a span, or a site with a span`);
+    if (!action.span && site && !siteInterval(site)) ctx.issue(`site "${action.target}" has no coordinate; a position is layout only`);
+    if (!action.span && !site) ctx.issue('name a site or give a span: a whole molecule is not a span');
+  },
+  apply(state, action, ctx) {
+    const actor = ctx.requirePresent(action.actor);
+    const { acid, site, length } = occupancyTarget(action.target, ctx);
+    if (state.occupancy[occupancyId(actor.id, acid)]) ctx.fail(`"${actor.id}" is already on ${acid}; vacate it first`);
+    const footprint = instanceDefinition(ctx.definition, actor.id)!.footprint;
+    let span: { from: number; to: number };
+    if (action.span) span = { from: action.span[0], to: action.span[1] };
+    else if (site!.span) span = { from: site!.span[0], to: site!.span[1] };
+    else span = action.orientation === 'reverse' ? { from: site!.at! - footprint!.length, to: site!.at! } : { from: site!.at!, to: site!.at! + footprint!.length };
+    if (!action.span && footprint && span.to - span.from !== footprint.length) {
+      ctx.fail(`"${actor.id}" covers ${footprint.length} nt but "${action.target}" spans ${span.to - span.from}; give a span, or use coat for several copies`);
+    }
+    const nucleic = readNucleicState(ctx.actor(acid));
+    const strand = action.strand ?? defaultStrand(nucleic, span, occupantForm(ctx, actor.id), ctx.fail);
+    placeOccupancy(state, ctx, {
+      id: occupancyId(actor.id, acid), instance: actor.id, acid, ...(site && { site: site.id }), span, strand,
+      ...(action.orientation && { orientation: action.orientation }),
+    }, length);
+    actor.visible = true;
+  },
+});
+
+interface CoatAction extends ActionSpec { actors: string[]; target: string; span?: [number, number]; strand?: SiteStrand; orientation?: Orientation }
+export const coat = definePrimitive<CoatAction>({
+  type: 'coat',
+  description: 'Place the listed instances side by side along a span, each covering its footprint, from one end.',
+  fields: {
+    actors: field.actors({ required: true, description: 'Instances in placement order. Only these are placed: nothing picks free copies.' }),
+    target: field.reference({ required: true, description: 'The nucleic acid, or a site with a span.' }),
+    span: field.interval({ description: 'Span to coat, overriding the site.' }),
+    strand: field.enum(['top', 'bottom', 'both'], { description: 'Defaults to the strand the footprint form allows.' }),
+    orientation: field.enum(['forward', 'reverse'], { description: 'Forward fills from the span start towards increasing coordinates, reverse from its end.' }),
+  },
+  presentation: { verb: 'coats' },
+  validate(action, ctx) {
+    requireOccupancyTarget(action.target, ctx);
+    if (!action.span && !locate(action.target, ctx.definition)?.site.span) ctx.issue('coat needs a span: a site with a span, or span');
+    for (const instance of action.actors) {
+      if (instanceDefinition(ctx.definition, instance) && !instanceDefinition(ctx.definition, instance)!.footprint) ctx.issue(`"${instance}" has no footprint to coat with`);
+    }
+  },
+  apply(state, action, ctx) {
+    const { acid, site, length } = occupancyTarget(action.target, ctx);
+    const span = action.span ? { from: action.span[0], to: action.span[1] } : { from: site!.span![0], to: site!.span![1] };
+    const sizes = action.actors.map(instance => instanceDefinition(ctx.definition, instance)!.footprint!.length);
+    const total = sizes.reduce((sum, size) => sum + size, 0);
+    if (total > span.to - span.from) ctx.fail(`${action.actors.length} instances need ${total} nt but ${acid} ${span.from}–${span.to} has ${span.to - span.from}`);
+    let cursor = action.orientation === 'reverse' ? span.to : span.from;
+    action.actors.forEach((instance, index) => {
+      const actor = ctx.requirePresent(instance);
+      if (state.occupancy[occupancyId(instance, acid)]) ctx.fail(`"${instance}" is already on ${acid}; vacate it first`);
+      const size = sizes[index]!;
+      const covered = action.orientation === 'reverse' ? { from: cursor - size, to: cursor } : { from: cursor, to: cursor + size };
+      cursor = action.orientation === 'reverse' ? covered.from : covered.to;
+      const strand = action.strand ?? defaultStrand(readNucleicState(ctx.actor(acid)), covered, occupantForm(ctx, instance), ctx.fail);
+      placeOccupancy(state, ctx, {
+        id: occupancyId(instance, acid), instance, acid, ...(site && { site: site.id }), span: covered, strand,
+        ...(action.orientation && { orientation: action.orientation }),
+      }, length);
+      actor.visible = true;
+    });
+  },
+});
+
+interface VacateAction extends ActionSpec { actor: string; target?: string }
+export const vacate = definePrimitive<VacateAction>({
+  type: 'vacate',
+  description: 'Lift an instance off a nucleic acid.',
+  fields: { actor: field.actor({ required: true }), target: field.reference({ description: 'The nucleic acid, when the instance occupies more than one.' }) },
+  presentation: { verb: 'leaves' },
+  validate(action, ctx) { if (action.target) requireOccupancyTarget(action.target, ctx); },
+  apply(state, action, ctx) {
+    const acid = action.target?.split('.')[0];
+    const held = Object.values(state.occupancy).filter(item => item.instance === action.actor && (!acid || item.acid === acid));
+    if (!held.length) ctx.fail(`"${action.actor}" is not on ${acid ?? 'any nucleic acid'}`);
+    if (held.length > 1) ctx.fail(`"${action.actor}" is on several nucleic acids; name one with target`);
+    delete state.occupancy[held[0]!.id];
   },
 });
 
@@ -312,6 +432,7 @@ export const resect = definePrimitive<ResectAction>({
       state.nascent = withStrandIntervals(state.nascent, strand, subtractInterval(strandIntervals(state.nascent, strand), range));
     }
     writeNucleicState(actor, state);
+    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
   },
 });
 
@@ -356,6 +477,7 @@ export const extend = definePrimitive<ExtendAction>({
     state.missing = withStrandIntervals(state.missing, strand, subtractInterval(missingOn(state, strand), range));
     state.nascent = withStrandIntervals(state.nascent, strand, addInterval(nascentRun(strand), range));
     writeNucleicState(actor, state);
+    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
   },
 });
 
@@ -386,6 +508,7 @@ export const unwind = definePrimitive<UnwindAction>({
     if (overlapsInterval(state.open, range)) ctx.fail(`${range.from}–${range.to} is already unwound`);
     state.open = addInterval(state.open, range);
     writeNucleicState(actor, state);
+    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
   },
 });
 
@@ -403,6 +526,7 @@ export const anneal = definePrimitive<AnnealAction>({
     if (!bubble) ctx.fail(`no unwound region at "${action.target}" to anneal`);
     state.open = state.open.filter(region => region !== bubble);
     writeNucleicState(actor, state);
+    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
   },
 });
 
@@ -474,6 +598,7 @@ const siteLesion = (type: string, lesion: LesionType | 'none', verb: string, cho
 export const builtinActions = [
   bind, unbind, setState, modify, translocate, synthesize, degrade, cleave, ligate,
   resect, extend, unwind, anneal,
+  occupy, coat, vacate,
   recruit,
   visibility('show', true, 'shows'),
   visibility('hide', false, 'hides'),

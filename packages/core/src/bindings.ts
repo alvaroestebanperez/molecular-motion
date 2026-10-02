@@ -41,7 +41,8 @@ export function addOccupancy(state: BindingState, instance: string, acid: string
 export function anonymousAttachment(state: BindingState, instance: string): { kind: 'interaction' | 'occupancy'; id: string } | undefined {
   const edge = Object.values(state.interactions).find(item => !item.symmetric && item.ends[0].instance === instance && !item.ends[0].interface);
   if (edge) return { kind: 'interaction', id: edge.id };
-  const occupancy = Object.values(state.occupancy).find(item => item.instance === instance);
+  // Only a point occupancy (legacy bind) is an anonymous attachment; span occupancy leaves with `vacate`.
+  const occupancy = Object.values(state.occupancy).find(item => item.instance === instance && !item.span);
   return occupancy && { kind: 'occupancy', id: occupancy.id };
 }
 
@@ -91,13 +92,15 @@ export function partnersOf(state: BindingState, instance: string): Partner[] {
 
 /**
  * The one partner a legacy view would show (what v3 called `boundTo`): what this instance binds, not
- * what binds it. The anonymous attachment when there is one, otherwise its first outgoing or
- * symmetric edge by id. Derived on demand, never stored.
+ * what binds it. The anonymous attachment when there is one, then the nucleic acid it occupies, then
+ * its first outgoing or symmetric edge by id. Derived on demand, never stored.
  */
 export function primaryPartner(state: BindingState, instance: string): string | undefined {
   const attachment = anonymousAttachment(state, instance);
   if (attachment?.kind === 'occupancy') { const item = state.occupancy[attachment.id]!; return reference(item.acid, item.site); }
   if (attachment) { const target = state.interactions[attachment.id]!.ends[1]; return reference(target.instance, target.site); }
+  const resting = Object.values(state.occupancy).sort((a, b) => a.id < b.id ? -1 : 1).find(item => item.instance === instance);
+  if (resting) return reference(resting.acid, resting.site);
   const edge = Object.values(state.interactions).sort((a, b) => a.id < b.id ? -1 : 1)
     .find(item => item.ends[0].instance === instance || (item.symmetric && item.ends[1].instance === instance));
   if (!edge) return undefined;
