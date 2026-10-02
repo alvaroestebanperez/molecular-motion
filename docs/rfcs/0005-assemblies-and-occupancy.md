@@ -1,6 +1,6 @@
 # RFC 0005 — Actor instances, interaction graph, and nucleic-acid occupancy
 
-- **Status:** draft. The decisions in §9 are open and must be settled before implementation.
+- **Status:** accepted. Decisions in §9.
 - **Builds on:** [RFC 0001](0001-schema-v2.md) §9.2, [RFC 0004](0004-nucleic-acid-geometry.md)
 - **Roadmap item:** *Complex assembly, stoichiometry, and repeated actor instances*
 
@@ -96,7 +96,7 @@ interface Interaction {
 ### 4.2 What stays derived
 
 - **Complexes** are the connected components of the graph (D6). `translocate { includeBound: true }` becomes "move the component". `degrade` removes every edge touching the instance, as today, but now over the graph.
-- **`ActorState.boundTo` leaves the stored state** in v4. A helper (`partnersOf(snapshot, id)`) and a derived "primary partner" for legacy UI replace it (D5).
+- **`state.interactions` is the only source of truth** for bindings (D5). `ActorState.boundTo` leaves the state *and* the snapshots. No derived copy is stored or exposed as a field. Consumers ask helpers (`partnersOf(snapshot, instance)`, `componentOf(snapshot, instance)`), which compute from the edges on demand.
 
 ## 5. Spatial occupancy on nucleic acids
 
@@ -123,7 +123,7 @@ footprint:
 Validation is generic and uses RFC 0004 state:
 
 - The span must lie inside the molecule and match `footprint.length`. A `form: single` occupant needs its strand present and its partner `missing` across the span. A `form: duplex` occupant needs both strands present and no `open` region. `any` needs only the occupied strand present.
-- **Occupancy is exclusive per strand.** Two occupancies may not cover the same nucleotide on the same strand. `both` counts as both strands.
+- **Occupancy is exclusive per strand: a validation rule, not a storage constraint** (D10). `state.occupancy` is a flat record of independent entries: no per-strand slots, no interval index that assumes disjointness, no "occupant at position" map. Exclusivity is one named check (`occupancyConflicts`) run when an occupancy is added. Relaxing it later (stacking, compatible partners) means changing that rule, not the state.
 - RFC 0004 actions respect occupancy. `resect`, `unwind`, and `extend` fail across occupied nucleotides whose required form they would break. As in RFC 0004, they never displace occupants silently: displacement is an explicit `vacate`.
 
 **Actions** (names provisional, D7):
@@ -145,7 +145,9 @@ Validation is generic and uses RFC 0004 state:
 | **RPA → RAD51 on the 3′ overhang** | `rpa` ×3, `rad51` ×6, `brca2` | `brca2`–`rad51#k` (mediator); `rad51#k.protomer`–`rad51#k+1.protomer` | `coat` RPA (form single); `vacate` RPA one by one while RAD51 copies `occupy`. Every step is explicit |
 | **EGFR dimerization** | `egfr` ×2, `egf` ×2 | `egf#i`–`egfr#i.ligand`; `egfr#1.dimer`–`egfr#2.dimer`; trans-autophosphorylation `phosphorylate egfr#2 by egfr#1` | none (membrane, compartments) |
 | **STING activation** | `sting` ×4, `cgamp` | `sting#1.dimer`–`sting#2.dimer`; cGAMP edges to *both* protomers of a dimer (pocket at the interface); `sting.oligo` edges between dimers | none. `translocate` ER→Golgi moves the whole component |
-| **Nucleosome** | Either one `complex` actor `nucleosome` (footprint 147, form duplex) or 8 histone instances with edges (D8) | Octamer edges if instances are used | One duplex occupancy of 147 bp. Wrapping is a renderer decision |
+| **Nucleosome** *(future, not a v4 validation case)* | Histone instances (H2A, H2B, H3, H4 ×2) | Octamer edges; the nucleosome is the derived component, like any other complex | Occupancies held by histone instances on the duplex. Wrapping is a renderer decision. **No stand-in `complex` actor with a 147-bp footprint** (D8) |
+
+RFC 0005 is validated on RPA→RAD51, EGFR dimerization and STING. The nucleosome stays a case the design must be able to absorb without new concepts (D8).
 
 **Explicitly out of scope:** strand invasion, D-loops, Holliday junctions, and any pairing of two nucleic-acid molecules. Occupancy is between a protein instance and *one* nucleic acid. Nothing here may be used to fake a second molecule pairing with the first.
 
@@ -162,30 +164,31 @@ New kinds of state (`instances`, `interactions`, `occupancy`), together with the
 
 - **v3 → v4 is automatic.** Actors keep a single instance with id = actor id. `bind` to an actor becomes an anonymous edge. `bind` to a site becomes a point occupancy. No document needs editing.
 - **The regression is in place before any code changes**, as in RFC 0004: SHA-256 of every step's full and compact SVG for the frozen v2 fixtures *and* the current v3 examples. Both must stay byte-identical through the migration PR.
-- **Snapshot API change.** `snapshot.actors` becomes `snapshot.instances` (or keeps its name with instance keys; D5). `boundTo` is replaced by helpers. React's "bound to" chip reads the helper. This is the one breaking change for consumers, and it ships with the migration PR.
+- **Snapshot API change.** Per-instance state is keyed by instance id. `boundTo` disappears and the helpers over `interactions` replace it. React's "bound to" chip reads a helper. This is the one breaking change for consumers, and it ships with the interaction-graph PR.
+- **A semantic baseline locks the meaning, not just the pixels.** PR 0 records, per step, a readable projection (presence, visibility, compartment, activity, modifications, binding partner, lesions, strand state) from the v3 API. Later PRs rebuild the same projection from the v4 API (partner from `interactions`, occupancy at a site as "bound to the site") and must match it exactly.
 
 ## 9. Open decisions
 
-| # | Decision | Options | Recommendation |
+| # | Decision | Options | Outcome |
 |---|---|---|---|
-| **D1** | Copies | (a) `copies: n` → `id#1…n`; (b) count only; (c) both, with count as a presentation badge | **(a)** now. Add a presentation badge later if baths of identical molecules need it |
-| **D2** | Instance lifecycle | (a) static pool declared up front; (b) dynamic creation (`spawn`) | **(a)**: fixed key set, pure seeking, simple diffs. `present: false` covers "not yet there" |
-| **D3** | Acting on many copies | (a) one instance per action; author writes N actions (in `parallel`); (b) list fields (`actors: [...]`) applied atomically by the primitive; (c) selectors/ranges (`rad51#1..6`, `rad51#*`) | **(b)** for occupancy (`coat`) and **(a)** elsewhere. Defer ranges: they are syntax, not semantics, and can desugar to (b) later. No "next free copies" magic |
-| **D4** | Binding representation | (a) `boundTo: string[]`; (b) edges with optional interfaces in `state.interactions` | **(b)**: stored once, interfaces and valence, per-edge diff keys |
-| **D5** | Legacy `boundTo` and snapshot shape | (a) remove from state and expose helpers; (b) keep as a derived read-only field in snapshots | **(a)**, with a `primaryPartner()` helper for UIs. A derived field in snapshots is duplicated state by another name |
-| **D6** | Complexes | (a) derived connected components; (b) declared complex entities with names | **(a)**. Named complexes can later be a *label* over a component, never stored membership |
-| **D7** | Protein–DNA binding | (a) always occupancy (bind to a site → occupancy); (b) an edge to a site *plus* optional occupancy | **(a)**: one concept for "on DNA", and edges stay instance-to-instance |
-| **D8** | Who holds an occupancy | (a) one instance (a multi-protein unit that sits on DNA as one, such as a nucleosome, is one `complex` actor with a footprint); (b) a whole component holds one occupancy | **(a)** now. The histone composition can come later as instances plus edges, with occupancy still held by one designated instance |
-| **D9** | Footprint | (a) on the definition (`length`, `form`); (b) on each `occupy` action | **(a)**, overridable per action by an explicit `span`. Copies of one actor behave alike |
-| **D10** | Occupancy overlap | (a) exclusive per strand; (b) declared stacking/compatibility between definitions | **(a)** now. Compatibility rules are a later extension |
-| **D11** | Orientation | (a) semantic (`forward`/`reverse` on occupancy, relative to top 5′→3′); (b) renderer only | **(a)** on occupancy only, because filament polarity is biology. Free-space rotation stays a renderer matter |
-| **D12** | Version | (a) `schemaVersion: 4` with automatic v3 → v4; (b) additive fields under v3 | **(a)**, following RFC 0001 §9.1 as RFC 0004 did |
+| **D1** | Copies | (a) `copies: n` → `id#1…n`; (b) count only; (c) both, with count as a presentation badge | **(a)** *(accepted)* |
+| **D2** | Instance lifecycle | (a) static pool declared up front; (b) dynamic creation (`spawn`) | **(a)** *(accepted)* |
+| **D3** | Acting on many copies | (a) one instance per action; author writes N actions (in `parallel`); (b) list fields (`actors: [...]`) applied atomically by the primitive; (c) selectors/ranges (`rad51#1..6`, `rad51#*`) | **(b)** for occupancy (`coat`), **(a)** elsewhere; ranges deferred; no "next free copies" *(accepted)* |
+| **D4** | Binding representation | (a) `boundTo: string[]`; (b) edges with optional interfaces in `state.interactions` | **(b)** *(accepted)* |
+| **D5** | Legacy `boundTo` and snapshot shape | (a) remove from state and expose helpers; (b) keep as a derived read-only field in snapshots | **`state.interactions` is the only source of truth** *(accepted)*. No `boundTo` in state or snapshots, not even derived. Helpers compute partners and components on demand |
+| **D6** | Complexes | (a) derived connected components; (b) declared complex entities with names | **(a)** *(accepted)* |
+| **D7** | Protein–DNA binding | (a) always occupancy (bind to a site → occupancy); (b) an edge to a site *plus* optional occupancy | **(a)** *(accepted)* |
+| **D8** | Who holds an occupancy | (a) one instance (a multi-protein unit that sits on DNA as one, such as a nucleosome, is one `complex` actor with a footprint); (b) a whole component holds one occupancy | **Neither, for now** *(accepted)*. No stand-in `complex` actor with a footprint. The nucleosome is a future case: once its composition is expressible, it is the component derived from histone instances and their interactions, like any complex, with occupancy held by those instances. v4 is validated on RPA→RAD51, EGFR and STING |
+| **D9** | Footprint | (a) on the definition (`length`, `form`); (b) on each `occupy` action | **(a)** *(accepted)* |
+| **D10** | Occupancy overlap | (a) exclusive per strand; (b) declared stacking/compatibility between definitions | **(a), as a validation rule only** *(accepted)*. Flat occupancy records; exclusivity is one replaceable check, never encoded in the storage |
+| **D11** | Orientation | (a) semantic (`forward`/`reverse` on occupancy, relative to top 5′→3′); (b) renderer only | **(a)** *(accepted)* |
+| **D12** | Version | (a) `schemaVersion: 4` with automatic v3 → v4; (b) additive fields under v3 | **(a)** *(accepted)* |
 
 ## 10. Implementation plan (after the decisions)
 
 | PR | Scope | Output change |
 |---|---|---|
-| 0. Regression | SHA-256 renders of the v2 fixtures and current v3 examples | none |
+| 0. Baseline | Frozen v3 fixtures; SHA-256 of full, compact and ghosted renders for v2 and v3 fixtures; semantic per-step projection | none |
 | 1. Instances + v4 | `copies`, instance expansion, per-instance state, v3 → v4 migration, scene keyed by instance and seeded by definition | none (byte-identical) |
 | 2. Interaction graph | `state.interactions`, interfaces, valence, `bind`/`unbind`/`degrade`/`translocate` over edges, helpers, React chip | none |
 | 3. Occupancy | `state.occupancy`, footprints, `occupy`/`vacate`/`coat`, RFC 0004 actions respect occupants | none for legacy docs |
