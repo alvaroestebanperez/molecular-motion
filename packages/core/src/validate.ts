@@ -86,6 +86,7 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     }
     if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, issues);
     if (actor.interfaces !== undefined) validateInterfaces(actor, path, issues);
+    if (actor.footprint !== undefined) validateFootprint(actor, path, issues);
     const acid = nucleicDescriptor(actor);
     if (actor.nucleic !== undefined) {
       if (!acid) issues.push(`${path}.nucleic is only allowed on dna and rna actors`);
@@ -166,6 +167,14 @@ function validateField(value: unknown, spec: FieldSpec, path: string, refs: Refe
       break;
     case 'boolean':
       if (typeof value !== 'boolean') issues.push(`${path} must be a boolean`);
+      break;
+    case 'actors':
+      if (!Array.isArray(value) || value.length === 0) { issues.push(`${path} must be a non-empty list of instances`); break; }
+      value.forEach((item, index) => { if (typeof item !== 'string' || !refs.actors.has(item)) issues.push(`${path}[${index}] ${unknownActor(String(item), refs)}`); });
+      if (new Set(value).size !== value.length) issues.push(`${path} lists an instance twice`);
+      break;
+    case 'interval':
+      if (!Array.isArray(value) || value.length !== 2 || !value.every(item => Number.isInteger(item) && item >= 0) || value[0] >= value[1]) issues.push(`${path} must be [from, to] with integers 0 ≤ from < to`);
       break;
     case 'integer':
       if (!Number.isInteger(value) || (spec.min !== undefined && (value as number) < spec.min)) issues.push(`${path} must be an integer${spec.min !== undefined ? ` ≥ ${spec.min}` : ''}`);
@@ -264,6 +273,15 @@ function validateInterfaces(actor: Record<string, unknown>, path: string, issues
     for (const key of Object.keys(item)) if (key !== 'id' && key !== 'valence') issues.push(`${at}.${key} is not supported`);
     if (item.valence !== undefined && (!Number.isInteger(item.valence) || (item.valence as number) < 1)) issues.push(`${at}.valence must be an integer ≥ 1`);
   });
+}
+
+function validateFootprint(actor: Record<string, unknown>, path: string, issues: string[]) {
+  if (actor.type === 'dna' || actor.type === 'rna') return issues.push(`${path}.footprint is not allowed on dna and rna`);
+  const footprint = actor.footprint;
+  if (!isObject(footprint)) return issues.push(`${path}.footprint must be an object`);
+  for (const key of Object.keys(footprint)) if (key !== 'length' && key !== 'form') issues.push(`${path}.footprint.${key} is not supported`);
+  if (!Number.isInteger(footprint.length) || (footprint.length as number) < 1) issues.push(`${path}.footprint.length must be an integer ≥ 1`);
+  if (footprint.form !== undefined && !['single', 'duplex', 'any'].includes(footprint.form as string)) issues.push(`${path}.footprint.form must be one of: single, duplex, any`);
 }
 
 /** `copies` is an integer ≥ 2 (omit it for one copy) and is not allowed on nucleic acids (RFC 0005 §6). */

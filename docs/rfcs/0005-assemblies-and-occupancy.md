@@ -137,7 +137,13 @@ Validation is generic and uses RFC 0004 state:
 | `vacate { actor }` | Removes the instance's occupancy |
 | `coat { actors: [rad51#1, …], target: dna.overhang, orientation? }` | Places the listed copies **adjacently** from one end of the span. It fails if they do not fit or if the region is occupied. A list action, not a hidden count (D3) |
 
-**Legacy.** `bind { actor, target: dna.site }` becomes an occupancy at the site with the actor's footprint. Without a declared footprint the occupancy is a zero-length point, which is exactly what v3 draws.
+**Legacy and point occupancy.** `bind { actor, target: dna | dna.site }` creates a **point** occupancy: it records where the instance rests, claims no nucleotides, and never takes part in the occupancy rule or form checks. That is exactly what v3 meant. Claiming nucleotides is always explicit, through `occupy` or `coat`. `bind` cannot overwrite a span occupancy, and an anonymous `unbind` does not remove one: spans leave with `vacate`.
+
+**Resolution rules (as implemented):**
+- **Span.** An explicit `span` overrides everything. Otherwise a span site gives the span, which must equal the footprint length, so a longer stretch calls for `coat`. Otherwise a point site anchors the footprint: `forward` covers `[at, at + length)` and `reverse` covers `[at − length, at)`.
+- **Strand.** When none is given, a `single` footprint takes the one strand whose partner is missing across the span, and fails if there is not exactly one. `duplex` takes `both`. `any` takes `both` if both strands are present, otherwise the present one.
+- **`coat`** places exactly the listed instances, adjacently, from the span start (`forward`) or end (`reverse`). It fails if they do not fit. It never picks free copies.
+- **Strand actions** (`resect`, `extend`, `unwind`, `anneal`) re-check every span occupant on the molecule afterwards, and fail naming the occupant that would no longer fit. For example, RPA must be vacated before `extend` re-synthesises its partner strand, and resection may continue beside RPA, which only needs its own strand.
 
 **Occupancy and interaction are independent.** RAD51 protomers along ssDNA have *both*: occupancy on DNA, and `protomer` edges to their neighbours. Neither is inferred from the other.
 

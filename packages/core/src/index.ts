@@ -8,6 +8,7 @@ export {
   anonymousAttachment, boundTo, componentOf, interactionId, occupancyId, partnersOf, primaryPartner,
 } from './bindings';
 export type { Partner } from './bindings';
+export { occupancyConflicts, occupancyMisfit } from './occupancy';
 export { actorIdOf, actorInstances, instanceDefinition, instanceIds, INSTANCE_SEPARATOR } from './instances';
 export { ActionFailure, ActionRegistry, BASE_FIELDS, defineAlias, definePrimitive, field } from './registry';
 export type { ActionDefinition, AliasDefinition, ApplyContext, FieldSpec, PrimitiveDefinition, ResolvedAction, ValidationContext } from './registry';
