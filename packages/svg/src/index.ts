@@ -1,7 +1,9 @@
 export { buildSvgScene, chainReach, defaultColor, HELIX } from './scene';
 export type { SceneActor, SceneConnection, SceneLesion, SceneNucleicAcid, SceneOptions, SceneSite, SvgScene } from './scene';
-export { describeScene, LESION_LABELS, mix, molecularMotionCss, renderSvg } from './render';
+export { describeScene, LESION_LABELS, mix, molecularMotionCss, renderSvg, THEME_TOKENS } from './render';
 export type { RenderOptions } from './render';
+export { exportPng, exportSvg } from './export';
+export type { ExportOptions, PngOptions } from './export';
 export {
   ACTION_ARROW_STROKE,
   ACTION_VISUAL_STYLES,

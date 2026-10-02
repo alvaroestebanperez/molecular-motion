@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
-import { compileMechanism, MechanismValidationError, parseMechanism, type MechanismDefinition } from '@molecular-motion/core';
+import { compileMechanism, MechanismValidationError, parseMechanism, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
+import { buildSvgScene, exportPng, exportSvg } from '@molecular-motion/svg';
 import {
   MechanismStage, MolecularMechanism, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, VisualVocabulary, useMechanismPlayer, useMolecularMotionStyles,
 } from '@molecular-motion/react';
@@ -168,6 +169,31 @@ function useFullscreen(ref: RefObject<HTMLElement | null>) {
   return typeof document !== 'undefined' && document.fullscreenEnabled ? { active, toggle } : undefined;
 }
 
+/** Save a Blob under a file name, through a temporary link. */
+function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: name });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Static figure of the current step, in the theme the reader is looking at (no out-of-focus actors). */
+function ExportButtons({ snapshot }: { snapshot: MechanismSnapshot }) {
+  const [busy, setBusy] = useState(false);
+  const file = () => {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    return { svg: exportSvg(buildSvgScene(snapshot), { theme }), name: `${snapshot.definition.mechanism.id}-${snapshot.step.id}` };
+  };
+  const png = async () => {
+    setBusy(true);
+    try { const { svg, name } = file(); download(await exportPng(svg), `${name}.png`); } finally { setBusy(false); }
+  };
+  return <div className="viewer__export" role="group" aria-label="Download this step">
+    <button type="button" onClick={() => { const { svg, name } = file(); download(new Blob([svg], { type: 'image/svg+xml' }), `${name}.svg`); }}>SVG</button>
+    <button type="button" onClick={png} disabled={busy} aria-busy={busy}>PNG</button>
+  </div>;
+}
+
 function MechanismPage({ example }: { example: Example }) {
   useMolecularMotionStyles();
   const player = useMechanismPlayer(example.definition);
@@ -196,6 +222,7 @@ function MechanismPage({ example }: { example: Example }) {
         <p>Step {player.stepIndex + 1}/{player.length}</p>
         <h2>{snapshot.step.title}</h2>
         {snapshot.step.summary && <span>{snapshot.step.summary}</span>}
+        <ExportButtons snapshot={snapshot} />
       </header>
       <MechanismStage
         className="viewer__canvas"
