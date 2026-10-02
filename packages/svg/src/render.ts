@@ -1,5 +1,8 @@
 import type { LesionType } from '@molecular-motion/core';
-import { actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene } from './scene';
+import {
+  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, relaxedAt, strandIndex, strandMissingAt,
+  type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
+} from './scene';
 import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
 
 export { mix };
@@ -117,8 +120,16 @@ export function describeScene(scene: SvgScene): string {
     const facts = [actor.activity, actor.boundTo && `bound to ${target(actor.boundTo)}`, actor.chain && `carrying ${actor.chain.label}`].filter(Boolean);
     return facts.length ? `${actor.label} (${facts.join(', ')})` : actor.label;
   });
-  const lesions = scene.lesions.map(lesion => `${LESION_LABELS[lesion.type]} at ${target(lesion.target)}`);
-  return [parts.length && `Shown: ${parts.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`].filter(Boolean).join(' ');
+  const lesions = scene.lesions.map(lesion => `${LESION_LABELS[lesion.type]} at ${target(lesion.target)}${lesion.strand === 'bottom' ? ' on the bottom strand' : ''}`);
+  const strands = scene.nucleicAcids.flatMap(acid => {
+    const facts = [
+      ...(acid.missing ?? []).map(range => `${range.strand} strand missing ${range.from}–${range.to} (${range.strand === 'top' ? 'bottom' : 'top'} strand single-stranded)`),
+      ...(acid.nascent ?? []).map(range => `${range.strand} strand newly synthesised ${range.from}–${range.to}`),
+      ...(acid.open ?? []).map(range => `unwound ${range.from}–${range.to}`),
+    ];
+    return facts.length ? [`${acid.label}: ${facts.join('; ')}`] : [];
+  });
+  return [parts.length && `Shown: ${parts.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`, strands.length && `Strands: ${strands.join('. ')}.`].filter(Boolean).join(' ');
 }
 
 // ---- Nucleic acids ----
@@ -129,15 +140,25 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   const phaseX = acid.sites[0]?.x ?? width / 2;
   const theta = (x: number) => k * (x - phaseX);
   const strandY = (strand: 0 | 1, x: number) => helixY(acid, strand, x, width);
-  const isFront = (strand: 0 | 1, x: number) => (strand === 0 ? 1 : -1) * Math.sin(theta(x)) >= 0;
+  const strandState = Boolean(acid.missing || acid.open);
+  const isFront = (strand: 0 | 1, x: number) => (strand === 0 ? 1 : -1) * Math.sin(theta(x)) >= 0 || (strandState && relaxedAt(acid, strand, x));
 
+  // Strand state on a single broken strand at the site (resected, re-synthesised) already shows the real
+  // discontinuity there, so the lesion's fixed-width gap is not drawn on top of it. A DSB keeps its gap:
+  // its two fragments stay apart whatever their overhangs.
+  const touched = (strand: 0 | 1, x: number) => [...acid.missing ?? [], ...acid.nascent ?? []]
+    .some(range => strandIndex(range.strand) === strand && x >= range.x0 - 1 && x <= range.x1 + 1);
   const gaps: [0 | 1, number, number][] = [];
   for (const site of acid.sites) {
-    if (site.lesion === 'single-strand-break') gaps.push([0, site.x - 12, site.x + 12]);
-    if (site.lesion === 'nick') gaps.push([0, site.x - 3, site.x + 3]);
-    if (site.lesion === 'double-strand-break') gaps.push([0, site.x - 15, site.x + 15], [1, site.x - 15, site.x + 15]);
+    const strands = (site.lesionStrands ?? ['top']).map(strandIndex).filter(strand => site.lesion === 'double-strand-break' || !touched(strand, site.x));
+    if (site.lesion === 'single-strand-break') for (const strand of strands) gaps.push([strand, site.x - 12, site.x + 12]);
+    if (site.lesion === 'nick') for (const strand of strands) gaps.push([strand, site.x - 3, site.x + 3]);
+    if (site.lesion === 'double-strand-break') for (const strand of strands) gaps.push([strand, site.x - 15, site.x + 15]);
   }
+  for (const range of acid.missing ?? []) gaps.push([strandIndex(range.strand), range.x0, range.x1]);
   const inGap = (strand: 0 | 1, x: number) => gaps.some(([s, from, to]) => s === strand && x > from && x < to);
+  // Base pairs need both strands, paired: none across a gap in either strand or inside a bubble.
+  const unpaired = (x: number) => strandState && (strandMissingAt(acid, 0, x) || strandMissingAt(acid, 1, x) || (acid.open ?? []).some(range => x > range.x0 && x < range.x1));
 
   const segments = { back: [] as string[], front: [] as string[] };
   for (const strand of [0, 1] as const) {
@@ -164,19 +185,64 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   for (let x = phaseX - Math.ceil((phaseX + 20) / spacing) * spacing; x <= width + 20; x += spacing) {
     const y0 = strandY(0, x);
     const y1 = strandY(1, x);
-    if (Math.abs(y0 - y1) < 5) continue;
+    if (Math.abs(y0 - y1) < 5 || unpaired(x)) continue;
     const lesion = lesionSites.get(Math.round(x));
     if (lesion === 'abasic-site' || lesion === 'single-strand-break' || lesion === 'double-strand-break') continue;
     const path = `M${round(x)} ${round(y0)}L${round(x)} ${round(y1)}`;
     (lesion === 'base-damage' || lesion === 'adduct' ? damaged : rungs).push(path);
   }
 
-  const markers = acid.sites.filter(site => site.lesion).map(site => lesionMarker(site.lesion!, site.x, strandY(0, site.x), prefix)).join('');
+  const markers = acid.sites.filter(site => site.lesion)
+    .map(site => lesionMarker(site.lesion!, site.x, strandY(strandIndex(site.lesionStrands?.[0] ?? 'top'), site.x), prefix)).join('');
+  // Newly synthesised nucleotides are traced over their backbone, in front or behind like the backbone.
+  const nascent = { back: [] as string[], front: [] as string[] };
+  for (const range of acid.nascent ?? []) {
+    const strand = strandIndex(range.strand);
+    let current: string[] = [];
+    let currentFront = isFront(strand, range.x0);
+    const flush = () => { if (current.length > 1) nascent[currentFront ? 'front' : 'back'].push(`M${current.join('L')}`); current = []; };
+    for (let x = range.x0; ; x = Math.min(x + 3, range.x1)) {
+      const front = isFront(strand, x);
+      current.push(`${round(x)} ${round(strandY(strand, x))}`);
+      if (front !== currentFront) { flush(); current.push(`${round(x)} ${round(strandY(strand, x))}`); currentFront = front; }
+      if (x >= range.x1) break;
+    }
+    flush();
+  }
+  const nascentPath = (layer: 'back' | 'front') => nascent[layer].length ? `<path class="mm-dna__nascent mm-dna__nascent--${layer}" d="${nascent[layer].join('')}"/>` : '';
   return `<g class="mm-dna__back"><path d="${segments.back.join('')}"/></g>`
+    + nascentPath('back')
     + `<path class="mm-dna__rungs" d="${rungs.join('')}"/>`
     + (damaged.length ? `<path class="mm-dna__rungs mm-dna__rungs--damaged" d="${damaged.join('')}"/>` : '')
     + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${segments.front.join('')}"/><path class="mm-dna__shine" d="${segments.front.join('')}"/></g>`
-    + markers;
+    + nascentPath('front') + markers + (acid.polarity ? polarityLabels(acid, width, gaps) : '');
+}
+
+/**
+ * 5′/3′ at both ends of every strand fragment. Top runs 5′→3′ left to right and bottom the other way,
+ * so a fragment of top reads 5′ … 3′ and a fragment of bottom 3′ … 5′. Fragments are what the
+ * canvas shows between gaps (breaks and missing nucleotides), so overhang ends are labelled too.
+ */
+function polarityLabels(acid: SceneNucleicAcid, width: number, gaps: [0 | 1, number, number][]): string {
+  const edge = 14;
+  const labels: string[] = [];
+  for (const strand of [0, 1] as const) {
+    const cuts = gaps.filter(([s]) => s === strand).map(([, from, to]) => [Math.max(0, from), Math.min(width, to)] as const).filter(([from, to]) => to > from).sort((a, b) => a[0] - b[0]);
+    const fragments: [number, number][] = [];
+    let start = 0;
+    for (const [from, to] of cuts) { if (from > start) fragments.push([start, from]); start = Math.max(start, to); }
+    if (start < width) fragments.push([start, width]);
+    // One lane per strand, outside the helix envelope, so the two strands' labels never collide.
+    const lane = acid.y + (strand === 0 ? -(HELIX.amplitude + 16) : HELIX.amplitude + 24);
+    for (const [from, to] of fragments) {
+      const left = from === 0 ? edge : from + 7; const right = to === width ? width - edge : to - 7;
+      if (right - left < 18) continue;
+      const [leftEnd, rightEnd] = strand === 0 ? ['5′', '3′'] : ['3′', '5′'];
+      labels.push(`<text class="mm-dna__polarity" x="${round(left)}" y="${round(lane)}">${leftEnd}</text>`);
+      labels.push(`<text class="mm-dna__polarity" x="${round(right)}" y="${round(lane)}">${rightEnd}</text>`);
+    }
+  }
+  return `<g class="mm-dna__polarities" data-acid="${escape(acid.id)}">${labels.join('')}</g>`;
 }
 
 function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string): string {
@@ -325,14 +391,16 @@ function haloGradient(id: string, color: string): string {
 }
 
 export const molecularMotionCss = `
-.mm-svg{--mm-ink:#15213b;--mm-muted:#4f5d75;--mm-surface:#ffffff;--mm-canvas:#f5f7fb;--mm-line:#dfe4ee;--mm-alert:#e5484d;--mm-dna:#3f63c4;--mm-dna-back:#a9b9e4;--mm-dna-rung:#8ea3dc;--mm-chain:#b44fb0;--mm-accent:#2563eb;display:block;width:100%;height:auto;overflow:visible;font-family:var(--mm-font,Inter,system-ui,sans-serif)}
-:where([data-theme=dark],.mm-theme-dark) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}
-@media(prefers-color-scheme:dark){:where(:root:not([data-theme=light])) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}}
+.mm-svg{--mm-ink:#15213b;--mm-muted:#4f5d75;--mm-surface:#ffffff;--mm-canvas:#f5f7fb;--mm-line:#dfe4ee;--mm-alert:#e5484d;--mm-dna:#3f63c4;--mm-dna-back:#a9b9e4;--mm-dna-rung:#8ea3dc;--mm-dna-new:#e0607a;--mm-chain:#b44fb0;--mm-accent:#2563eb;display:block;width:100%;height:auto;overflow:visible;font-family:var(--mm-font,Inter,system-ui,sans-serif)}
+:where([data-theme=dark],.mm-theme-dark) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-dna-new:#f08aa0;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}
+@media(prefers-color-scheme:dark){:where(:root:not([data-theme=light])) .mm-svg{--mm-ink:#e7ecf6;--mm-muted:#93a1b8;--mm-surface:#141b2b;--mm-canvas:#0e1422;--mm-line:#26314a;--mm-alert:#ff6b6b;--mm-dna:#7f9ef0;--mm-dna-back:#34457a;--mm-dna-rung:#4b61a3;--mm-dna-new:#f08aa0;--mm-chain:#d77ad3;--mm-accent:#6ea0ff}}
 .mm-dna__back path{fill:none;stroke:var(--mm-dna-back);stroke-width:${HELIX.backTube};stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__rungs{fill:none;stroke:var(--mm-dna-rung);stroke-width:4.2;stroke-linecap:round;opacity:.85}
 .mm-dna__rungs--damaged{stroke:var(--mm-alert);opacity:1}
 .mm-dna__tube{fill:none;stroke:var(--mm-dna);stroke-width:${HELIX.tube};stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__shine{fill:none;stroke:#fff;stroke-opacity:.3;stroke-width:3;stroke-linecap:round;transform:translateY(-2.5px)}
+.mm-dna__nascent{fill:none;stroke:var(--mm-dna-new);stroke-width:${HELIX.tube - 3};stroke-linecap:round;stroke-linejoin:round}.mm-dna__nascent--back{stroke-width:${HELIX.backTube - 3};opacity:.55}
+.mm-dna__polarity{fill:var(--mm-muted);font-size:11px;font-weight:700;text-anchor:middle}
 .mm-binding{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}.mm-binding--relation path{stroke:var(--mm-muted);opacity:.72}
 .mm-lesion__glow{animation:mm-pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-lesion__dot{fill:var(--mm-alert);stroke:var(--mm-surface);stroke-width:1.5}.mm-lesion__ring{fill:var(--mm-surface);stroke:var(--mm-alert);stroke-width:2}

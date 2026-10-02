@@ -149,7 +149,9 @@ export interface SceneLesion { /* … */ strand: 'top' | 'bottom' | 'both' }
 - **Polarity labels** (5′/3′) are drawn at strand ends, at break ends, and at overhang termini whenever the actor declares a `nucleic` block. Legacy documents stay unlabelled, which keeps compatibility.
 - **Strand-aware lesions**: the gap and marker sit on the declared strand.
 - **Bound actors and chains follow the anchor.** An actor bound to a site on single-stranded DNA rests on the remaining strand. A modification chain (`polymerize`, e.g. a RAD51 filament) on such an actor runs *along* the single-stranded segment instead of leaving towards the free side. True stoichiometry (one RAD51 per 3 nt) stays out of scope. The chain is still a single modification with a `length`.
-- **Stable keys**: segments are keyed `acid/strand/from`, so `patchSvg` animates resection as the backbone shortening rather than a redraw.
+- **Keys**: the molecule stays one keyed group (`acid:<id>`), so `patchSvg` redraws its backbone between steps instead of morphing it. Path `d` transitions are not reliable across browsers, and actors bound to the molecule still animate because they are keyed separately. Per-segment keys can come later without a schema change.
+- **Fixed lesion gaps yield to strand state.** Once a single broken strand has been resected or re-synthesised at the site, the `missing` range shows the real discontinuity, and the lesion's fixed-width gap is not drawn on top of it. A DSB always keeps its gap, because its two fragments stay apart.
+- **Polarity labels sit in one lane per strand**, above and below the helix envelope, so labels from the two strands never collide.
 - **Accessibility**: the SVG description gains strand and range information, for example "top strand resected from 40 to 58 (3′ overhang on bottom strand)".
 
 ## 8. Schema version
