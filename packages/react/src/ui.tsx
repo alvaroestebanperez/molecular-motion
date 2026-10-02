@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { actorInstances, type MechanismSnapshot, type ReferenceDefinition } from '@molecular-motion/core';
+import { actorInstances, partnersOf, type MechanismSnapshot, type ReferenceDefinition } from '@molecular-motion/core';
 import { LESION_LABELS } from '@molecular-motion/svg';
 import { ExitFullscreenIcon, ExternalIcon, FullscreenIcon, NextIcon, PauseIcon, PlayIcon, PreviousIcon, ResetIcon } from './icons';
 import { MechanismThumbnail } from './MechanismStage';
@@ -196,7 +196,7 @@ function MolecularDetails({ snapshot, selectedActor }: { snapshot: MechanismSnap
         const state = snapshot.actors[id]!;
         const facts = [
           state.activity && <span key="a" className={`mm-chip mm-chip--${state.activity.state}`}>{state.activity.state}</span>,
-          state.boundTo && <span key="b" className="mm-chip">bound to {describeTarget(state.boundTo)}</span>,
+          ...partnersOf(snapshot, id).map(partner => <span key={`b:${partner.id}`} className="mm-chip">bound to {describeTarget(partner.reference)}</span>),
           ...state.modifications.map(modification => <span key={modification.id} className="mm-chip">{modification.label}{modification.site ? ` @ ${modification.site}` : ''}{modification.length ? ` ×${modification.length}` : ''}</span>),
           state.compartment && <span key="c" className="mm-chip mm-chip--muted">{compartments.get(state.compartment) ?? state.compartment}</span>,
         ].filter(Boolean);

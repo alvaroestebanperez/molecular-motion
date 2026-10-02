@@ -37,6 +37,8 @@ export interface ActorSite {
   position?: Point;
 }
 
+export interface InterfaceDefinition { id: string; valence?: number }
+
 export interface ActorDefinition {
   id: string;
   type: ActorType;
@@ -47,6 +49,8 @@ export interface ActorDefinition {
   sites?: ActorSite[];
   /** `dna`/`rna` actors only. */
   nucleic?: NucleicDefinition;
+  /** Binding interfaces (RFC 0005 §4.1); `valence` (default 1) caps simultaneous partners per instance. */
+  interfaces?: InterfaceDefinition[];
   /**
    * Number of copies (RFC 0005 §3). `copies: n` compiles to instances `id#1 … id#n`, each with its own
    * state; without it the actor is one instance whose id is the actor id. Not allowed on dna/rna.
@@ -151,7 +155,6 @@ export interface ActorState {
   present: boolean;
   visible: boolean;
   compartment?: string;
-  boundTo?: string;
   activity?: { state: Activity; by?: string };
   modifications: Modification[];
   /** dna/rna only; absent while the molecule is intact. */
@@ -160,9 +163,29 @@ export interface ActorState {
 
 export interface SiteState { lesion?: LesionType }
 
+/** One side of an interaction: an instance, optionally through a declared interface or at one of its sites. */
+export interface InteractionEnd { instance: string; interface?: string; site?: string }
+
+/**
+ * A binding between two instances, stored once (RFC 0005 §4). Directed (`ends[0]` binds `ends[1]`)
+ * unless `symmetric` (homotypic, same interface on both ends). Ends without an interface are the
+ * anonymous legacy binding: at most one per binder, replaced by a new anonymous `bind` as in v3.
+ */
+export interface Interaction { id: string; ends: [InteractionEnd, InteractionEnd]; symmetric?: boolean }
+
+/**
+ * An instance resting on a nucleic acid (RFC 0005 §5), optionally at a declared site. Spans,
+ * strands, footprints and orientation arrive with occupancy proper; this is the record they extend.
+ */
+export interface Occupancy { id: string; instance: string; acid: string; site?: string }
+
 export interface MechanismState {
   actors: Record<string, ActorState>;
   sites: Record<string, SiteState>;
+  /** The only source of truth for bindings between instances. */
+  interactions: Record<string, Interaction>;
+  /** Instances on nucleic acids. */
+  occupancy: Record<string, Occupancy>;
 }
 
 export interface Presentation { verb: string; tone?: 'activating' | 'inhibitory' | 'neutral' }

@@ -89,7 +89,10 @@ export function compileMechanism(input: unknown, options: CompileOptions = {}): 
 
     const { end } = runSequence(step.actions, `steps[${stepIndex}].actions`, 0);
     const resolved = structuredClone(state);
-    return deepFreeze({ stepIndex, step, definition, actors: resolved.actors, sites: resolved.sites, timeline, duration: end });
+    return deepFreeze({
+      stepIndex, step, definition, actors: resolved.actors, sites: resolved.sites,
+      interactions: resolved.interactions, occupancy: resolved.occupancy, timeline, duration: end,
+    });
   });
 
   if (issues.length) throw new MechanismValidationError(issues);
@@ -120,7 +123,7 @@ export function initialState(definition: MechanismDefinition): MechanismState {
     };
     for (const site of actor.sites ?? []) sites[`${id}.${site.id}`] = {};
   }
-  return { actors, sites };
+  return { actors, sites, interactions: {}, occupancy: {} };
 }
 
 function applyContext(state: MechanismState, definition: MechanismDefinition): ApplyContext {
@@ -156,6 +159,9 @@ function flatten(state: MechanismState): Map<string, unknown> {
   for (const [reference, site] of Object.entries(state.sites)) {
     for (const [key, value] of Object.entries(site)) if (value !== undefined) out.set(`sites.${reference}.${key}`, value);
   }
+  // One key per binding: parallel branches conflict only when they touch the same edge or occupancy.
+  for (const interaction of Object.values(state.interactions)) out.set(`interactions.${interaction.id}`, interaction);
+  for (const occupancy of Object.values(state.occupancy)) out.set(`occupancy.${occupancy.id}`, occupancy);
   return out;
 }
 

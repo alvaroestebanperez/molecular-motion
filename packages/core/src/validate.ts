@@ -85,6 +85,7 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
       else if (typeof actor.molecule !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(actor.molecule)) issues.push(`${path}.molecule must be a lowercase key such as "atp" or "nad-plus"`);
     }
     if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, issues);
+    if (actor.interfaces !== undefined) validateInterfaces(actor, path, issues);
     const acid = nucleicDescriptor(actor);
     if (actor.nucleic !== undefined) {
       if (!acid) issues.push(`${path}.nucleic is only allowed on dna and rna actors`);
@@ -248,6 +249,21 @@ function validateSiteGeometry(site: Record<string, unknown>, path: string, acid:
     if (site.strand !== 'top' && site.strand !== 'bottom' && site.strand !== 'both') issues.push(`${path}.strand must be one of: top, bottom, both`);
     else if (site.strand !== 'top' && nucleicForm(acid) === 'single') issues.push(`${path}.strand must be top on a single-stranded molecule`);
   }
+}
+
+/** Interfaces: unique ids, valence an integer ≥ 1; nucleic acids bind by occupancy and declare none. */
+function validateInterfaces(actor: Record<string, unknown>, path: string, issues: string[]) {
+  if (actor.type === 'dna' || actor.type === 'rna') return issues.push(`${path}.interfaces is not allowed on dna and rna: proteins rest on them by occupancy`);
+  if (!Array.isArray(actor.interfaces)) return issues.push(`${path}.interfaces must be an array`);
+  const ids = new Set<string>();
+  actor.interfaces.forEach((item, index) => {
+    const at = `${path}.interfaces[${index}]`;
+    if (!isObject(item) || typeof item.id !== 'string' || !/^[a-z][a-z0-9-]*$/.test(item.id)) return issues.push(`${at}.id must be a lowercase id such as "dimer"`);
+    if (ids.has(item.id)) issues.push(`${path}.interfaces duplicates "${item.id}"`);
+    ids.add(item.id);
+    for (const key of Object.keys(item)) if (key !== 'id' && key !== 'valence') issues.push(`${at}.${key} is not supported`);
+    if (item.valence !== undefined && (!Number.isInteger(item.valence) || (item.valence as number) < 1)) issues.push(`${at}.valence must be an integer ≥ 1`);
+  });
 }
 
 /** `copies` is an integer ≥ 2 (omit it for one copy) and is not allowed on nucleic acids (RFC 0005 §6). */

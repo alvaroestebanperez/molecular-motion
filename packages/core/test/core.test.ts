@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  builtinRegistry, compileMechanism, defineAlias, definePrimitive, field, MechanismValidationError, parseMechanism,
+  builtinRegistry, compileMechanism, defineAlias, definePrimitive, field, MechanismValidationError, parseMechanism, primaryPartner,
 } from '../src';
 
 const yaml = `
@@ -32,8 +32,8 @@ steps:
 describe('mechanism compiler', () => {
   it('parses YAML and deterministically reduces any step', () => {
     const mechanism = compileMechanism(parseMechanism(yaml));
-    expect(mechanism.at('binding').actors.sensor!.boundTo).toBe('dna.lesion');
-    expect(mechanism.at('damage').actors.sensor!.boundTo).toBeUndefined();
+    expect(primaryPartner(mechanism.at('binding'), 'sensor')).toBe('dna.lesion');
+    expect(primaryPartner(mechanism.at('damage'), 'sensor')).toBeUndefined();
     expect(mechanism.at(1).sites['dna.lesion']!.lesion).toBe('single-strand-break');
   });
 
@@ -139,7 +139,7 @@ describe('built-in actions across target mechanisms', () => {
     expect(mechanism.at('drug').actors.egfr).toMatchObject({ activity: { state: 'inhibited', by: 'erlotinib' }, modifications: [] });
     const down = mechanism.at('down').actors;
     expect(down.egfr).toMatchObject({ present: false, visible: false });
-    expect(down.egf!.boundTo).toBeUndefined();
+    expect(primaryPartner(mechanism.at('down'), 'egf')).toBeUndefined();
   });
 
   it('refuses actions on actors that are not present', () => {
@@ -171,7 +171,7 @@ describe('translocate', () => {
   const compartments = (snapshot: ReturnType<ReturnType<typeof compileMechanism>['at']>) =>
     Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, actor.compartment]));
   const bindings = (snapshot: ReturnType<ReturnType<typeof compileMechanism>['at']>) =>
-    Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, actor.boundTo]));
+    Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, primaryPartner(snapshot, actor.id)]));
 
   it('moves only the named actor by default and changes no bindings', () => {
     const mechanism = compileMechanism(doc({ actor: 'erk' }));
@@ -197,7 +197,7 @@ describe('translocate', () => {
   it('includeBound does not move the partner the actor itself is bound to', () => {
     const move = compileMechanism(doc({ actor: 'erk', includeBound: true })).at('move');
     expect(compartments(move)).toEqual({ mek: 'cytoplasm', erk: 'nucleus', dusp6: 'nucleus' });
-    expect(move.actors.erk!.boundTo).toBe('mek');
+    expect(primaryPartner(move, 'erk')).toBe('mek');
   });
 
   it('reports invalid translocations', () => {
