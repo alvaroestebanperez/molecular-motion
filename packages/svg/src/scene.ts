@@ -1,9 +1,23 @@
 import { hashString } from './primitives/shared';
-import { nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot, type Modification, type Point } from '@molecular-motion/core';
+import {
+  lesionStrands, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
+  type Modification, type Point, type SiteStrand, type StrandId,
+} from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
 
-export interface SceneSite extends Point { reference: string; lesion?: LesionType }
+export interface SceneSite extends Point {
+  reference: string;
+  lesion?: LesionType;
+  /** Strands the lesion affects (top is drawn as strand 0); present with a lesion. */
+  lesionStrands?: StrandId[];
+  /** Strand declared on the site, if any. */
+  strand?: SiteStrand;
+}
+
+/** Interbase range of a nucleic acid with its drawn extent (`x0` < `x1`). */
+export interface SceneRange { from: number; to: number; x0: number; x1: number }
+export interface SceneStrandRange extends SceneRange { strand: StrandId }
 
 export interface SceneNucleicAcid {
   id: string;
@@ -12,6 +26,14 @@ export interface SceneNucleicAcid {
   color?: string;
   y: number;
   sites: SceneSite[];
+  /** Coordinate length; x = width · coordinate / length. */
+  length?: number;
+  /** Draw 5′/3′ labels: the actor declares its nucleic geometry. */
+  polarity?: boolean;
+  /** Strand state (RFC 0004 §4), present only when the molecule is not intact. */
+  missing?: SceneStrandRange[];
+  nascent?: SceneStrandRange[];
+  open?: SceneRange[];
 }
 
 export interface SceneActor extends Point {
@@ -43,7 +65,7 @@ export interface SceneActor extends Point {
  * (an author-fixed `position`), so `from`/`to` run centre to target and a dotted link is drawn.
  */
 export interface SceneConnection { source: string; target: string; from: Point; to: Point; kind?: 'contact' | 'relation' }
-export interface SceneLesion extends Point { target: string; type: LesionType }
+export interface SceneLesion extends Point { target: string; type: LesionType; strand: SiteStrand }
 
 export interface SvgScene {
   width: number;
@@ -66,14 +88,63 @@ export interface SceneOptions {
 /** Helix geometry shared with the renderer: strand amplitude, wavelength and stroke widths. */
 export const HELIX = { amplitude: 30, wavelength: 196, tube: 12, backTube: 10 } as const;
 
-/** Centre line of one strand of a helix at `x` (strand 0 crests at the first site). */
-export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites'>, strand: 0 | 1, x: number, width: number): number {
-  const phaseX = acid.sites[0]?.x ?? width / 2;
-  return acid.y + (strand === 0 ? -HELIX.amplitude : HELIX.amplitude) * Math.cos(2 * Math.PI / HELIX.wavelength * (x - phaseX));
+/** Strand 0 is `top`, strand 1 is `bottom`. */
+export const strandIndex = (strand: StrandId): 0 | 1 => strand === 'top' ? 0 : 1;
+
+/** How far inside a range's edge a relaxed strand reaches its relaxed shape, in px. */
+const RELAX = 16;
+/**
+ * 0 outside `[x0, x1]`, easing to 1 within `RELAX` of the edges. A stretch shorter than four
+ * `RELAX` relaxes proportionally less, so a few-nucleotide gap does not kink the strand.
+ */
+function relaxation(x: number, ranges: readonly { x0: number; x1: number }[]): number {
+  let weight = 0;
+  for (const range of ranges) {
+    const depth = Math.min(x - range.x0, range.x1 - x);
+    if (depth <= 0) continue;
+    const t = Math.min(1, depth / RELAX);
+    weight = Math.max(weight, t * t * (3 - 2 * t) * Math.min(1, (range.x1 - range.x0) / (4 * RELAX)));
+  }
+  return weight;
 }
-/** Upper visible surface of the helix at `x`: the top edge of whichever backbone tube is higher. */
-const helixTop = (acid: SceneNucleicAcid, x: number, width: number) =>
-  Math.min(helixY(acid, 0, x, width) - HELIX.tube / 2, helixY(acid, 1, x, width) - HELIX.backTube / 2);
+
+/** True where `strand` has no nucleotides at `x`. */
+export const strandMissingAt = (acid: Pick<SceneNucleicAcid, 'missing'>, strand: 0 | 1, x: number) =>
+  (acid.missing ?? []).some(range => strandIndex(range.strand) === strand && x > range.x0 && x < range.x1);
+
+/** Ranges where `strand` is single-stranded: its partner is missing there. */
+export const singleStranded = (acid: Pick<SceneNucleicAcid, 'missing'>, strand: 0 | 1) =>
+  (acid.missing ?? []).filter(range => strandIndex(range.strand) !== strand);
+
+/**
+ * Centre line of one strand at `x` (strand 0 crests at the first site). Renderer convention
+ * (RFC 0004 §7): a single-stranded stretch relaxes into a shallow wave on its own side of the axis,
+ * and in an unwound bubble both strands bow apart; an intact molecule is the plain double helix.
+ */
+export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites' | 'missing' | 'open'>, strand: 0 | 1, x: number, width: number): number {
+  const phaseX = acid.sites[0]?.x ?? width / 2;
+  const side = strand === 0 ? -1 : 1;
+  const helical = acid.y + side * HELIX.amplitude * Math.cos(2 * Math.PI / HELIX.wavelength * (x - phaseX));
+  if (!acid.missing && !acid.open) return helical;
+  const single = relaxation(x, singleStranded(acid, strand));
+  const open = relaxation(x, acid.open ?? []);
+  if (!single && !open) return helical;
+  const relaxed = open >= single
+    ? acid.y + side * (HELIX.amplitude + 10)
+    : acid.y + side * (HELIX.amplitude * .55 + 5 * Math.sin(2 * Math.PI * (x - phaseX) / 64));
+  const weight = Math.max(single, open);
+  return helical + (relaxed - helical) * weight;
+}
+
+/** True where a strand is drawn in front regardless of the helix phase: relaxed stretches lie flat. */
+export const relaxedAt = (acid: Pick<SceneNucleicAcid, 'missing' | 'open'>, strand: 0 | 1, x: number) =>
+  relaxation(x, [...singleStranded(acid, strand), ...acid.open ?? []]) > 0;
+
+/** Upper visible surface of the helix at `x`: the top edge of whichever present backbone tube is higher. */
+const helixTop = (acid: SceneNucleicAcid, x: number, width: number) => Math.min(
+  ...([0, 1] as const).filter(strand => !strandMissingAt(acid, strand, x)).map(strand => helixY(acid, strand, x, width) - (strand === 0 ? HELIX.tube : HELIX.backTube) / 2),
+  Infinity,
+);
 
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
 const PALETTE = ['#8b78d0', '#5aa9a0', '#d5839a', '#dca064', '#7c9cc4', '#8fae86', '#c58fc9', '#6fa3c9'];
@@ -241,6 +312,10 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
 
   const nucleicAcids = shown.filter(definition => isNucleic(definition.type)).map((definition, index): SceneNucleicAcid => {
     const y = definition.position?.y ?? height * .74 + index * 120;
+    const length = nucleicLength(definition);
+    const x = (coordinate: number) => width * coordinate / length;
+    const range = ({ from, to }: { from: number; to: number }): SceneRange => ({ from, to, x0: x(from), x1: x(to) });
+    const strandState = snapshot.actors[definition.id]!.nucleic;
     return {
       id: definition.id,
       type: definition.type as 'dna' | 'rna',
@@ -250,8 +325,17 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       sites: (definition.sites ?? []).map(site => {
         const reference = `${definition.id}.${site.id}`;
         const lesion = snapshot.sites[reference]?.lesion;
-        return { reference, x: siteX(definition, site, width), y: y - HELIX.amplitude, ...(lesion && { lesion }) };
+        return {
+          reference, x: siteX(definition, site, width), y: y - HELIX.amplitude,
+          ...(lesion && { lesion, lesionStrands: lesionStrands(definition, site, lesion) }),
+          ...(site.strand && { strand: site.strand }),
+        };
       }),
+      length,
+      ...(definition.nucleic && { polarity: true }),
+      ...(strandState?.missing.length && { missing: strandState.missing.map(item => ({ strand: item.strand, ...range(item) })) }),
+      ...(strandState?.nascent.length && { nascent: strandState.nascent.map(item => ({ strand: item.strand, ...range(item) })) }),
+      ...(strandState?.open.length && { open: strandState.open.map(range) }),
     };
   });
   const siteIndex = new Map(nucleicAcids.flatMap(acid => acid.sites.map(site => [site.reference, site] as const)));
@@ -328,6 +412,37 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const right = neighbours.some(other => other.x > actor.x);
     const left = neighbours.some(other => other.x < actor.x);
     if (right && !left) actor.chain.angle = Math.PI - CHAIN_ANGLE;
+  }
+
+  // A chain on an actor bound to a site next to single-stranded DNA (a filament on an overhang) runs
+  // along that stretch instead of leaving towards the free side: it takes the stretch under or nearest
+  // the actor (right on ties) and heads for its distal end, away from the crowded site.
+  for (const actor of placed.values()) {
+    const reference = snapshot.actors[actor.id]!.boundTo;
+    const acid = reference ? acidIndex.get(reference.split('.')[0]!) : undefined;
+    const site = reference ? siteIndex.get(reference) : undefined;
+    if (!actor.chain || !acid?.missing || !site) continue;
+    const distance = (range: SceneRange) => Math.max(0, range.x0 - actor.x, actor.x - range.x1);
+    const stretch = [...acid.missing].sort((a, b) => distance(a) - distance(b) || b.x1 - a.x1)[0]!;
+    const distal = Math.abs(stretch.x0 - site.x) > Math.abs(stretch.x1 - site.x) ? stretch.x0 : stretch.x1;
+    // Aim where the chain's own reach meets the backbone surface on the way to the distal end, so the
+    // filament comes to rest on the strand instead of running on through it.
+    const reach = chainBase(actor) + chainReach(actor.chain.length);
+    const rest = (x: number) => ({ x, y: helixTop(acid, x, width) - 14 });
+    const direction = Math.sign(distal - actor.x) || 1;
+    let target = rest(distal);
+    for (let x = actor.x; direction * (distal - x) >= 0; x += direction * 3) {
+      const point = rest(x);
+      if (Math.hypot(point.x - actor.x, point.y - actor.y) >= reach) { target = point; break; }
+    }
+    let angle = Math.atan2(target.y - actor.y, target.x - actor.x);
+    // Like docked actors, tilt towards "up" until no bead dips into the backbone.
+    const sinks = (candidate: number) => chainGeometry(actor.radius, candidate, actor.chain!.length, chainBase({ ...actor, chain: { ...actor.chain!, angle: candidate } })).beads
+      .some(bead => actor.y + bead.y + bead.r + BEAD_OUTLINE > helixTop(acid, actor.x + bead.x, width) + 1);
+    for (let step = 0; step < 30 && sinks(angle); step++) {
+      angle += Math.sign(Math.atan2(Math.sin(-Math.PI / 2 - angle), Math.cos(-Math.PI / 2 - angle))) * .05;
+    }
+    actor.chain.angle = angle;
   }
 
   // 2. Free actors (visible, unbound) line up across the top.
@@ -434,7 +549,9 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const to = siteIndex.get(reference) ?? actorIndex.get(reference.split('.')[0]!) ?? (acid && { x: actor.x, y: acid.y - HELIX.amplitude });
     return to ? [{ source: actor.id, target: reference, from: { x: actor.x, y: actor.y }, to: { x: to.x, y: to.y }, kind: 'relation' }] : [];
   });
-  const lesions = nucleicAcids.flatMap(acid => acid.sites.flatMap(site => site.lesion ? [{ target: site.reference, type: site.lesion, x: site.x, y: site.y }] : []));
+  const lesions = nucleicAcids.flatMap(acid => acid.sites.flatMap((site): SceneLesion[] => site.lesion
+    ? [{ target: site.reference, type: site.lesion, strand: site.lesionStrands!.length > 1 ? 'both' : site.lesionStrands![0]!, x: site.x, y: site.y }]
+    : []));
 
   return {
     width, height,

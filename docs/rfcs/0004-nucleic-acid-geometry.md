@@ -149,7 +149,9 @@ export interface SceneLesion { /* … */ strand: 'top' | 'bottom' | 'both' }
 - **Polarity labels** (5′/3′) are drawn at strand ends, at break ends, and at overhang termini whenever the actor declares a `nucleic` block. Legacy documents stay unlabelled, which keeps compatibility.
 - **Strand-aware lesions**: the gap and marker sit on the declared strand.
 - **Bound actors and chains follow the anchor.** An actor bound to a site on single-stranded DNA rests on the remaining strand. A modification chain (`polymerize`, e.g. a RAD51 filament) on such an actor runs *along* the single-stranded segment instead of leaving towards the free side. True stoichiometry (one RAD51 per 3 nt) stays out of scope. The chain is still a single modification with a `length`.
-- **Stable keys**: segments are keyed `acid/strand/from`, so `patchSvg` animates resection as the backbone shortening rather than a redraw.
+- **Keys**: the molecule stays one keyed group (`acid:<id>`), so `patchSvg` redraws its backbone between steps instead of morphing it. Path `d` transitions are not reliable across browsers, and actors bound to the molecule still animate because they are keyed separately. Per-segment keys can come later without a schema change.
+- **Fixed lesion gaps yield to strand state.** Once a single broken strand has been resected or re-synthesised at the site, the `missing` range shows the real discontinuity, and the lesion's fixed-width gap is not drawn on top of it. A DSB always keeps its gap, because its two fragments stay apart.
+- **Polarity labels sit in one lane per strand**, above and below the helix envelope, so labels from the two strands never collide.
 - **Accessibility**: the SVG description gains strand and range information, for example "top strand resected from 40 to 58 (3′ overhang on bottom strand)".
 
 ## 8. Schema version
@@ -180,4 +182,6 @@ PR 1 changes no output. PR 4 is the first PR that intentionally changes an examp
 5. **`fill-gap` keeps its v2 semantics** *(accepted)*. Long-patch synthesis needs an explicit `extend`.
 6. **Semantics and rendering are separate** *(accepted)*, as described in §6.
 7. **Multi-molecule pairing stays out** *(accepted)*. Strand invasion, D-loops, and Holliday junctions are not approximated with this model, for example by faking a second molecule as `open` or `nascent` ranges on the first.
-8. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.
+8. **No `restore` shortcut** *(accepted)*. There is no action that returns a molecule to an intact duplex without the transformations that would produce it. Every state is the consequence of explicit actions, so the model never claims an outcome it cannot represent. In particular, `extend` cannot cross a DSB and `ligate` cannot seal a gap.
+9. **HR stops at the RAD51 filament** *(accepted)*. The example covers DSB → resection → 3′ ssDNA overhang → RAD51 filament, which is the part the single-molecule model represents correctly. Strand invasion, D-loop formation, synthesis on the sister chromatid and resolution wait for multi-molecule support (roadmap).
+10. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.

@@ -58,10 +58,12 @@ actors:
     type: dna
     label: DNA
     compartment: nucleus
+    nucleic: { length: 100 }
     sites:
       - id: lesion
         type: guanine
         at: 50
+        strand: top
 
   - id: ogg1
     type: protein

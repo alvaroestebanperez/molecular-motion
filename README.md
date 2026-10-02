@@ -34,7 +34,7 @@ npm run dev
 The repository includes two mechanisms to exercise different parts of the language:
 
 - [PARP1-mediated single-strand break repair](examples/parp1-ssb-repair.yaml)
-- [Homologous recombination](examples/homologous-recombination.yaml)
+- [Homologous recombination: end resection and RAD51 loading](examples/homologous-recombination.yaml)
 
 ## Why Molecular Motion?
 
@@ -261,7 +261,8 @@ examples/     # complete mechanism definitions
 - [x] Live editor with PARP1 and homologous recombination examples
 - [x] Sequential and parallel action groups within a step
 - [x] Extensible action registry, compartments, and typed actor state
-- [ ] Rich DNA/RNA geometry, strand direction, and site anchors
+- [x] Nucleic-acid coordinates, strand polarity, resection, synthesis and unwinding ([RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md))
+- [ ] Interactions between nucleic-acid molecules: strand invasion, D-loops, synthesis on a sister chromatid, Holliday junctions
 - [ ] Complex assembly, stoichiometry, and repeated actor instances
 - [x] Per-step references, key events, and summaries
 - [x] Review-figure SVG language: helix with depth, molecular surfaces, lesion states, PAR chains, callouts
