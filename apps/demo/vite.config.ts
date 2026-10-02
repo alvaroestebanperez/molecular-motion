@@ -5,7 +5,6 @@ import react from '@vitejs/plugin-react';
 const source = (path: string) => fileURLToPath(new URL(`../../packages/${path}`, import.meta.url));
 
 export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? '/molecular-motion/' : '/',
   plugins: [react()],
   // Use package sources directly so the demo never runs against stale builds.
   resolve: {
