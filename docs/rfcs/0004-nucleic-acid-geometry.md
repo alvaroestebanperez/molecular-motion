@@ -1,6 +1,6 @@
 # RFC 0004 — Nucleic-acid geometry: coordinates, strand polarity, and site anchors
 
-- **Status:** proposed
+- **Status:** accepted
 - **Builds on:** [RFC 0001](0001-schema-v2.md), [RFC 0002](0002-step-references-and-viewer.md), [RFC 0003](0003-visual-vocabulary.md) §4–5
 - **Roadmap item:** *Rich DNA/RNA geometry, strand direction, and site anchors*
 
@@ -12,7 +12,7 @@ A nucleic acid in schema v2 is a featureless helix. Sites only have a layout hin
 - **Polarity does not exist in the model.** HR resection runs 5′→3′ and leaves 3′ overhangs. That is the central geometric fact of the pathway, and it cannot be expressed. Today the HR example jumps from "MRN binds" to "RAD51 filament" over an unchanged duplex.
 - **Single-stranded regions, unwound bubbles, and newly synthesised DNA** already exist as renderer primitives (`nucleicAcid({ kind: 'ssdna' })`, the `unwound` and elongating states, `showDirectionality`), but no mechanism can reach them. RFC 0003 §4 explicitly left this open "until a future schema RFC proves that additional biological state is necessary".
 
-The four target repair mechanisms (PARP1/SSB, BER, HR, and later NHEJ/MMR) all prove that need.
+The repair mechanisms in scope (PARP1/SSB, BER, HR, and later NHEJ/MMR) all prove that need.
 
 ## 2. Goals and non-goals
 
@@ -53,13 +53,13 @@ actors:
 ```
 
 - **Interbase, 0-based coordinates**, the same convention as BED and UCSC: `at: n` is the boundary between nucleotide *n − 1* and *n*. Breaks and nicks fall *between* nucleotides, so they map onto a boundary. Nucleotide-level lesions (`base-damage`, `abasic-site`, `adduct`) refer to the nucleotide `[at, at + 1)`. A site may instead give a `span: [from, to]` for footprints and patches.
-- **Two strands, fixed polarity.** `top` runs 5′→3′ left to right. `bottom` is antiparallel. The layout always draws the molecule in this orientation, so polarity on screen is never ambiguous. A `single` molecule has only `top`.
+- **Two strands, fixed polarity.** Coordinates increase along `top` from its 5′ end to its 3′ end. `bottom` is antiparallel. A `single` molecule has only `top`. How this is drawn is a renderer convention (§7).
 - **`strand`** on a site is `top | bottom | both`. The default depends on the lesion type it receives: `both` for `double-strand-break`, and `top` for every strand-level lesion. That default matches what the renderer draws today.
 - **Sites on non-nucleic actors** (`EGFR.Y1068`) are unchanged. `at`, `span`, and `strand` are rejected on actors that are not `dna`/`rna`.
 
 ### Compatibility rule
 
-An actor with no `nucleic` block gets an **implicit `length: 100`**, and the legacy layout keywords become coordinates: `start → 28`, `center → 50`, `end → 72`. The scene maps a coordinate to `x = width · at / length`, which reproduces the current geometry exactly. A `Point` position stays what it always was: a layout override that does not affect the coordinate.
+The v2 → v3 migration gives an actor with no `nucleic` block an **implicit `length: 100`**, and turns the legacy layout keywords into coordinates: `start → 28`, `center → 50`, `end → 72`. Independently, the scene maps a coordinate to `x = width · at / length`, and together the two reproduce the current geometry exactly. A `Point` position stays what it always was: a layout override. Its site has **no coordinate**, so it can still be bound and carry lesions, but `resect`, `extend`, and `unwind` reject it. The core never derives a coordinate from pixels.
 
 ## 4. State
 
@@ -115,11 +115,20 @@ That leaves a **3′ overhang** on each side, which is where RAD51 and RPA load.
 
 ### Existing vocabulary
 
-- `fill-gap` keeps its v2 meaning (lesion → `nick`). If the site also has missing nucleotides, it *additionally* behaves like `extend` over the whole gap. That is the only way to keep both BER short-patch (no missing range) and long-patch working.
+- `fill-gap` keeps exactly its v2 meaning (lesion → `nick`) and never touches `NucleicState`. Long-patch synthesis is written as an explicit `extend`, followed by `fill-gap` or `ligate`. Each action represents one transformation, so elongation is never hidden inside another verb.
 - `cleave`, `ligate`, `repair`, and `damage` are unchanged, and now act on the site's strand.
-- New aliases: `resect-dsb` → `resect`, `open-bubble` → `unwind`. These exist only for presentation verbs.
+- No new aliases. The four primitives are the whole addition.
 
-## 6. Rendering
+## 6. Semantics and rendering stay separate
+
+Everything in §3–5 is biology: `length`, coordinates, `strand`, and the `missing`, `nascent`, and `open` ranges. The core validates it and folds it, and it never mentions pixels, curves, labels, or colours. Everything below is a renderer decision. It may change between themes or renderers without a schema change, and it must never feed back into the core. Concretely:
+
+- The core does not know that `top` is drawn on top, nor that the molecule is drawn left to right. That reading rule is a renderer convention (§10.3).
+- `position: Point` stays a layout override. It is not a coordinate and never reaches `NucleicState`.
+- The legacy keyword mapping (`start → 28`, …) lives in the v2 → v3 migration. It is not in the scene.
+- Polarity labels, segment shapes, the RAD51 chain following the overhang, and `length → x` scaling are all scene and render concerns, and no core type carries them.
+
+## 7. Rendering
 
 The scene reads `NucleicState` and site strands. It never sees action types.
 
@@ -140,7 +149,7 @@ export interface SceneLesion { /* … */ strand: 'top' | 'bottom' | 'both' }
 - **Stable keys**: segments are keyed `acid/strand/from`, so `patchSvg` animates resection as the backbone shortening rather than a redraw.
 - **Accessibility**: the SVG description gains strand and range information, for example "top strand resected from 40 to 58 (3′ overhang on bottom strand)".
 
-## 7. Schema version
+## 8. Schema version
 
 RFC 0001 §9.1 says that a new *kind* of state is a schema change. `NucleicState` is one, so this RFC introduces **`schemaVersion: 3`**:
 
@@ -148,22 +157,24 @@ RFC 0001 §9.1 says that a new *kind* of state is a schema change. `NucleicState
 - A golden test locks the migrated PARP1 and HR scenes to the current v2 output, byte for byte.
 - `schema.json` is regenerated from the registry. The v2 schema is kept as `schema.v2.json`.
 
-## 8. Code changes (in reviewable PRs)
+## 9. Code changes (in reviewable PRs)
 
 | PR | Scope |
 |---|---|
 | 1. Coordinates | `core/types.ts` (`NucleicDefinition`, `at`/`span`/`strand`), `validate.ts`, `migrate.ts` (v2 → v3), `schema.ts`; `svg/scene.ts` maps `at` → x; golden identity test |
-| 2. Strand state | `NucleicState` in `types.ts`, range utilities (normalise/merge/subtract) with property tests, `resect`/`extend`/`unwind`/`anneal` + aliases in `actions.ts`, `fill-gap` extension, diff keys |
+| 2. Strand state | `NucleicState` in `types.ts`, range utilities (normalise/merge/subtract) with property tests, `resect`/`extend`/`unwind`/`anneal` in `actions.ts`, diff keys |
 | 3. Rendering | `svg/scene.ts` segments and strand-aware lesions; `render.ts` per-segment backbones, polarity labels, chains along ssDNA; `patchSvg` key test |
 | 4. Examples & docs | HR gains a resection step and RAD51 on the 3′ overhang; PARP1 declares the lesion strand; README roadmap; vocabulary page shows a resected end |
 
 PR 1 changes no output. PR 4 is the first PR that intentionally changes an example scene.
 
-## 9. Decisions and open questions
+## 10. Decisions
 
 1. **Interbase coordinates** *(proposed)* rather than 1-based nucleotides. Breaks are boundaries, and the convention matches BED, which most bioinformatics readers already know.
 2. **`top`/`bottom`** *(proposed)* rather than `watson`/`crick` or `+`/`−`. These names are neutral, and display labels are optional.
-3. **Fixed left-to-right orientation** *(proposed)*. Authors cannot flip a molecule, which keeps "5′ on the left of the top strand" a reliable reading rule. Revisit if two-molecule figures need it.
-4. **Bump to v3** *(open)*. The alternative is additive optional fields under v2, as RFC 0002 did for `nick`. That is less ceremony, but it breaks the RFC 0001 rule on new state kinds.
-5. **`fill-gap` overloading** *(open)*. Option (a): extend it as described in §5. Option (b): keep it lesion-only and require an explicit `extend` for long-patch repair. (b) is more honest to the design rule, and (a) is friendlier to authors.
-6. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.
+3. **Fixed left-to-right orientation** *(renderer convention)*. Authors cannot flip a molecule, which keeps "5′ on the left of the top strand" a reliable reading rule. Revisit if two-molecule figures need it.
+4. **`schemaVersion: 3`** *(accepted)*, following RFC 0001 §9.1. Migration v2 → v3 is automatic, and existing documents render byte-identically.
+5. **`fill-gap` keeps its v2 semantics** *(accepted)*. Long-patch synthesis needs an explicit `extend`.
+6. **Semantics and rendering are separate** *(accepted)*, as described in §6.
+7. **Multi-molecule pairing stays out** *(accepted)*. Strand invasion, D-loops, and Holliday junctions are not approximated with this model, for example by faking a second molecule as `open` or `nascent` ranges on the first.
+8. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.
