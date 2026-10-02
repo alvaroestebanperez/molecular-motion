@@ -31,10 +31,11 @@ npm install
 npm run dev
 ```
 
-The repository includes two mechanisms to exercise different parts of the language:
+The repository includes three mechanisms to exercise different parts of the language:
 
 - [PARP1-mediated single-strand break repair](examples/parp1-ssb-repair.yaml)
-- [Homologous recombination: end resection and RAD51 loading](examples/homologous-recombination.yaml)
+- [Homologous recombination: end resection, RPA coating and RAD51 loading](examples/homologous-recombination.yaml)
+- [EGFR activation by ligand-induced dimerization](examples/egfr-dimerization.yaml)
 
 ## Why Molecular Motion?
 
@@ -265,7 +266,7 @@ examples/     # complete mechanism definitions
 - [x] Extensible action registry, compartments, and typed actor state
 - [x] Nucleic-acid coordinates, strand polarity, resection, synthesis and unwinding ([RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md))
 - [ ] Interactions between nucleic-acid molecules: strand invasion, D-loops, synthesis on a sister chromatid, Holliday junctions
-- [ ] Complex assembly, stoichiometry, and repeated actor instances
+- [x] Actor copies, interaction graph with interfaces, and footprint occupancy on nucleic acids ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md))
 - [x] Per-step references, key events, and summaries
 - [x] Review-figure SVG language: helix with depth, molecular surfaces, lesion states, PAR chains, callouts
 - [x] Dashboard viewer: timeline, animated stage, step details, thumbnails, light/dark themes
