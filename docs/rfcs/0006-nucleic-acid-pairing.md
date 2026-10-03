@@ -1,143 +1,254 @@
-# RFC 0006 — Pairing between nucleic-acid molecules: homology, strand invasion, templated synthesis
+# RFC 0006 — Nucleic topology: pairing between strands of different molecules
 
-- **Status:** draft. The decisions in §9 are open and must be settled before implementation.
+- **Status:** accepted. Decisions in §11.
 - **Builds on:** [RFC 0004](0004-nucleic-acid-geometry.md) (coordinates, strand state), [RFC 0005](0005-assemblies-and-occupancy.md) (instances, interactions, occupancy)
 - **Roadmap item:** *Interactions between nucleic-acid molecules: strand invasion, D-loops, synthesis on a sister chromatid, Holliday junctions*
 
 ## 1. Problem
 
-The HR example stops at the RAD51 filament because every nucleic-acid relation in the model is internal to one molecule. Base pairs are derived from "both strands present and not unwound". RFC 0004 §10.7 and RFC 0005 §6 explicitly forbade faking a second molecule with `open` or `nascent` ranges. To continue HR honestly, the model needs four things:
+The HR example stops at the RAD51 filament because every nucleic-acid relation in the model is internal to one molecule. Base pairs are derived from "both strands present and not unwound". RFC 0004 §10.7 and RFC 0005 §6 forbade faking a second molecule with `open` or `nascent` ranges. To continue HR honestly, the model must express this chain as explicit actions:
 
-1. A way to say that two molecules (a broken chromatid and its sister) **carry the same sequence over a region**.
-2. **Base pairing between strands of different molecules** (the invading strand paired with the donor's complementary strand, inside a D-loop).
-3. **Synthesis whose template is on another molecule** (extension of the invading 3′ end using the donor).
-4. The end of the story, as consequences of explicit actions, never a `restore`: displacement of the extended strand, annealing to the other end, fill-in and ligation.
+```text
+RAD51-coated ssDNA → homology engagement → strand invasion → displaced strand
+   → synthesis using the sister chromatid as template → resolution
+```
 
-## 2. Scope
+The RFC looks for the **smallest generic abstraction** that does so. It does not add a `DLoop` primitive, a D-loop state, or any other named structure. HR is the main case. Annealing of complementary molecules and other branched structures are the check that the abstraction is generic (§9).
 
-**In:** homology declarations, inter-molecular pairing, strand invasion and the D-loop, extension on a donor template, D-loop disassembly, and annealing to the second end. Together these complete **synthesis-dependent strand annealing (SDSA)** end to end.
+## 2. Three layers, kept apart
 
-**Out (later RFCs):**
-- double Holliday junctions, branch migration of four-way junctions, and their resolution;
-- crossover outcomes, which permanently exchange arms between molecules and need molecule-level connectivity;
-- break-induced replication;
-- sequence content and mismatch repair in heteroduplex DNA.
+RFC 0005 separated who binds whom from who sits where. This RFC adds a third relation and keeps the same discipline: each layer answers one question, is stored once, and is never inferred from another.
 
-The design must not preclude them (§8).
+| Layer | Relation | Question | Lives in | RFC |
+|---|---|---|---|---|
+| **Interaction graph** | instance ↔ instance | Who is bound to whom, through which interface? | `state.interactions` | 0005 |
+| **Occupancy** | instance → span of a nucleic acid | Which nucleotides does a protein cover, on which strand? | `state.occupancy` | 0005 |
+| **Nucleic topology** | strand span ↔ strand span of another molecule | Which nucleotides are base-paired with which? | `state.pairings` | this one |
 
-## 3. Homology: a static declaration
+```text
+instances ◀──edges── interactions                       (layer 1)
+    │
+    └──holds──▶ occupancy ──on──▶ strand span           (layer 2)
+                                      ▲
+                                      └──paired with──▶ strand span of another molecule   (layer 3)
+```
+
+How the HR chain falls on the layers:
+
+| Event | Layer 1 | Layer 2 | Layer 3 |
+|---|---|---|---|
+| RAD51-coated ssDNA | `protomer` edges between copies | each copy occupies 3 nt of the overhang | none |
+| Homology engagement | unchanged | filament copies also rest on the donor (D9) | **none**: no base pair exists yet |
+| Strand invasion | unchanged | unchanged, or copies leave by `vacate` | a pairing appears |
+| Synthesis on the donor | a polymerase binds | the polymerase may occupy | the pairing grows |
+| Resolution | proteins leave | occupants leave | the pairing is removed |
+
+Rules that follow:
+
+- **A pairing never names a protein, and an occupancy never names a second molecule.** RAD51 does not "hold" the two DNAs together in the state. If the filament bridges them, that is two occupancies by the same instance (layer 2).
+- **No layer derives another.** A pairing does not create an interaction between the two molecules, and removing every protein does not remove a pairing.
+- **Layers constrain each other only through named validation rules**, as occupancy already does with strand state (`requireOccupantsFit`). Section 7 lists them.
+
+## 3. Nucleic topology
+
+### 3.1 The only new state
+
+```ts
+interface StrandSpan { acid: string; strand: StrandId; from: number; to: number }  // interbase, RFC 0004
+interface Pairing { ends: [StrandSpan, StrandSpan] }   // equal lengths; ends in canonical order
+// state.pairings: Record<string, Pairing[]>   keyed by strand pair, e.g. "chromosome.bottom~sister.top"
+```
+
+A pairing says that the nucleotides of one strand span are base-paired, one to one, with the nucleotides of another strand span. Nothing else is stored: no kind, no name, no reference to why it formed. Lists are normalised like RFC 0004 ranges (adjacent segments with the same correspondence merge), so a pairing that grows by synthesis changes one diff key, `pairings.<strand pair>`.
+
+### 3.2 Polarity fixes the coordinate correspondence (D2)
+
+Base pairing is antiparallel. RFC 0004 fixes each strand's polarity: `top` runs 5′→3′ with increasing coordinates, `bottom` with decreasing ones. Given two spans of equal length, the nucleotide-by-nucleotide map is therefore forced, and no orientation flag or map is stored:
+
+| Strands paired | Correspondence | Typical case |
+|---|---|---|
+| `top` ↔ `bottom` | direct: `a.from + i ↔ b.from + i` | two duplexes aligned in the same direction |
+| `top` ↔ `top`, `bottom` ↔ `bottom` | mirrored: `a.from + i ↔ b.to − 1 − i` | two complementary single strands; an inverted repeat |
+
+The 5′ end of one span always meets the 3′ end of the other. Which end of a paired span is a 3′ end, and therefore where a polymerase can act, is read from the strand, as in RFC 0004.
+
+### 3.3 One invariant: at most one partner per nucleotide
+
+A nucleotide is in exactly one of three conditions, all derived by one helper (`partnerOf(state, acid, strand, range)`):
+
+- **paired in cis**: the other strand of its own molecule is present and the position is not `open` (RFC 0004, unchanged, still derived);
+- **paired in trans**: it lies inside a pairing;
+- **unpaired**: neither.
+
+`pairingConflicts` is the single check, in the style of `occupancyConflicts`: a pairing may only cover nucleotides that are **present and unpaired**. A strand becomes unpaired in the ways RFC 0004 already provides: its partner was removed (`resect`), the duplex was opened (`unwind`), or the molecule is single-stranded.
+
+This is why `open` needs no change of meaning. It already says "both strands present, not paired with each other". A donor strand paired in trans sits inside an `open` region, and the other donor strand in that region is the displaced strand.
+
+### 3.4 Structures are derived, never stored
+
+A **branch point** is a position where the partner of a strand changes along its length (cis → trans, trans → unpaired, one pairing → another). The core does not store, name or count branch points. A D-loop is "an `open` region with a pairing into one of its strands". An R-loop is the same with an RNA. A Holliday junction is two reciprocal pairings (§9). The renderer draws strands and their partners. A step title may call the result a D-loop; no code does.
+
+## 4. Alignment: what a pairing may form between (D3, D4)
+
+The core has no sequence. It cannot know, and never asserts, that two molecules are homologous or complementary. The author declares which ranges **correspond**, in a top-level list:
 
 ```yaml
-homology:
+alignments:
   - id: sister
-    between: [chromosome, sister]   # two dna actors
-    range: [0, 80]                  # interbase, on both (same coordinates)
-    # or, for differing coordinates:
-    # a: { acid: chromosome, span: [0, 80] }
-    # b: { acid: sister, span: [100, 180] }
+    between: [chromosome, sister]
+    range: [0, 80]                  # same coordinates on both
+    # or: a: { acid: chromosome, span: [0, 80] }, b: { acid: sister, span: [100, 180] }
     orientation: same               # same | opposite
 ```
 
-- **Homology is authored data:** "these coordinates carry the same sequence". It has no sequence and no scoring, and the core knows no biology beyond it.
-- It defines a **coordinate map** between the two molecules. `same` maps `p ↦ p + offset`; `opposite` maps `p ↦ end − p`, for an inverted repeat or a molecule drawn in the other direction.
-- **Complementarity follows polarity (RFC 0004).** With `same` orientation, A's `top` is complementary to B's `bottom`, and A's `bottom` to B's `top`. With `opposite`, `top` pairs with `top`, and the antiparallel requirement still holds through the map.
+**Alignment and pairing are two concepts, and they stay apart:**
 
-## 4. Pairing: inter-molecular base pairing (state)
+| | `alignment` | `Pairing` |
+|---|---|---|
+| Says | these two ranges correspond, position by position, so their strands *may* pair | these nucleotides *are* base-paired now |
+| Lives in | the definition | `state.pairings` |
+| Changes over time | never | yes, only through `pair`, `unpair` and `extend` |
+| Biological claim | none. Why the ranges correspond (homology, complementarity, a designed guide) is the author's business | a base pair exists |
 
-```ts
-interface PairedStrand { acid: string; strand: StrandId; from: number; to: number }
-interface Pairing {
-  id: string;               // canonical from both ends
-  homology: string;         // the declaration that licenses it
-  ends: [PairedStrand, PairedStrand];
-}
-// state.pairings: Record<string, Pairing>
-```
-
-**One invariant, checked generically: every nucleotide of every strand has at most one partner.** That partner is either its own molecule's other strand (present, not missing, not inside an `open` region) or exactly one inter-molecular pairing. It follows that:
-
-- the invading strand must be single across the span (its own partner missing, e.g. a resected 3′ overhang);
-- the donor strand it pairs with must be unpaired across the mapped span, i.e. inside an `open` region of the donor (its own partner displaced);
-- the two ranges must map onto each other through the homology, and the strands must be complementary per §3.
-
-**The D-loop is derived, not stored:** a donor `open` region plus a pairing into it. The displaced donor strand is whatever is left unpaired in the bubble. Renderers name and draw it, and the core never stores "D-loop".
+- **Which strands may pair follows from polarity.** With `same`, `a.top` may pair with `b.bottom` and `a.bottom` with `b.top`. With `opposite`, `top` with `top` and `bottom` with `bottom`.
+- **An alignment is required (D3).** `pair` is rejected unless an alignment covers both spans with the matching correspondence. `pair { target, with }` uses it to derive the partner span, so the author does not repeat coordinates.
+- **The state does not reference it.** A pairing is valid or not by §3.3 alone. The alignment is checked when a pairing is created or grown, and an alignment with no pairing changes nothing.
+- A molecule may be aligned with itself over two ranges (repeats, inverted repeats).
 
 ## 5. Actions
 
-| Action | Effect | Notes |
+| Action | Effect | Fails when |
 |---|---|---|
-| `pair { target, with, homology?, strand? }` | Pairs the target strand range (a site or span on molecule A) with the complementary strand of the homologous range on molecule `with` | One transformation. It fails unless the invariant holds, so the donor must already be unwound (`unwind`, RFC 0004) |
-| `unpair { target }` | Dissolves the pairing on that range | The invader is released; the donor stays `open` until `anneal` |
-| *(alias)* `invade` → `pair` | Presentation verb "invades" | Expands to exactly one action (RFC 0001 §9.3) |
+| `pair { target, with, strand?, span?, alignment? }` | Pairs a strand span of the target molecule with the corresponding strand span of `with`, found through the alignment | either span is not present and unpaired (§3.3); no alignment covers them |
+| `unpair { target, strand?, span? }` | Removes the pairing over that span. Both strands become unpaired | nothing is paired there |
+| *(alias)* `invade` → `pair` | Presentation verb "invades" | — |
 
-**Templated synthesis (change to `extend`, RFC 0004 §5).** When the nucleotides next to a 3′ end are **paired with another molecule**, the template is the partner strand on that molecule, read through the homology map:
+`pair` and `unpair` do nothing else. They do not unwind, anneal, displace, or move proteins.
 
-- the new nucleotides become `nascent` on the invading molecule;
-- the **pairing grows** with them, because a newly made strand is base-paired to its template: one transformation, as in-molecule `extend` creates a duplex implicitly;
-- the donor template must be unpaired across the new range, so a longer D-loop needs an explicit `unwind` first. Nothing is displaced silently.
+**Displacement of an existing strand is explicit (D6).** To pair with a strand that is paired in cis, the duplex is first opened with `unwind` (RFC 0004), and the old partner stays in the bubble as the displaced strand. After `unpair`, the bubble stays `open` until `anneal`. `unwind` and `pair` are independent primitives and there is no concerted action. If authoring proves too verbose, a later alias may compile to several actions, which changes no state and no primitive.
 
-**Bridged breaks (change to RFC 0004 §5's DSB rule).** RFC 0004 forbids `extend` at a double-strand break because the 3′ end and its template lie on different fragments. That remains the default, and becomes conditional:
+**Existing strand actions gain one guard each**, all through `partnerOf`:
 
-- **Rule:** a DSB is *bridged* by a strand when that strand is present at both nucleotides flanking the break, and at least one of them is `nascent`. Resection removed the original flanks, so only synthesis across the break can make a strand present on both sides.
-- **Effect on `extend` at a DSB:** it is allowed when the template is a pairing, or when the break is bridged. A bridged break means the other fragment is annealed and physically connected.
-- **Effect on `ligate`:** it clears a DSB only when both strands are continuous across it. The existing gap guard already checks that.
-- **Everything is derived from RFC 0004 state:** there is no new storage for fragment connectivity.
-- **Abstraction kept from RFC 0004:** the nicks where new and old DNA meet (for example at the far end of a fill-in) are not tracked as separate lesions. The break site carries the lesion, and `ligate` seals it once no gap remains.
+| Action | Added rule |
+|---|---|
+| `anneal` | fails if any strand in the bubble is paired in trans: `unpair` first |
+| `resect` | fails across nucleotides paired in trans |
+| `unwind` | unchanged. An adjacent span merges into the existing bubble, which is how a bubble grows |
+| `degrade` (of a nucleic acid) | removes its pairings, as it removes edges and occupancies |
 
-### SDSA as explicit actions (the target story)
+## 6. Templated synthesis
 
-```text
-resect ──▶ RPA / RAD51 (RFC 0005) ──▶ unwind sister.region ──▶ invade chromosome.right-overhang with sister
-   ──▶ extend chromosome.break (template: sister, via the pairing) ──▶ unpair ──▶ anneal sister
-   ──▶ (the extended strand and the left 3′ overhang are now both present: paired, break bridged)
-   ──▶ extend the left 3′ end (template: the extended strand, same molecule) ──▶ ligate ──▶ intact
-```
+### 6.1 The template is the partner of the 3′ end (D7)
 
-Every arrow is one existing or proposed action, and the end state is the consequence of all of them.
+`extend` copies "the opposite strand". With pairings, that becomes: **the template is whatever the 3′-terminal nucleotide is paired with.** The invariant gives it at most one partner, so the template is never ambiguous and needs no field.
 
-## 6. Interplay with occupancy (RFC 0005)
+- 3′ end paired **in cis**: RFC 0004 behaviour, unchanged.
+- 3′ end paired **in trans**: the template is the partner strand, continuing past the end of the pairing. The new nucleotides become `nascent` on the extending molecule, and the pairing grows to cover them, in the same action. A new strand is base-paired to its template, as in-molecule `extend` creates a duplex implicitly.
+- The template nucleotides must be present and unpaired, and inside the alignment. Opening the donor further is an explicit `unwind`. Nothing is displaced silently (D6).
 
-A footprint form reads strand state. Pairing adds a new way for a strand to be "paired", so the forms need a definition that includes it (D6):
+### 6.2 What happens on the extending molecule (D8)
 
-- **`single`** means unpaired (no in-molecule partner and no pairing).
-- **`duplex`** means paired, in-molecule or by pairing.
+The nascent nucleotides fill `missing` coordinates of their own molecule. If the opposite strand is present there, RFC 0004 would read them as paired in cis, which is false: they are paired with the donor. So:
 
-The presynaptic RAD51 filament performs the invasion, so its footprint form determines whether it may stay on the strand when it pairs (D6). Strand-changing actions (`pair`, `unpair`, `extend`) keep RFC 0005's rule: every span occupant must still fit afterwards, or the action fails naming it.
+- **Rule:** trans-templated `extend` also marks the new range `open` on the extending molecule wherever its opposite strand is present. `open` means exactly this: both present, not paired with each other.
+- **Consequence:** when the pairing is later removed, the new strand and the old one are both unpaired. They pair only through an explicit `anneal`. In HR this is second-end annealing, and it is an action, not a side effect of `unpair`.
+- **Covalent synthesis and pairing stay distinct transformations.** `extend` makes nucleotides, which are paired with the template they were copied from and with nothing else. It never pairs the new strand with any other strand, on its own molecule or elsewhere.
 
-## 7. Rendering (renderer decisions, no schema impact)
+### 6.3 Bridged breaks (D11)
 
-- **Two molecules:** the broken molecule above and the donor below, stacked with room for the D-loop between them. Today's layout puts a second molecule at the bottom edge, so it must change when several molecules are shown.
-- **Pairing:** the invading strand leaves its molecule through an S-curve at the edges of the paired range, and runs inside the donor's bubble alongside the template strand. The displaced donor strand bows away (RFC 0004 `open` geometry). Base pairs are drawn between the paired strands only.
-- **Synthesis on the donor** uses the RFC 0004 nascent style on the invading strand inside the bubble.
-- **Polarity labels** stay per molecule. The invading 3′ end is labelled where it sits in the bubble.
-- **Description:** "chromosome bottom strand 40–58 paired with sister top strand 40–58 (D-loop)".
+RFC 0004 forbids `extend` at a double-strand break because the 3′ end and its template lie on different fragments. That remains the default and becomes conditional:
 
-## 8. Extensibility check (not implemented)
+- `extend` at a DSB is allowed when the 3′ end is **paired in trans** (§6.1), or when the break is **bridged**.
+- A DSB is *bridged* when one strand is present at both nucleotides flanking the break, at least one of them is `nascent`, and that strand is paired in cis on both sides. Resection removed the original flanks, so only synthesis across the break, followed by annealing, satisfies this.
+- `ligate` clears a DSB only when both strands are continuous across it. The existing gap guard already checks that.
+- "Bridged" is computed on demand from `missing`, `nascent`, `open` and `pairings`, including the cis-continuity condition. Nothing about it is persisted. As in RFC 0004, the nicks where new and old DNA meet are not separate lesions: the break site carries the lesion until `ligate`.
 
-- **dHJ.** Second-end capture creates a second pairing. A double Holliday junction is two pairings plus crossing strands, so it needs strand-continuity *between* molecules (which strand connects to which across a junction). That is a later "connectivity" concept layered on pairings, not a replacement for them.
-- **Mismatch / heteroduplex.** It would be a property of a pairing (a site inside it), not new pairing storage.
-- **NHEJ.** End synapsis is an interaction between proteins at two ends of one molecule (RFC 0005). Microhomology annealing would be a pairing within one molecule across a break (`homology` from a molecule to itself).
+## 7. Where the layers meet
 
-## 9. Open decisions
+- **Footprint forms read pairing status (D10).** `single` means the occupied strand is unpaired. `duplex` means it is paired, in cis or in trans. `any` needs only the strand present. `strand: both` still requires cis pairing for `duplex`.
+- **`form: any` is the absence of a form restriction on that footprint.** It tells the validator not to check pairing status for this occupant. It is not a biological statement that the protein binds every form of nucleic acid. The HR example declares RAD51 `any` so the filament can stay on the strand through `pair` and leave by an explicit `vacate`.
+- **Strand-changing actions keep RFC 0005's rule.** After `pair`, `unpair`, `extend`, `unwind` or `anneal`, every span occupant on the affected molecules must still fit, or the action fails naming it. A `single` RPA on the second end therefore stays valid while the nascent strand is still paired with the donor (§6.2), and must be vacated before `anneal`.
+- **Engagement with the donor is not a pairing (D9).** Before invasion there are no base pairs, so layer 3 is empty. Engagement is the filament resting on the donor: a second occupancy by the same instances. A `Pairing` exists only once strands are actually paired. This already works, since occupancy ids are per `<instance>@<acid>` and `vacate` takes a `target`.
+- **No interaction is created between nucleic acids.** `componentOf` is unchanged. Whether `translocate { includeBound }` carries a paired molecule is left out: it is not needed for the cases in scope.
 
-| # | Decision | Options | Recommendation |
+## 8. HR as explicit actions (SDSA)
+
+Starting state, from the current example: `chromosome` (length 80), DSB at 40, 18 nt resected. `bottom [40, 58)` is the right 3′ overhang, coated with RAD51. `top [22, 40)` is the left 3′ overhang, coated with RPA. `sister` is an intact duplex, aligned with it over `[0, 80]`, `same`.
+
+| # | Action | State change | Layer |
 |---|---|---|---|
-| **D1** | Where homology lives | (a) top-level `homology` list with explicit ranges and orientation; (b) a property on the nucleic acid (`homologousTo`) | **(a)**: ranges and orientation are first-class, several homologies per molecule are possible, and the same shape can later carry microhomology |
-| **D2** | Coordinate mapping | (a) offset + orientation (`same`/`opposite`); (b) arbitrary piecewise maps | **(a)**. Piecewise maps (indels between homologs) can come later without changing pairing storage |
-| **D3** | Pairing storage | (a) `state.pairings` records between strand ranges of two molecules; (b) extend `NucleicState` of each molecule with partner references | **(a)**: stored once, like interactions (RFC 0005 D5), with no duplicated state on both molecules |
-| **D4** | Invasion as actions | (a) explicit `unwind` (donor) then `pair`, with `invade` as a presentation alias of `pair`; (b) one `invade` primitive that unwinds and pairs | **(a)**: one transformation per action. The donor bubble is a separate, visible event |
-| **D5** | Templated synthesis | (a) `extend` reads the pairing as template and grows the pairing, with the donor already unwound; (b) `extend` also unwinds the donor ahead of synthesis (D-loop migration) | **(a)**: no silent displacement. Migration is an explicit `unwind` |
-| **D6** | Footprint forms and pairing | (a) strict: `single` = unpaired by any means, `duplex` = paired by any means; (b) forms read only in-molecule strands | **(a)**: forms describe what the protein sits on. Under (a), a `single` RAD51 could not stay on the strand it pairs. Because RAD51 binds both ssDNA and dsDNA, the HR example declares it `form: any`, so the filament stays through invasion and leaves through an explicit `vacate` (the RAD54-like step). RPA stays `single` |
-| **D7** | DSB extension and ligation | (a) derived "bridged" rule (§5) relaxing RFC 0004's ban; (b) keep the ban and add explicit per-strand break state | **(a)**: no new storage, and it follows from resection plus synthesis |
-| **D8** | Schema version | (a) `schemaVersion: 5` with automatic v4 → v5; (b) additive under v4 | **(a)**: a new kind of state (RFC 0001 §9.1). Migration is identity, and the baselines stay byte-identical |
-| **D9** | Scope of this RFC | (a) SDSA end to end; dHJ, resolution, crossovers and BIR deferred; (b) include dHJ | **(a)**: dHJ needs inter-molecular strand connectivity (§8), a concept of its own |
+| 1 | filament copies rest on `sister [40, 58)` | occupancies on `sister` | 2 |
+| 2 | `unwind sister.donor` | `sister.open [40, 58)` | RFC 0004 |
+| 3 | `invade chromosome.right-overhang with sister` | pairing `chromosome.bottom [40, 58) ~ sister.top [40, 58)`; `sister.bottom [40, 58)` is the displaced strand | 3 |
+| 4 | `vacate` RAD51 copies | occupancies removed | 2 |
+| 5 | `unwind sister.ahead` | `sister.open [22, 58)` | RFC 0004 |
+| 6 | `extend chromosome.break, strand: bottom, length: 18` | `chromosome.bottom [22, 40)` nascent; pairing grows to `[22, 58)`; `chromosome.open [22, 40)` | 3 + RFC 0004 |
+| 7 | `unpair` the invading strand | pairing removed | 3 |
+| 8 | `anneal sister.donor` | `sister` intact again | RFC 0004 |
+| 9 | `vacate` RPA; `anneal chromosome.left-overhang` | second end annealed; break bridged by `bottom` | 2, RFC 0004 |
+| 10 | `extend chromosome.break, strand: top, length: 18` | `chromosome.top [40, 58)` nascent, template in cis | RFC 0004 |
+| 11 | `ligate chromosome.break` | lesion cleared | RFC 0001 |
 
-## 10. Implementation plan (after the decisions)
+The final state is an intact chromosome with two `nascent` tracts and an untouched sister. It is the fold of the eleven actions. Removing any of them makes a later one fail.
 
-| PR | Scope | Output change |
+## 9. Generality check (not implemented by this RFC)
+
+| Structure | In this model | Needs anything new? |
 |---|---|---|
-| 0. Baseline | Freeze the v4 examples as fixtures; extend the render and semantic baselines | none |
-| 1. Homology + pairing | Declarations, `state.pairings`, the invariant, `pair`/`unpair`/`invade`, v5 migration, footprint forms reading pairing | none for legacy docs |
-| 2. Templated synthesis | `extend` through pairings, bridged-DSB rule, `ligate` across bridged breaks | none for legacy docs |
-| 3. Rendering | Several molecules, D-loop geometry, paired strands, description | only for docs with pairings |
-| 4. Example | HR continues: sister chromatid, invasion, D-loop, extension, displacement, annealing, fill-in, ligation | intended |
+| **Annealing of two complementary single strands** (oligos, RNA–DNA hybrid) | two `single` molecules, alignment `opposite`, one `top ~ top` pairing | no |
+| **R-loop** (transcript or guide RNA in a duplex) | `open` on the DNA, a pairing from the RNA into it | no |
+| **Second-end capture** | the displaced donor strand pairs with the other overhang: a second `pair` | no |
+| **Double Holliday junction** | after second-end capture, synthesis and ligation: both strands of one molecule paired in trans with both strands of the other over one range | no |
+| **Branch migration** | `unwind` ahead, `pair`, `unpair` behind, `anneal` | no, but four actions per increment (D6) |
+| **dHJ dissolution** (non-crossover) | `unpair` both pairings, `anneal` both molecules | no |
+| **Single-strand annealing, microhomology** | a molecule aligned with itself; pairing across the break | state: no. The 3′ flaps need a new trimming action |
+| **Hairpin, cruciform** | self-alignment `opposite`; a strand pairs with itself | state: no. Rendering excluded by RFC 0004 |
+| **Primer extension on a separate template; replication fork with nascent strands as molecules** | pairing plus trans-templated `extend` | authorable initial `missing` state, which does not exist today |
+| **Nuclease resolution of a junction, crossover** | cutting and re-joining exchanges strands *between* molecules | **yes**: covalent connectivity across molecules. A later RFC, layered on pairings |
+| **Flap, strand-displacement synthesis within one molecule** | two nucleotides at one (molecule, strand, coordinate) | **yes**: the same connectivity concept |
+| **Triplex, G-quadruplex, parallel pairing** | more than one partner, or non-antiparallel | **yes**: relax §3.3 or §3.2, both single replaceable rules |
+
+The line the check draws: pairings cover every structure made by changing **who is base-paired with whom**. They do not cover structures that change **which nucleotide is covalently joined to which**. That is the boundary of this RFC (D12).
+
+## 10. Rendering (renderer decisions, no schema impact)
+
+The scene reads `NucleicState` and `pairings`. It never sees action types and has no notion of invasion, D-loop, donor or recipient.
+
+- **Several molecules:** stacked, with room between them. Today's layout puts a second molecule at the bottom edge and must change.
+- **A strand paired in trans** leaves its molecule's axis at the edges of the paired span and runs beside its partner. Rungs are drawn between partners, whichever molecule they belong to. An unpaired strand in an `open` region bows away, as it does today.
+- **Nascent** nucleotides keep the RFC 0004 style wherever they are drawn.
+- **Polarity labels** stay per strand end.
+- **Description** is structural: "chromosome bottom strand 40–58 paired with sister top strand 40–58; sister bottom strand 40–58 unpaired".
+- **Keys:** each molecule stays one keyed group. Pairing geometry is redrawn between steps, as backbones are.
+
+## 11. Decisions
+
+| # | Decision | Options | Outcome |
+|---|---|---|---|
+| **D1** | What a pairing relates, and where it is stored | (a) strand span ↔ strand span, stored once in `state.pairings`; (b) partner references inside each molecule's `NucleicState`; (c) whole-molecule relation plus a range | **(a)** *(accepted)* |
+| **D2** | Coordinate correspondence | (a) derived from strand polarity and equal span length (§3.2); (b) stored orientation or map on each pairing | **(a)** *(accepted)* |
+| **D3** | What licenses `pair` | (a) a prior declaration is required; (b) optional; (c) none | **(a)** *(accepted)* |
+| **D4** | Shape and name of the declaration | (a) top-level list between two molecule ranges with `same`/`opposite`; (b) strand-level declarations; (c) a property on the nucleic acid. Name: `homology` or `alignment` | **(a), named `alignments`** *(accepted)*. The core has no sequence and does not assert biological homology. An alignment declares correspondence between spans; a `Pairing` is the pairing that exists in the state. The two stay separate (§4) |
+| **D5** | Cis pairing | (a) stays derived (RFC 0004); only trans pairing is stored; (b) all base pairing becomes explicit records | **(a)** *(accepted)* |
+| **D6** | Displacing an existing partner | (a) explicit `unwind`, then `pair`; (b) one concerted primitive; (c) both | **(a)** *(accepted)*. `unwind` and `pair` stay independent primitives; no concerted action for now. A later alias may compile to several actions without changing the model |
+| **D7** | Template of `extend` | (a) derived: the partner of the 3′ end; (b) an explicit `template` field | **(a)** *(accepted)* |
+| **D8** | Nascent strand vs its own molecule | (a) trans-templated `extend` leaves the range `nascent` and `open`; annealing is an explicit `anneal`; (b) `unpair` anneals implicitly | **(a)** *(accepted)*. Covalent synthesis and pairing are distinct transformations |
+| **D9** | Engagement with the donor | (a) occupancy of the filament copies on the donor, no pairing; (b) a non-base-paired record in layer 3; (c) not modelled | **(a)** *(accepted)*. No `Pairing` exists until strands are actually paired |
+| **D10** | Footprint forms | (a) forms read pairing status by any means; (b) forms read only the molecule's own strands | **(a)** *(accepted)*. The HR example declares RAD51 `form: any`, documented as the absence of a form restriction on the footprint, not a general biological claim about RAD51 (§7) |
+| **D11** | DSB extension and ligation | (a) derived "bridged" rule (§6.3); (b) explicit per-strand break state and tracked nicks | **(a)** *(accepted)*. Fully derived, including the cis-continuity condition. No persistent state |
+| **D12** | Scope | (a) core tested beyond SDSA; renderer and example SDSA only; (b) SDSA only everywhere; (c) include nuclease resolution and crossovers | **(a)** *(accepted)*. Core tested up to dHJ formation, branch migration and dissolution. The renderer and the HR mechanism stop at SDSA |
+| **D13** | Verbs | (a) `pair`/`unpair` for trans, `anneal`/`unwind` keep their cis meaning; (b) generalise `anneal` and `unwind` | **(a)** *(accepted)* |
+| **D14** | Schema version | (a) `schemaVersion: 5` with automatic v4 → v5; (b) additive under v4 | **(a)** *(accepted)*, with legacy baselines |
+
+## 12. Implementation plan
+
+Each PR keeps every frozen fixture (v1–v4) byte-identical in render and identical in the semantic projection, until PR 5 changes the HR example on purpose.
+
+| PR | Scope | Tests | Output change |
+|---|---|---|---|
+| **0. Baseline** | Freeze the three v4 examples as fixtures; SHA-256 of full, compact and ghosted renders; per-step semantic projection; keep `schema.v4.json` | the baselines themselves | none |
+| **1. Schema v5, alignments, pairings** | `schemaVersion: 5` and identity migration v4 → v5; `alignments` in types, schema and validation (nucleic actors, ranges inside the molecules, equal lengths); `state.pairings` with normalised segments and diff keys; `partnerOf` and `pairingConflicts`; `pair`, `unpair`, alias `invade`; `degrade` removes pairings | migration; alignment validation; correspondence for `top~bottom` and `top~top`; the invariant; normalisation and merge; determinism and seek; parallel-conflict keys | none |
+| **2. Layer rules** | Guards on `anneal` and `resect`; footprint forms read `partnerOf`; occupants re-checked on both molecules after `pair` and `unpair`; a second occupancy of one instance on another molecule (engagement) | each guard; `single`/`duplex`/`any` against cis, trans and unpaired; RPA on a strand whose opposite is nascent and `open` | none |
+| **3. Templated synthesis** | `extend` through a pairing (template from the 3′ end, pairing grows, range `open` on the extending molecule); `extend` on a `single` molecule paired in trans; derived bridged rule; `ligate` across a bridged break | SDSA end to end (§8), including that removing any action makes a later one fail; annealing of two single strands; dHJ formation, branch migration and dissolution | none |
+| **4. Rendering** | Layout for several nucleic acids; strands paired in trans; rungs between partners; structural description; keys | geometry and contact tests; description; legacy SHA baselines | only for documents with pairings |
+| **5. Example and docs** | HR continues from the filament to an intact chromosome (§8): `sister` actor, alignment, RAD51 `form: any`; README roadmap; notes in RFC 0004 §10.7–10.9 and RFC 0005 §6 pointing here | new HR baseline | intended |
