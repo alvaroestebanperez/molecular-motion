@@ -6,8 +6,11 @@ const RESUMED = 'mm-resume';
  * Update an SVG rendered by `renderSvg` in place. Children of each `data-layer` group are matched
  * by `data-key`: persistent elements keep their DOM node (so CSS transitions animate transform and
  * opacity), new ones fade in, and removed ones fade out before being detached.
+ *
+ * Layers named in `keep` are left exactly as they are: something else is drawing them (the geometry
+ * animator, ADR 0001), and a later call without `keep` settles them.
  */
-export function patchSvg(container: HTMLElement, markup: string): void {
+export function patchSvg(container: HTMLElement, markup: string, options: { keep?: readonly string[] } = {}): void {
   const template = document.createElement('template');
   template.innerHTML = markup.trim();
   const next = template.content.firstElementChild;
@@ -30,6 +33,7 @@ export function patchSvg(container: HTMLElement, markup: string): void {
     const layer = child.getAttribute('data-layer');
     let target = present.get(slot(child));
     present.delete(slot(child));
+    if (layer && options.keep?.includes(layer)) { if (target) cursor = target; continue; }
     if (!target) {
       target = document.importNode(child, false);
       current.insertBefore(target, cursor ? cursor.nextSibling : current.firstChild);
@@ -43,6 +47,7 @@ export function patchSvg(container: HTMLElement, markup: string): void {
     reconcile(target, child);
   }
   for (const stale of present.values()) {
+    if (options.keep?.includes(stale.getAttribute('data-layer') ?? '')) continue;
     if (!stale.hasAttribute('data-layer')) { stale.remove(); continue; }
     reconcile(stale, document.createElement('g'));
     stale.removeAttribute('data-layer');

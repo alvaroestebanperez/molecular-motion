@@ -1,8 +1,9 @@
 import type { LesionType } from '@molecular-motion/core';
 import {
   actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
-  type SceneActor, type SceneConnection, type SceneNucleicAcid, type ScenePairing, type SvgScene,
+  type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
 } from './scene';
+import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
 import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
 
 export { mix };
@@ -45,8 +46,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   const defs = `<defs>${colors.map((color, index) => sphereGradient(`${prefix}-g${index}`, color) + haloGradient(`${prefix}-halo-${index}`, color)).join('')}`
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
-  const acids = scene.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, scene.width, prefix)}</g>`).join('');
-  const pairings = scene.pairings.map(pairing => pairedStrands(scene, pairing)).join('');
+  const { acids, pairings } = nucleicLayerMarkup(geometryFrame(scene), prefix);
   const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false)).join('');
   const labels = compact ? '' : [
@@ -158,9 +158,9 @@ export function describeScene(scene: SvgScene): string {
  * Strands paired across two molecules (RFC 0006 §10): each travelling strand, its base pairs to the
  * partner, and its free ends. One keyed group per strand pair, so a pairing that grows is the same element.
  */
-function pairedStrands(scene: SvgScene, pairing: ScenePairing): string {
+function pairedStrands(frame: GeometryFrame, pairing: FramePairing): string {
   const line = (points: { x: number; y: number }[]) => `M${points.map(point => `${round(point.x)} ${round(point.y)}`).join('L')}`;
-  const parts = pairing.segments.flatMap(segment => pairingGeometry(scene, segment) ?? []);
+  const parts = pairing.segments.flatMap(segment => pairingGeometry(frame, segment, segment.travel) ?? []);
   const strands = parts.map(part => line(part.points)).join('');
   const rungs = parts.flatMap(part => part.rungs.map(line)).join('');
   const nascent = parts.flatMap(part => part.nascent.map(line)).join('');
@@ -170,6 +170,18 @@ function pairedStrands(scene: SvgScene, pairing: ScenePairing): string {
     + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${strands}"/><path class="mm-dna__shine" d="${strands}"/></g>`
     + (nascent ? `<path class="mm-dna__nascent mm-dna__nascent--front" d="${nascent}"/>` : '')
     + ends + '</g>';
+}
+
+/**
+ * Content of the two nucleic layers for a frame: a settled step (`geometryFrame(scene)`) or an instant
+ * of a transition (ADR 0001). The viewer's animator redraws only these, on the elements already there.
+ */
+export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm'): { acids: string; pairings: string } {
+  const prefix = escape(idPrefix);
+  return {
+    acids: frame.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, frame.width, prefix)}</g>`).join(''),
+    pairings: frame.pairings.map(pairing => pairedStrands(frame, pairing)).join(''),
+  };
 }
 
 // ---- Nucleic acids ----
@@ -486,6 +498,7 @@ export const molecularMotionCss = `
 .mm-lesion__glow{animation:mm-pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-lesion__dot{fill:var(--mm-alert);stroke:var(--mm-surface);stroke-width:1.5}.mm-lesion__ring{fill:var(--mm-surface);stroke:var(--mm-alert);stroke-width:2}
 .mm-actor,.mm-label{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease,filter .6s ease}
+.mm-layer[data-layer=acids]{transition:transform .8s cubic-bezier(.22,.7,.2,1)}
 .mm-actor{cursor:pointer;outline:none}.mm-actor--ghost,.mm-label--ghost{opacity:.26;cursor:default;pointer-events:none}
 .mm-actor--ghost{filter:blur(2.2px)}.mm-actor--ghost .mm-actor__inner{filter:none}
 .mm-shape__outline,.mm-actor .mm-surface__outline{fill:color-mix(in srgb,var(--mm-actor) 62%,var(--mm-ink))}

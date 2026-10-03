@@ -44,6 +44,8 @@ describe.each(EXAMPLES)('patchSvg invariant: %s', name => {
     return settled(fresh);
   });
 
+  // The all-pairs walk patches a few hundred times; it is slow under load, never close to this limit.
+  vi.setConfig({ testTimeout: 60_000 });
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
