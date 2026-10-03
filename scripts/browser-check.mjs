@@ -37,6 +37,7 @@ try {
 
   const failures = [];
   let checked = 0;
+  let strandsChecked = 0;
   for (const example of EXAMPLES) {
     await send('Page.navigate', { url: `http://localhost:${PORT}/#/mechanisms/${example}` });
     await sleep(600); await send('Page.reload'); await sleep(1500);
@@ -57,6 +58,51 @@ try {
         for (const { key, from, mid: middle, element } of mid) out.push({ key, step: document.querySelector('.viewer__caption h2').textContent, from, mid: middle, to: look(element), kept: element.isConnected });
       }
       return out;`);
+    // Strands (ADR 0001): walk again and sample the nucleic paths while they change.
+    await send('Page.reload'); await sleep(1500);
+    const strands = await evaluate(`
+      const stage = document.querySelector('.viewer__canvas');
+      const next = document.querySelector('[aria-label="Next step"]');
+      const paths = () => new Map([...stage.querySelectorAll('[data-layer="acids"] > [data-key] path, [data-layer="pairings"] > [data-key] path')]
+        .map(path => [path.closest('[data-key]').dataset.key + ' ' + path.getAttribute('class') + (path.parentElement.matches('.mm-dna__back') ? ' back' : ''), path]));
+      const measure = map => new Map([...map].map(([key, path]) => [key, { path, d: path.getAttribute('d'), length: path.getAttribute('d') ? path.getTotalLength() : 0 }]));
+      const pairingKeys = () => [...stage.querySelectorAll('[data-layer="pairings"] > [data-key]')].map(group => group.dataset.key).sort().join(',');
+      const out = [];
+      while (!next.disabled) {
+        const before = measure(paths());
+        const pairedBefore = pairingKeys();
+        next.click();
+        const samples = [];
+        for (const wait of [150, 200, 200]) { await new Promise(resolve => setTimeout(resolve, wait)); samples.push(measure(paths())); }
+        await new Promise(resolve => setTimeout(resolve, 900));
+        const after = measure(paths());
+        const step = document.querySelector('.viewer__caption h2').textContent;
+        for (const [key, end] of after) {
+          const start = before.get(key);
+          if (!start || start.d === end.d) continue;
+          out.push({ step, key, handoff: pairedBefore !== pairingKeys(), kept: start.path === end.path && start.path.isConnected, start: start.length, end: end.length,
+            mid: samples.map(sample => sample.get(key)?.length ?? null), moving: samples.map(sample => { const d = sample.get(key)?.d; return d !== undefined && d !== start.d && d !== end.d; }) });
+        }
+      }
+      return out;`);
+    for (const { step, key, handoff, kept, start, end, mid, moving } of strands) {
+      strandsChecked += 1;
+      const paired = key.startsWith('pairing:');
+      // What must show an intermediate shape: a strand paired across molecules, a nascent tract, and any
+      // backbone whose drawn length changes clearly (a gap, a bubble). Two changes are discrete by design
+      // and exempt: the fixed gap of a lesion at a site, and a backbone handing a stretch over to the
+      // pairing layer or taking it back (the stretch itself is checked there).
+      const backbone = key.includes('mm-dna__tube') || key.endsWith(' back');
+      const mustMove = paired || key.includes('mm-dna__nascent') || (backbone && Math.abs(end - start) > 60 && !handoff);
+      const steady = (length, index) => length !== null && (end > start ? length >= (index ? mid[index - 1] : start) - 3 : length <= (index ? mid[index - 1] : start) + 3);
+      const problems = [
+        !kept && 'its <path> was replaced',
+        mustMove && !moving.some(Boolean) && 'it jumped: no intermediate shape was drawn',
+        // A paired strand that ends longer never gets shorter on the way, and the other way round.
+        paired && key.includes('mm-dna__tube') && Math.abs(end - start) > 40 && !mid.every(steady) && `its length did not change steadily (${[start, ...mid, end].map(Math.round).join(' → ')})`,
+      ].filter(Boolean);
+      if (problems.length) failures.push(`${example} · ${step} · ${key}: ${problems.join('; ')}`);
+    }
     for (const { key, step, from, mid, to, kept } of results) {
       checked += 1;
       const travelled = Math.hypot(to.x - from.x, to.y - from.y);
@@ -72,7 +118,7 @@ try {
     }
   }
   socket.close();
-  console.log(`ghost → present: ${checked} transitions sampled in mid-flight, ${failures.length} failed`);
+  console.log(`ghost → present: ${checked} transitions sampled in mid-flight; strands: ${strandsChecked} changing paths sampled in mid-flight; ${failures.length} failed`);
   for (const failure of failures) console.log(`  ✗ ${failure}`);
   if (!checked) { console.error('nothing was checked'); process.exitCode = 1; }
   if (failures.length) process.exitCode = 1;

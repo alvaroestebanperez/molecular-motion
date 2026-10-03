@@ -1,6 +1,7 @@
 import { useEffect, useId, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { CompiledMechanism } from '@molecular-motion/core';
-import { buildSvgScene, molecularMotionCss, renderSvg } from '@molecular-motion/svg';
+import { buildSvgScene, geometryFrame, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame } from '@molecular-motion/svg';
+import { animateGeometry, motionTiming, NUCLEIC_LAYERS, type GeometryAnimation } from './animate';
 import { patchSvg } from './patch';
 import { uiCss } from './styles';
 
@@ -45,12 +46,42 @@ export function MechanismStage({ mechanism, stepIndex, ghosts, selectedActor = n
     return () => observer.disconnect();
   }, []);
 
-  const markup = useMemo(() => {
+  const scene = useMemo(() => {
     const size = narrow ? { width: 640, height: 620 } : {};
-    return renderSvg(buildSvgScene(mechanism.at(stepIndex), { ...size, ghosts }), { idPrefix, selectedActor });
-  }, [mechanism, stepIndex, ghosts, narrow, idPrefix, selectedActor]);
+    return buildSvgScene(mechanism.at(stepIndex), { ...size, ghosts });
+  }, [mechanism, stepIndex, ghosts, narrow]);
+  const markup = useMemo(() => renderSvg(scene, { idPrefix, selectedActor }), [scene, idPrefix, selectedActor]);
 
-  useLayoutEffect(() => { if (ref.current) patchSvg(ref.current, markup); }, [markup]);
+  // The geometry on screen, and the transition drawing it if one is running (ADR 0001). Everything but
+  // the nucleic layers is patched at once and moves by CSS; those layers are animated from what is
+  // shown to the new step, and settled with a full patch when they arrive.
+  const shown = useRef<{ frame: GeometryFrame; size: string } | null>(null);
+  const running = useRef<GeometryAnimation | null>(null);
+  useLayoutEffect(() => {
+    const container = ref.current;
+    if (!container) return;
+    const target = geometryFrame(scene);
+    const size = `${scene.width}×${scene.height}`;
+    const origin = running.current?.frame() ?? shown.current?.frame;
+    running.current?.cancel();
+    running.current = null;
+    const svg = container.firstElementChild;
+    const timing = svg && origin && shown.current?.size === size ? motionTiming(svg) : undefined;
+    const changes = origin && timing?.duration && JSON.stringify(nucleicLayerMarkup(origin, idPrefix)) !== JSON.stringify(nucleicLayerMarkup(target, idPrefix));
+    if (!svg || !origin || !timing || !changes) {
+      patchSvg(container, markup);
+      shown.current = { frame: target, size };
+      return;
+    }
+    patchSvg(container, markup, { keep: NUCLEIC_LAYERS });
+    shown.current = { frame: origin, size };
+    running.current = animateGeometry(svg, origin, target, idPrefix, timing, () => {
+      running.current = null;
+      shown.current = { frame: target, size };
+      patchSvg(container, markup);
+    });
+  }, [scene, markup, idPrefix]);
+  useEffect(() => () => running.current?.cancel(), []);
 
   const actorFrom = (target: EventTarget | null) =>
     target instanceof Element ? target.closest<SVGGElement>('[data-actor][role=button]')?.dataset.actor ?? null : null;

@@ -202,7 +202,7 @@ export interface PairingGeometry {
  * own molecule it eases back onto that molecule's axis, so entry and exit are one smooth curve; a free
  * end simply ends beside the partner.
  */
-export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>, { traveller, host }: ScenePairingSegment): PairingGeometry | undefined {
+export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>, { traveller, host }: Pick<ScenePairingSegment, 'traveller' | 'host'>, travel = 1): PairingGeometry | undefined {
   const own = scene.nucleicAcids.find(acid => acid.id === traveller.acid);
   const other = scene.nucleicAcids.find(acid => acid.id === host.acid);
   if (!own || !other) return undefined;
@@ -220,7 +220,9 @@ export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>,
   const [hostFrom, hostTo] = [host.from * otherScale, host.to * otherScale];
   const settle = Math.min(RELAX, (hostTo - hostFrom) / 2);
   const level = (x: number) => helixY(other, partner, Math.max(hostFrom + settle, Math.min(hostTo - settle, x)), width);
-  const weight = (p: number) => Math.min(
+  // `travel` is how far the stretch has come from its own molecule's line (0) to its place here (1).
+  // A settled step is always 1; frames of a transition pass through the values in between (ADR 0001 §4.3).
+  const weight = (p: number) => travel * Math.min(
     continues.from ? smooth((p - traveller.from) * ownScale / ramp) : 1,
     continues.to ? smooth((traveller.to - p) * ownScale / ramp) : 1,
   );
@@ -259,6 +261,34 @@ export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>,
     ...(continues.to ? [] : [end(points.at(-1)!, points.at(-2)!, labels.to)]),
   ] : [];
   return { points, rungs, nascent, ends };
+}
+
+/**
+ * Record on each molecule the stretches of its strands that are drawn beside another molecule, and
+ * whether the strand goes on along its own molecule past each end of them. Past an end it goes on when
+ * the next nucleotide is there, on this molecule's line, and is not where synthesis stopped: the 3′ end
+ * of a new stretch is a free end. Read from strand ranges only, so it serves frames as well as steps.
+ */
+export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneStrandSpan[], width: number): void {
+  const NEAR = 1e-3;
+  for (const acid of acids) delete acid.away;
+  for (const traveller of travellers) {
+    const acid = acids.find(item => item.id === traveller.acid);
+    if (!acid) continue;
+    const length = acid.length ?? 100;
+    const scale = width / length;
+    const on = (list: readonly { strand: StrandId; from: number; to: number }[] | undefined, at: number) =>
+      (list ?? []).some(range => range.strand === traveller.strand && range.from <= at && at < range.to);
+    const others = travellers.filter(other => other.acid === traveller.acid);
+    const top = traveller.strand === 'top';
+    const goesOn = (inside: number, outside: number, threePrime: boolean) => outside >= 0 && outside < length
+      && !on(acid.missing, outside) && !on(others, outside)
+      && !(threePrime && on(acid.nascent, inside) && !on(acid.nascent, outside));
+    acid.away = [...acid.away ?? [], {
+      strand: traveller.strand, from: traveller.from, to: traveller.to, x0: traveller.from * scale, x1: traveller.to * scale,
+      continues: [goesOn(traveller.from + NEAR, traveller.from - NEAR, !top), goesOn(traveller.to - NEAR, traveller.to + NEAR, top)],
+    }];
+  }
 }
 
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
@@ -504,24 +534,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     });
     return segments.length ? [{ key, segments }] : [];
   });
-  const travellers = pairings.flatMap(pairing => pairing.segments.map(segment => segment.traveller));
-  for (const traveller of travellers) {
-    const acid = acidIndex.get(traveller.acid)!;
-    const scale = width / (acid.length ?? 100);
-    const nucleic = snapshot.actors[traveller.acid]!.nucleic;
-    const on = (list: readonly { strand: StrandId; from: number; to: number }[] | undefined, nucleotide: number) =>
-      (list ?? []).some(range => range.strand === traveller.strand && range.from <= nucleotide && nucleotide < range.to);
-    // Past an end the strand goes on along its own molecule when the next nucleotide is there, on this
-    // molecule's axis, and is not where synthesis stopped: the 3′ end of a new stretch is a free end.
-    const top = traveller.strand === 'top';
-    const goesOn = (inside: number, outside: number, threePrime: boolean) => outside >= 0 && outside < (acid.length ?? 100)
-      && !on(nucleic?.missing, outside) && !on(travellers.filter(other => other.acid === traveller.acid), outside)
-      && !(threePrime && on(nucleic?.nascent, inside) && !on(nucleic?.nascent, outside));
-    acid.away = [...acid.away ?? [], {
-      strand: traveller.strand, from: traveller.from, to: traveller.to, x0: traveller.from * scale, x1: traveller.to * scale,
-      continues: [goesOn(traveller.from, traveller.from - 1, !top), goesOn(traveller.to - 1, traveller.to, top)],
-    }];
-  }
+  markAway(nucleicAcids, pairings.flatMap(pairing => pairing.segments.map(segment => segment.traveller)), width);
   /** Where a strand stretch is drawn when it travels to another molecule: the point at coordinate `p`. */
   const travelling = (acid: string, strand: SiteStrand | undefined, p: number): Point | undefined => {
     for (const segment of pairings.flatMap(pairing => pairing.segments)) {

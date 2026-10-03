@@ -88,7 +88,7 @@ The anchor is derived from the two frames, in this order.
 
    A nascent stretch that goes away retracts in the opposite order: its 3′ end first.
 
-2. **Otherwise a state spreads from where it already is.** The front starts at the end of the stretch whose neighbour, in the origin frame, is already in the destination state. For "missing", a break site and a molecule end count as such a neighbour: the strand already ends there.
+2. **Otherwise a state spreads from where it already is.** The front starts at the end of the stretch whose neighbour, in the origin frame, is already in the destination state. For "missing", a break site and a molecule end count as such a neighbour: the strand already ends there. For the same reason presence does not spread across a break: the nucleotides on the other side belong to another fragment.
    - A gap opens from the break. A gap being closed without nascent nucleotides closes from the strand that is there.
    - A bubble grows from the bubble next to it.
 3. **Both ends qualify:** two fronts start at the ends and meet in the middle (a bubble closing).
