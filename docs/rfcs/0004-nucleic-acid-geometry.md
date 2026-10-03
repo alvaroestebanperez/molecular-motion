@@ -111,7 +111,7 @@ That leaves a **3′ overhang** on each side, which is where RAD51 and RPA load.
 - `resect` requires a break at the target (`single-strand-break`, `nick`, `double-strand-break`). It errors if `length` exceeds the distance to the molecule end. It never clamps silently.
 - `resect` continues from the current 5′ end. A second `resect` at the same break extends the existing overhang, so short-range (MRN) and long-range (EXO1) resection can be separate steps.
 - `extend` requires missing nucleotides adjacent to a 3′ end at the site (past any nucleotides already synthesised from it), and cannot extend past them. The opposite strand must be present across the range, because it is the template.
-- `extend` is rejected at a `double-strand-break`: the 3′ end and its template lie on different fragments, so filling in would pair two molecules (§2).
+- `extend` is rejected at a `double-strand-break`: the 3′ end and its template lie on different fragments, so filling in would pair two molecules (§2). [RFC 0006](0006-nucleic-acid-pairing.md) §6 makes this conditional: it is allowed when the 3′ end is paired with another molecule, or when a new strand bridges the break.
 - `ligate` is rejected while a broken strand still has missing nucleotides at the break, including a gap left behind by a partial `extend`. A ligase seals a nick, not a gap.
 - `unwind` requires a `duplex` molecule and both strands present in the range. `anneal` requires an existing `open` region.
 - At most one `open` region overlaps any site.
@@ -181,7 +181,7 @@ PR 1 changes no output. PR 4 is the first PR that intentionally changes an examp
 4. **`schemaVersion: 3`** *(accepted)*, following RFC 0001 §9.1. Migration v2 → v3 is automatic, and existing documents render byte-identically.
 5. **`fill-gap` keeps its v2 semantics** *(accepted)*. Long-patch synthesis needs an explicit `extend`.
 6. **Semantics and rendering are separate** *(accepted)*, as described in §6.
-7. **Multi-molecule pairing stays out** *(accepted)*. Strand invasion, D-loops, and Holliday junctions are not approximated with this model, for example by faking a second molecule as `open` or `nascent` ranges on the first.
+7. **Multi-molecule pairing stays out** *(accepted; superseded by [RFC 0006](0006-nucleic-acid-pairing.md), which adds it as its own layer without faking a second molecule)*. Strand invasion, D-loops, and Holliday junctions are not approximated with this model, for example by faking a second molecule as `open` or `nascent` ranges on the first.
 8. **No `restore` shortcut** *(accepted)*. There is no action that returns a molecule to an intact duplex without the transformations that would produce it. Every state is the consequence of explicit actions, so the model never claims an outcome it cannot represent. In particular, `extend` cannot cross a DSB and `ligate` cannot seal a gap.
-9. **HR stops at the RAD51 filament** *(accepted)*. The example covers DSB → resection → 3′ ssDNA overhang → RAD51 filament, which is the part the single-molecule model represents correctly. Strand invasion, D-loop formation, synthesis on the sister chromatid and resolution wait for multi-molecule support (roadmap).
+9. **HR stops at the RAD51 filament** *(accepted; the example continues to an intact chromatid since [RFC 0006](0006-nucleic-acid-pairing.md))*. The example covers DSB → resection → 3′ ssDNA overhang → RAD51 filament, which is the part the single-molecule model represents correctly. Strand invasion, D-loop formation, synthesis on the sister chromatid and resolution wait for multi-molecule support (roadmap).
 10. **Lengths are abstract units** for layout. A 10 kb resection is drawn at the same width as 100 nt. Scale bars and breaks in the axis are deferred.

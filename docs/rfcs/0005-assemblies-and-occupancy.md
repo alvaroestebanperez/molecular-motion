@@ -158,7 +158,7 @@ Validation is generic and uses RFC 0004 state:
 
 RFC 0005 is validated on RPA→RAD51, EGFR dimerization and STING. The nucleosome stays a case the design must be able to absorb without new concepts (D8).
 
-**Explicitly out of scope:** strand invasion, D-loops, Holliday junctions, and any pairing of two nucleic-acid molecules. Occupancy is between a protein instance and *one* nucleic acid. Nothing here may be used to fake a second molecule pairing with the first.
+**Explicitly out of scope:** strand invasion, D-loops, Holliday junctions, and any pairing of two nucleic-acid molecules. Occupancy is between a protein instance and *one* nucleic acid. Nothing here may be used to fake a second molecule pairing with the first. Pairing is a separate layer, added by [RFC 0006](0006-nucleic-acid-pairing.md), which also redefines footprint forms in terms of pairing status (§7 there).
 
 ## 7. Rendering (renderer decisions, no schema impact)
 

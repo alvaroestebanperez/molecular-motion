@@ -6,7 +6,7 @@ import { compileMechanism, parseMechanism } from '@molecular-motion/core';
 import { buildSvgScene, exportPng, exportSvg, molecularMotionCss, renderSvg, THEME_TOKENS } from '../src';
 
 const hr = compileMechanism(parseMechanism(readFileSync(resolve(process.cwd(), 'examples/homologous-recombination.yaml'), 'utf8')));
-const scene = buildSvgScene(hr.at(hr.length - 1));
+const scene = buildSvgScene(hr.at('filament'));
 const parse = (markup: string) => new DOMParser().parseFromString(markup, 'image/svg+xml');
 
 describe('exportSvg', () => {

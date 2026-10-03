@@ -34,7 +34,7 @@ npm run dev
 The repository includes three mechanisms to exercise different parts of the language:
 
 - [PARP1-mediated single-strand break repair](examples/parp1-ssb-repair.yaml)
-- [Homologous recombination: end resection, RPA coating and RAD51 loading](examples/homologous-recombination.yaml)
+- [Homologous recombination: from the break to an intact chromatid by strand invasion, synthesis on the sister chromatid and annealing (SDSA)](examples/homologous-recombination.yaml)
 - [EGFR activation by ligand-induced dimerization](examples/egfr-dimerization.yaml)
 
 ## Why Molecular Motion?
@@ -123,7 +123,7 @@ Targets use `actor.site` references. Sites on DNA and RNA have an interbase coor
 
 Several copies of one molecule are declared with `copies: n` and addressed as `id#1 … id#n`. Each copy has its own state but the same silhouette and colour ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md)).
 
-Strands of two nucleic acids can base-pair. A top-level `alignments` list declares which ranges correspond, and `pair` / `unpair` change the pairing that actually exists; neither unwinds nor anneals a duplex ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md), schema v5). Rendering of paired molecules is not implemented yet.
+Strands of two nucleic acids can base-pair. A top-level `alignments` list declares which ranges correspond, and `pair` / `unpair` change the pairing that actually exists; neither unwinds nor anneals a duplex ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md), schema v5).
 
 ## React
 
@@ -280,7 +280,8 @@ examples/     # complete mechanism definitions
 - [x] Sequential and parallel action groups within a step
 - [x] Extensible action registry, compartments, and typed actor state
 - [x] Nucleic-acid coordinates, strand polarity, resection, synthesis and unwinding ([RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md))
-- [ ] Interactions between nucleic-acid molecules: strand invasion, D-loops, synthesis on a sister chromatid, Holliday junctions
+- [x] Pairing between nucleic-acid molecules: strand invasion, displaced strands, synthesis on another molecule ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md))
+- [ ] Strand exchange between molecules: nuclease resolution of junctions, crossovers, flaps
 - [x] Actor copies, interaction graph with interfaces, and footprint occupancy on nucleic acids ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md))
 - [x] Per-step references, key events, and summaries
 - [x] Review-figure SVG language: helix with depth, molecular surfaces, lesion states, PAR chains, callouts
