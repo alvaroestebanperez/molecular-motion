@@ -17,12 +17,17 @@ export function patchSvg(container: HTMLElement, markup: string): void {
   }
 
   syncAttributes(current, next);
+  // Top-level children are matched by `data-layer`, or by tag name when they have none (title, desc).
+  // Matching walks the children directly instead of running selectors against the long-lived tree.
+  const slot = (element: Element) => element.getAttribute('data-layer') ?? `<${element.tagName}>`;
+  const present = new Map(Array.from(current.children).filter(child => !child.hasAttribute('data-leaving')).map(child => [slot(child), child]));
   // Some layers exist only in some steps (pairings between molecules). A layer that appears is put
   // where a fresh render has it, so stacking order holds; one that is gone empties out and is removed.
   let cursor: Element | null = null;
   for (const child of Array.from(next.children)) {
     const layer = child.getAttribute('data-layer');
-    let target = layer ? current.querySelector(`:scope > [data-layer="${layer}"]`) : current.querySelector(`:scope > ${child.tagName}`);
+    let target = present.get(slot(child));
+    present.delete(slot(child));
     if (!target) {
       target = document.importNode(child, false);
       current.insertBefore(target, cursor ? cursor.nextSibling : current.firstChild);
@@ -35,10 +40,11 @@ export function patchSvg(container: HTMLElement, markup: string): void {
     }
     reconcile(target, child);
   }
-  for (const stale of Array.from(current.querySelectorAll(':scope > [data-layer]'))) {
-    if (next.querySelector(`:scope > [data-layer="${stale.getAttribute('data-layer')}"]`)) continue;
+  for (const stale of present.values()) {
+    if (!stale.hasAttribute('data-layer')) { stale.remove(); continue; }
     reconcile(stale, document.createElement('g'));
     stale.removeAttribute('data-layer');
+    stale.setAttribute('data-leaving', '');
     window.setTimeout(() => stale.remove(), EXIT_MS);
   }
 }
