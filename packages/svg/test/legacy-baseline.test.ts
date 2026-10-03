@@ -7,7 +7,7 @@ import { firstAppearances, upcomingActors } from '../../react/src/player';
 import { buildSvgScene, renderSvg } from '../src';
 
 /**
- * Legacy render baseline (RFC 0004 §8, RFC 0005 §8). Frozen copies of the documents as they were at
+ * Legacy render baseline (RFC 0004 §8, RFC 0005 §8, RFC 0006 §12). Frozen copies of the documents as they were at
  * each schema version must render byte-identically through every later schema change. Each step is
  * locked three ways: full viewer, compact thumbnail, and the viewer with upcoming actors as ghosts.
  * UPDATE_GOLDEN=1 regenerates; do that only when a visual change is intended and reviewed.
@@ -15,8 +15,10 @@ import { buildSvgScene, renderSvg } from '../src';
 const FIXTURES = {
   v2: (name: string) => new URL(`./fixtures/v2/${name}.yaml`, import.meta.url),
   v3: (name: string) => new URL(`../../core/test/fixtures/v3/${name}.yaml`, import.meta.url),
+  v4: (name: string) => new URL(`../../core/test/fixtures/v4/${name}.yaml`, import.meta.url),
 } as const;
 const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
+const DOCUMENTS: Record<keyof typeof FIXTURES, readonly string[]> = { v2: MECHANISMS, v3: MECHANISMS, v4: [...MECHANISMS, 'egfr-dimerization'] };
 const golden = (version: string, name: string) => new URL(`./fixtures/baseline/${version}.${name}.svg-sha256.json`, import.meta.url);
 const sha256 = (markup: string) => createHash('sha256').update(markup).digest('hex');
 
@@ -36,7 +38,7 @@ function digests(source: string) {
 }
 
 describe.each(Object.keys(FIXTURES) as (keyof typeof FIXTURES)[])('legacy render baseline: schema %s', version => {
-  it.each(MECHANISMS)('%s renders byte-identically', name => {
+  it.each(DOCUMENTS[version])('%s renders byte-identically', name => {
     const rendered = digests(readFileSync(FIXTURES[version](name), 'utf8'));
     if (process.env.UPDATE_GOLDEN) writeFileSync(golden(version, name), `${JSON.stringify(rendered, null, 2)}\n`);
     expect(rendered).toEqual(JSON.parse(readFileSync(golden(version, name), 'utf8')));

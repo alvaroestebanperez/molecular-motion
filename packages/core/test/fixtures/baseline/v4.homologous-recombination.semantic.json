@@ -1,0 +1,1895 @@
+[
+  {
+    "step": "break",
+    "interactions": {},
+    "occupancy": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "mrn": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[0].actions[0]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "sensing",
+    "interactions": {},
+    "occupancy": {
+      "mrn@dna": {
+        "id": "mrn@dna",
+        "instance": "mrn",
+        "acid": "dna",
+        "site": "break"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[1].actions[0]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "mrn",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "short-range",
+    "interactions": {
+      "brca1~mrn": {
+        "id": "brca1~mrn",
+        "ends": [
+          {
+            "instance": "brca1"
+          },
+          {
+            "instance": "mrn"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "mrn@dna": {
+        "id": "mrn@dna",
+        "instance": "mrn",
+        "acid": "dna",
+        "site": "break"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 46
+            },
+            {
+              "strand": "bottom",
+              "from": 34,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "mrn",
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[2].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "brca1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[2].actions[1]",
+        "type": "resect",
+        "primitive": "resect",
+        "subject": "dna.break",
+        "agent": "mrn",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "long-range",
+    "interactions": {
+      "brca1~mrn": {
+        "id": "brca1~mrn",
+        "ends": [
+          {
+            "instance": "brca1"
+          },
+          {
+            "instance": "mrn"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "mrn@dna": {
+        "id": "mrn@dna",
+        "instance": "mrn",
+        "acid": "dna",
+        "site": "break"
+      },
+      "exo1@dna": {
+        "id": "exo1@dna",
+        "instance": "exo1",
+        "acid": "dna",
+        "site": "break"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "mrn",
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.break",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[3].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "exo1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[1]",
+        "type": "resect",
+        "primitive": "resect",
+        "subject": "dna.break",
+        "agent": "exo1",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "rpa-coating",
+    "interactions": {},
+    "occupancy": {
+      "rpa#1@dna": {
+        "id": "rpa#1@dna",
+        "instance": "rpa#1",
+        "acid": "dna",
+        "site": "right-overhang",
+        "span": {
+          "from": 40,
+          "to": 46
+        },
+        "strand": "bottom"
+      },
+      "rpa#2@dna": {
+        "id": "rpa#2@dna",
+        "instance": "rpa#2",
+        "acid": "dna",
+        "site": "right-overhang",
+        "span": {
+          "from": 46,
+          "to": 52
+        },
+        "strand": "bottom"
+      },
+      "rpa#3@dna": {
+        "id": "rpa#3@dna",
+        "instance": "rpa#3",
+        "acid": "dna",
+        "site": "right-overhang",
+        "span": {
+          "from": 52,
+          "to": 58
+        },
+        "strand": "bottom"
+      },
+      "rpa#4@dna": {
+        "id": "rpa#4@dna",
+        "instance": "rpa#4",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 22,
+          "to": 28
+        },
+        "strand": "top"
+      },
+      "rpa#5@dna": {
+        "id": "rpa#5@dna",
+        "instance": "rpa#5",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 28,
+          "to": 34
+        },
+        "strand": "top"
+      },
+      "rpa#6@dna": {
+        "id": "rpa#6@dna",
+        "instance": "rpa#6",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 34,
+          "to": 40
+        },
+        "strand": "top"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.right-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.right-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.right-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[4].actions[0].parallel[0].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "exo1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[0].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "exo1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[1].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "mrn",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[1].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "mrn",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[2].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "brca1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[2].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "brca1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[1]",
+        "type": "coat",
+        "primitive": "coat",
+        "subject": "dna.right-overhang",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[2]",
+        "type": "coat",
+        "primitive": "coat",
+        "subject": "dna.left-overhang",
+        "agent": null,
+        "start": 1800,
+        "duration": 600
+      }
+    ],
+    "duration": 2400
+  },
+  {
+    "step": "nucleation",
+    "interactions": {
+      "rad51#1:protomer~rad51#2:protomer": {
+        "id": "rad51#1:protomer~rad51#2:protomer",
+        "ends": [
+          {
+            "instance": "rad51#2",
+            "interface": "protomer"
+          },
+          {
+            "instance": "rad51#1",
+            "interface": "protomer"
+          }
+        ],
+        "symmetric": true
+      },
+      "brca2~rad51#1": {
+        "id": "brca2~rad51#1",
+        "ends": [
+          {
+            "instance": "brca2"
+          },
+          {
+            "instance": "rad51#1"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "rpa#1@dna": {
+        "id": "rpa#1@dna",
+        "instance": "rpa#1",
+        "acid": "dna",
+        "site": "right-overhang",
+        "span": {
+          "from": 40,
+          "to": 46
+        },
+        "strand": "bottom"
+      },
+      "rpa#2@dna": {
+        "id": "rpa#2@dna",
+        "instance": "rpa#2",
+        "acid": "dna",
+        "site": "right-overhang",
+        "span": {
+          "from": 46,
+          "to": 52
+        },
+        "strand": "bottom"
+      },
+      "rpa#4@dna": {
+        "id": "rpa#4@dna",
+        "instance": "rpa#4",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 22,
+          "to": 28
+        },
+        "strand": "top"
+      },
+      "rpa#5@dna": {
+        "id": "rpa#5@dna",
+        "instance": "rpa#5",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 28,
+          "to": 34
+        },
+        "strand": "top"
+      },
+      "rpa#6@dna": {
+        "id": "rpa#6@dna",
+        "instance": "rpa#6",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 34,
+          "to": 40
+        },
+        "strand": "top"
+      },
+      "rad51#1@dna": {
+        "id": "rad51#1@dna",
+        "instance": "rad51#1",
+        "acid": "dna",
+        "span": {
+          "from": 55,
+          "to": 58
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      },
+      "rad51#2@dna": {
+        "id": "rad51#2@dna",
+        "instance": "rad51#2",
+        "acid": "dna",
+        "span": {
+          "from": 52,
+          "to": 55
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.right-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.right-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "rad51#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[5].actions[0]",
+        "type": "vacate",
+        "primitive": "vacate",
+        "subject": "rpa#3",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[5].actions[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "rpa#3",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[5].actions[2]",
+        "type": "coat",
+        "primitive": "coat",
+        "subject": "dna",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      },
+      {
+        "path": "steps[5].actions[3]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "rad51#2",
+        "agent": null,
+        "start": 1800,
+        "duration": 600
+      },
+      {
+        "path": "steps[5].actions[4]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "brca2",
+        "agent": null,
+        "start": 2400,
+        "duration": 600
+      }
+    ],
+    "duration": 3000
+  },
+  {
+    "step": "filament",
+    "interactions": {
+      "rad51#1:protomer~rad51#2:protomer": {
+        "id": "rad51#1:protomer~rad51#2:protomer",
+        "ends": [
+          {
+            "instance": "rad51#2",
+            "interface": "protomer"
+          },
+          {
+            "instance": "rad51#1",
+            "interface": "protomer"
+          }
+        ],
+        "symmetric": true
+      },
+      "brca2~rad51#1": {
+        "id": "brca2~rad51#1",
+        "ends": [
+          {
+            "instance": "brca2"
+          },
+          {
+            "instance": "rad51#1"
+          }
+        ]
+      },
+      "rad51#1:protomer~rad51#3:protomer": {
+        "id": "rad51#1:protomer~rad51#3:protomer",
+        "ends": [
+          {
+            "instance": "rad51#3",
+            "interface": "protomer"
+          },
+          {
+            "instance": "rad51#1",
+            "interface": "protomer"
+          }
+        ],
+        "symmetric": true
+      },
+      "rad51#3:protomer~rad51#4:protomer": {
+        "id": "rad51#3:protomer~rad51#4:protomer",
+        "ends": [
+          {
+            "instance": "rad51#4",
+            "interface": "protomer"
+          },
+          {
+            "instance": "rad51#3",
+            "interface": "protomer"
+          }
+        ],
+        "symmetric": true
+      },
+      "rad51#4:protomer~rad51#5:protomer": {
+        "id": "rad51#4:protomer~rad51#5:protomer",
+        "ends": [
+          {
+            "instance": "rad51#5",
+            "interface": "protomer"
+          },
+          {
+            "instance": "rad51#4",
+            "interface": "protomer"
+          }
+        ],
+        "symmetric": true
+      },
+      "rad51#5:protomer~rad51#6:protomer": {
+        "id": "rad51#5:protomer~rad51#6:protomer",
+        "ends": [
+          {
+            "instance": "rad51#6",
+            "interface": "protomer"
+          },
+          {
+            "instance": "rad51#5",
+            "interface": "protomer"
+          }
+        ],
+        "symmetric": true
+      }
+    },
+    "occupancy": {
+      "rpa#4@dna": {
+        "id": "rpa#4@dna",
+        "instance": "rpa#4",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 22,
+          "to": 28
+        },
+        "strand": "top"
+      },
+      "rpa#5@dna": {
+        "id": "rpa#5@dna",
+        "instance": "rpa#5",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 28,
+          "to": 34
+        },
+        "strand": "top"
+      },
+      "rpa#6@dna": {
+        "id": "rpa#6@dna",
+        "instance": "rpa#6",
+        "acid": "dna",
+        "site": "left-overhang",
+        "span": {
+          "from": 34,
+          "to": 40
+        },
+        "strand": "top"
+      },
+      "rad51#1@dna": {
+        "id": "rad51#1@dna",
+        "instance": "rad51#1",
+        "acid": "dna",
+        "span": {
+          "from": 55,
+          "to": 58
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      },
+      "rad51#2@dna": {
+        "id": "rad51#2@dna",
+        "instance": "rad51#2",
+        "acid": "dna",
+        "span": {
+          "from": 52,
+          "to": 55
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      },
+      "rad51#3@dna": {
+        "id": "rad51#3@dna",
+        "instance": "rad51#3",
+        "acid": "dna",
+        "span": {
+          "from": 49,
+          "to": 52
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      },
+      "rad51#4@dna": {
+        "id": "rad51#4@dna",
+        "instance": "rad51#4",
+        "acid": "dna",
+        "span": {
+          "from": 46,
+          "to": 49
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      },
+      "rad51#5@dna": {
+        "id": "rad51#5@dna",
+        "instance": "rad51#5",
+        "acid": "dna",
+        "span": {
+          "from": 43,
+          "to": 46
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      },
+      "rad51#6@dna": {
+        "id": "rad51#6@dna",
+        "instance": "rad51#6",
+        "acid": "dna",
+        "span": {
+          "from": 40,
+          "to": 43
+        },
+        "strand": "bottom",
+        "orientation": "reverse"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "mrn": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "exo1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#4": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#5": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rpa#6": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.left-overhang",
+        "modifications": [],
+        "nucleic": null
+      },
+      "brca2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "rad51#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#3": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#4": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#5": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      },
+      "rad51#6": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna",
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[6].actions[0].parallel[0].sequence[0]",
+        "type": "vacate",
+        "primitive": "vacate",
+        "subject": "rpa#1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[0].parallel[0].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "rpa#1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[0].parallel[1].sequence[0]",
+        "type": "vacate",
+        "primitive": "vacate",
+        "subject": "rpa#2",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[0].parallel[1].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "rpa#2",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[1]",
+        "type": "coat",
+        "primitive": "coat",
+        "subject": "dna",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[2]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "rad51#3",
+        "agent": null,
+        "start": 1800,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[3]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "rad51#4",
+        "agent": null,
+        "start": 2400,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[4]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "rad51#5",
+        "agent": null,
+        "start": 3000,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[5]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "rad51#6",
+        "agent": null,
+        "start": 3600,
+        "duration": 600
+      }
+    ],
+    "duration": 4200
+  }
+]

@@ -1,0 +1,181 @@
+schemaVersion: 4
+
+mechanism:
+  id: homologous-recombination
+  name: Homologous recombination — end resection and RAD51 loading
+  description: >
+    The first phase of double-strand break repair by homologous recombination: the break is
+    sensed, its 5′ ends are resected in two stages, and RAD51 assembles on the resulting 3′
+    single-stranded overhangs. RPA coats the exposed single strands first; BRCA2 then loads RAD51,
+    which replaces RPA copy by copy and forms a filament. The mechanism stops there on purpose. Strand invasion, D-loop
+    formation, synthesis on the sister chromatid and resolution pair two nucleic-acid molecules,
+    which the model does not represent yet (RFC 0004, RFC 0005).
+
+compartments: [nucleus]
+
+actors:
+  - id: dna
+    type: dna
+    label: Broken chromosome
+    compartment: nucleus
+    nucleic: { length: 80 }
+    sites:
+      - id: break
+        type: double-strand-break
+        at: 40
+      - id: left-overhang
+        label: 3′ overhang (left end)
+        span: [22, 40]
+      - id: right-overhang
+        label: 3′ overhang (right end)
+        span: [40, 58]
+  - id: mrn
+    type: complex
+    label: MRN
+    color: "#fb923c"
+    compartment: nucleus
+  - id: brca1
+    type: protein
+    label: BRCA1
+    color: "#f472b6"
+    compartment: nucleus
+  - id: exo1
+    type: protein
+    label: EXO1
+    color: "#5aa9a0"
+    compartment: nucleus
+  - id: rpa
+    type: protein
+    label: RPA
+    color: "#e0a03c"
+    compartment: nucleus
+    copies: 6
+    footprint: { length: 6, form: single }
+  - id: brca2
+    type: protein
+    label: BRCA2
+    color: "#6f9fcf"
+    compartment: nucleus
+  - id: rad51
+    type: protein
+    label: RAD51
+    color: "#818cf8"
+    compartment: nucleus
+    copies: 6
+    footprint: { length: 3, form: single }
+    interfaces:
+      - { id: protomer, valence: 2 }
+
+steps:
+  - id: break
+    title: Double-strand break
+    summary: Both strands are cut at the same position
+    actions:
+      - type: cleave
+        target: dna.break
+        lesion: double-strand-break
+
+  - id: sensing
+    title: End sensing
+    summary: MRN binds the broken ends
+    actions:
+      - type: bind
+        actor: mrn
+        target: dna.break
+
+  - id: short-range
+    title: Short-range resection
+    summary: MRN, with BRCA1, trims the 5′ ends
+    keyEvents:
+      - BRCA1 joins MRN at the break and favours resection
+      - The 5′ end of each fragment is shortened, exposing short 3′ overhangs
+    actions:
+      - type: recruit
+        actor: brca1
+        target: mrn
+      - type: resect
+        target: dna.break
+        length: 6
+        by: mrn
+
+  - id: long-range
+    title: Long-range resection
+    summary: EXO1 extends the 3′ overhangs
+    keyEvents:
+      - EXO1 continues 5′→3′ from where MRN stopped
+      - Each fragment now ends in a long 3′ single-stranded tail
+    actions:
+      - type: recruit
+        actor: exo1
+        target: dna.break
+      - type: resect
+        target: dna.break
+        length: 12
+        by: exo1
+
+  - id: rpa-coating
+    title: RPA coats the overhangs
+    summary: RPA protects both 3′ single-stranded tails
+    keyEvents:
+      - The resection machinery leaves the ends
+      - Three RPA complexes coat each 3′ overhang side by side, removing secondary structure
+    actions:
+      - parallel:
+          - sequence:
+              - { type: unbind, actor: exo1 }
+              - { type: hide, actor: exo1 }
+          - sequence:
+              - { type: unbind, actor: mrn }
+              - { type: hide, actor: mrn }
+          - sequence:
+              - { type: unbind, actor: brca1 }
+              - { type: hide, actor: brca1 }
+      - type: coat
+        actors: ["rpa#1", "rpa#2", "rpa#3"]
+        target: dna.right-overhang
+      - type: coat
+        actors: ["rpa#4", "rpa#5", "rpa#6"]
+        target: dna.left-overhang
+
+  - id: nucleation
+    title: BRCA2 nucleates RAD51
+    summary: RAD51 replaces RPA at the junction of the right end
+    keyEvents:
+      - BRCA2 brings RAD51 to the single-strand–duplex junction
+      - The RPA complex nearest the junction is displaced
+      - Two RAD51 protomers take its place and bind each other
+    actions:
+      - { type: vacate, actor: "rpa#3" }
+      - { type: hide, actor: "rpa#3" }
+      - type: coat
+        actors: ["rad51#1", "rad51#2"]
+        target: dna
+        span: [52, 58]
+        orientation: reverse
+      - { type: bind, actor: "rad51#2", interface: protomer, target: "rad51#1", targetInterface: protomer }
+      - { type: bind, actor: brca2, target: "rad51#1" }
+
+  - id: filament
+    title: RAD51 filament formation
+    summary: The filament grows towards the break, displacing RPA
+    keyEvents:
+      - RPA is displaced from the rest of the right overhang
+      - Four more RAD51 protomers extend the filament, each bound to its neighbour
+      - The RAD51 filament is ready to search for the homologous sequence (not modelled yet)
+    actions:
+      - parallel:
+          - sequence:
+              - { type: vacate, actor: "rpa#1" }
+              - { type: hide, actor: "rpa#1" }
+          - sequence:
+              - { type: vacate, actor: "rpa#2" }
+              - { type: hide, actor: "rpa#2" }
+      - type: coat
+        actors: ["rad51#3", "rad51#4", "rad51#5", "rad51#6"]
+        target: dna
+        span: [40, 52]
+        orientation: reverse
+      - { type: bind, actor: "rad51#3", interface: protomer, target: "rad51#1", targetInterface: protomer }
+      - { type: bind, actor: "rad51#4", interface: protomer, target: "rad51#3", targetInterface: protomer }
+      - { type: bind, actor: "rad51#5", interface: protomer, target: "rad51#4", targetInterface: protomer }
+      - { type: bind, actor: "rad51#6", interface: protomer, target: "rad51#5", targetInterface: protomer }
