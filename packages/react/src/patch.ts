@@ -1,4 +1,6 @@
 const EXIT_MS = 450;
+/** Marks the animations `patchSvg` starts itself, so a later patch can replace them. */
+const RESUMED = 'mm-resume';
 
 /**
  * Update an SVG rendered by `renderSvg` in place. Children of each `data-layer` group are matched
@@ -59,6 +61,10 @@ function reconcile(target: Element, source: Element) {
   for (const incoming of Array.from(source.children)) {
     const key = incoming.getAttribute('data-key');
     let element = key ? existing.get(key) : undefined;
+    const reference: ChildNode | null = cursor ? cursor.nextSibling : target.firstChild;
+    // A kept element that has to change place in the layer is re-inserted, and a browser drops the CSS
+    // transitions of a re-inserted node: it would jump. Its look just before is kept to resume from.
+    const resume = element && reference !== element ? transitionState(element) : undefined;
     if (element) {
       existing.delete(key!);
       syncAttributes(element, incoming);
@@ -69,8 +75,8 @@ function reconcile(target: Element, source: Element) {
       const entering = element;
       requestAnimationFrame(() => requestAnimationFrame(() => entering.classList.remove('mm-enter')));
     }
-    const reference: ChildNode | null = cursor ? cursor.nextSibling : target.firstChild;
     if (reference !== element) target.insertBefore(element, reference);
+    if (resume) resumeTransitions(element, resume);
     cursor = element;
   }
   for (const stale of existing.values()) {
@@ -79,6 +85,48 @@ function reconcile(target: Element, source: Element) {
     stale.setAttribute('aria-hidden', 'true');
     stale.removeAttribute('tabindex');
     window.setTimeout(() => stale.remove(), EXIT_MS);
+  }
+}
+
+/** One transitioned property of an element: its value now, and how the stylesheet animates it. */
+interface TransitionState { property: string; value: string; duration: number; easing: string }
+
+/** Top-level commas only: `cubic-bezier(.2, .7, .2, 1), ease` is two items. */
+const list = (value: string) => value.split(/,(?![^(]*\))/).map(item => item.trim());
+const milliseconds = (value: string) => (value.endsWith('ms') ? parseFloat(value) : parseFloat(value) * 1000) || 0;
+
+/**
+ * What the stylesheet transitions on an element, with the values it shows right now (mid-transition
+ * values included). Empty when nothing is transitioned, as under `prefers-reduced-motion`.
+ */
+function transitionState(element: Element): TransitionState[] {
+  if (typeof window.getComputedStyle !== 'function' || typeof element.animate !== 'function') return [];
+  const style = window.getComputedStyle(element);
+  const properties = list(style.transitionProperty ?? '');
+  const durations = list(style.transitionDuration ?? '');
+  const easings = list(style.transitionTimingFunction ?? '');
+  return properties.flatMap((property, index) => {
+    const duration = milliseconds(durations[index % durations.length] ?? '');
+    return property && property !== 'none' && property !== 'all' && duration > 0
+      ? [{ property, value: style.getPropertyValue(property), duration, easing: easings[index % easings.length] || 'ease' }]
+      : [];
+  });
+}
+
+/**
+ * Play, on a re-inserted element, the transitions it would have had if it had stayed in place: from
+ * the look it had to the one it has now, with the stylesheet's own durations and easings.
+ */
+function resumeTransitions(element: Element, before: readonly TransitionState[]) {
+  if (!before.length) return;
+  for (const animation of element.getAnimations?.() ?? []) if (animation.id === RESUMED) animation.cancel();
+  const style = window.getComputedStyle(element);
+  for (const { property, value, duration, easing } of before) {
+    if (style.getPropertyValue(property) === value) continue;
+    const name = property.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    // Only the start is given (a lone keyframe would otherwise be the end): the animation runs towards
+    // whatever the element's style says, also if that changes meanwhile.
+    element.animate([{ [name]: value, offset: 0 }], { duration, easing, id: RESUMED });
   }
 }
 
