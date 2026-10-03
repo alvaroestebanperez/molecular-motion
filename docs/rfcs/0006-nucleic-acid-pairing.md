@@ -144,6 +144,13 @@ alignments:
 
 - 3′ end paired **in cis**: RFC 0004 behaviour, unchanged.
 - 3′ end paired **in trans**: the template is the partner strand, continuing past the end of the pairing. The new nucleotides become `nascent` on the extending molecule, and the pairing grows to cover them, in the same action. A new strand is base-paired to its template, as in-molecule `extend` creates a duplex implicitly.
+- **This is the continuation of an existing pairing, not an implicit `pair`.** The pairing already joins the 3′ end to the strand being used as template, and `extend` only prolongs it:
+  - a valid trans pairing must exist at the initial 3′ end;
+  - `extend` prolongs that pairing and no other. It never looks for, or creates, a different partner;
+  - the coordinate correspondence comes from the existing pairing's polarity and its alignment;
+  - conflicts, alignment and molecule limits, and continuity of the pairing are all enforced;
+  - the synthesised range is `nascent` and paired in trans for as long as it stays on the template.
+- Later, `unpair` removes only the trans pairing. The synthesised range stays `nascent` and `open` (§6.2), and cis pairing reappears only through an explicit `anneal`.
 - The template nucleotides must be present and unpaired, and inside the alignment. Opening the donor further is an explicit `unwind`. Nothing is displaced silently (D6).
 
 ### 6.2 What happens on the extending molecule (D8)
