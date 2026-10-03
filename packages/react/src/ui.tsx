@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { actorInstances, partnersOf, type MechanismSnapshot, type ReferenceDefinition } from '@molecular-motion/core';
 import { LESION_LABELS } from '@molecular-motion/svg';
 import { ExitFullscreenIcon, ExternalIcon, FullscreenIcon, NextIcon, PauseIcon, PlayIcon, PreviousIcon, ResetIcon } from './icons';
@@ -25,8 +25,9 @@ export function PlaybackControls({ player, fullscreen }: PlaybackControlsProps) 
   };
   return <div className="mm-controls">
     <button type="button" className="mm-controls__play" onClick={play} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <PauseIcon /> : <PlayIcon />}</button>
-    <button type="button" className="mm-icon-button" onClick={() => { player.setPlaying(false); player.previous(); }} disabled={stepIndex === 0} aria-label="Previous step"><PreviousIcon /></button>
-    <button type="button" className="mm-icon-button" onClick={() => { player.setPlaying(false); player.next(); }} disabled={stepIndex === length - 1} aria-label="Next step"><NextIcon /></button>
+    {/* `aria-disabled`, not `disabled`: at either end the button keeps the focus it has instead of dropping it. */}
+    <button type="button" className="mm-icon-button" onClick={() => { player.setPlaying(false); player.previous(); }} aria-disabled={stepIndex === 0} aria-label="Previous step"><PreviousIcon /></button>
+    <button type="button" className="mm-icon-button" onClick={() => { player.setPlaying(false); player.next(); }} aria-disabled={stepIndex === length - 1} aria-label="Next step"><NextIcon /></button>
     <div className="mm-scrubber">
       <span className="mm-scrubber__count" aria-hidden="true">{stepIndex + 1} / {length}</span>
       <ol className="mm-scrubber__track" aria-label="Steps">
@@ -77,7 +78,20 @@ export function StepTimeline({ player }: { player: MechanismPlayer }) {
 // ---- Thumbnails ----
 
 export function StepThumbnails({ player }: { player: MechanismPlayer }) {
-  return <ol className="mm-thumbnails" aria-label="Step overview">
+  const strip = useRef<HTMLOListElement>(null);
+  // Keep the current step in view. Only the strip scrolls, sideways: the page never moves.
+  useEffect(() => {
+    const list = strip.current;
+    const item = list?.children[player.stepIndex] as HTMLElement | undefined;
+    if (!list || !item) return;
+    const [left, right] = [item.offsetLeft - list.offsetLeft, item.offsetLeft - list.offsetLeft + item.offsetWidth];
+    if (left >= list.scrollLeft && right <= list.scrollLeft + list.clientWidth) return;
+    const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const target = Math.max(0, left - (list.clientWidth - item.offsetWidth) / 2);
+    if (typeof list.scrollTo === 'function') list.scrollTo({ left: target, behavior: reduced ? 'auto' : 'smooth' });
+    else list.scrollLeft = target;
+  }, [player.stepIndex]);
+  return <ol ref={strip} className="mm-thumbnails" aria-label="Step overview">
     {player.mechanism.definition.steps.map((step, index) => <li key={step.id}>
       <button
         type="button"

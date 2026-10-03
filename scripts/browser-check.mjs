@@ -38,6 +38,7 @@ try {
   const failures = [];
   let checked = 0;
   let strandsChecked = 0;
+  let polishChecked = 0;
   for (const example of EXAMPLES) {
     await send('Page.navigate', { url: `http://localhost:${PORT}/#/mechanisms/${example}` });
     await sleep(600); await send('Page.reload'); await sleep(1500);
@@ -48,7 +49,7 @@ try {
       const look = element => { const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, opacity: Number(style.opacity), blur: Number(/blur\\(([\\d.]+)px\\)/.exec(style.filter)?.[1] ?? 0) }; };
       const out = [];
-      while (!next.disabled) {
+      while (next.getAttribute('aria-disabled') !== 'true') {
         const ghosts = new Map([...stage.querySelectorAll('.mm-actor--ghost')].map(element => [element.dataset.key, { element, from: look(element) }]));
         next.click();
         await new Promise(resolve => setTimeout(resolve, 150));
@@ -68,7 +69,7 @@ try {
       const measure = map => new Map([...map].map(([key, path]) => [key, { path, d: path.getAttribute('d'), length: path.getAttribute('d') ? path.getTotalLength() : 0 }]));
       const pairingKeys = () => [...stage.querySelectorAll('[data-layer="pairings"] > [data-key]')].map(group => group.dataset.key).sort().join(',');
       const out = [];
-      while (!next.disabled) {
+      while (next.getAttribute('aria-disabled') !== 'true') {
         const before = measure(paths());
         const pairedBefore = pairingKeys();
         next.click();
@@ -117,8 +118,116 @@ try {
       if (problems.length) failures.push(`${example} · ${step} · ${key}: ${problems.join('; ')}`);
     }
   }
+
+  // ---- Viewer polish: the same checks at a desktop and a phone size ----
+  const polish = [];
+  const expectThat = (where, ok, what) => { polishChecked += 1; if (!ok) polish.push(`${where}: ${what}`); };
+  const open = async (example, [width, height, mobile], reduced = false) => {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: reduced ? 'reduce' : 'no-preference' }] });
+    await send('Page.navigate', { url: `http://localhost:${PORT}/#/mechanisms/${example}` });
+    await sleep(500); await send('Page.reload'); await sleep(1500);
+  };
+  const VIEWPORTS = { '1440×900': [1440, 900, false], '390×844': [390, 844, true] };
+  for (const [name, viewport] of Object.entries(VIEWPORTS)) {
+    await open('homologous-recombination', viewport);
+    const page = await evaluate(`
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const stage = document.querySelector('.viewer__canvas');
+      const svg = stage.querySelector('svg');
+      const [, , boxWidth] = svg.getAttribute('viewBox').split(' ').map(Number);
+      const drawn = svg.getBoundingClientRect().width / boxWidth;
+      const onScreen = selector => { const element = stage.querySelector(selector); return element ? parseFloat(getComputedStyle(element).fontSize) * drawn : null; };
+      const next = document.querySelector('[aria-label="Next step"]');
+      const previous = document.querySelector('[aria-label="Previous step"]');
+      const current = () => [...document.querySelectorAll('.mm-timeline__step')].findIndex(item => item.getAttribute('aria-current') === 'step');
+      const out = { viewBox: svg.getAttribute('viewBox'), scrollX: document.documentElement.scrollWidth > innerWidth + 1 };
+      // Canvas: the figure fills the room the stage gives it.
+      out.fill = svg.getBoundingClientRect().height / stage.getBoundingClientRect().height;
+      // Text on screen.
+      out.text = { polarity: onScreen('.mm-dna__polarity'), callout: onScreen('.mm-label--alert .mm-callout'), pill: onScreen('.mm-pill__text') };
+      // Focus at the ends: the button that cannot go further keeps the focus.
+      previous.focus(); previous.click(); await wait(100);
+      out.previousAtStart = { focused: document.activeElement === previous, disabled: previous.getAttribute('aria-disabled'), native: previous.disabled, step: current() };
+      const strip = document.querySelector('.mm-thumbnails');
+      const visible = () => { const a = strip.querySelector('[aria-current]').getBoundingClientRect(), b = strip.getBoundingClientRect(); return a.left >= b.left - 1 && a.right <= b.right + 1; };
+      const pageY = scrollY;
+      const last = document.querySelectorAll('.mm-timeline__step').length - 1;
+      next.focus();
+      for (let index = 0; index < last + 2; index++) { next.click(); await wait(40); }
+      await wait(900);
+      out.nextAtEnd = { focused: document.activeElement === next, disabled: next.getAttribute('aria-disabled'), native: next.disabled, step: current(), last };
+      // Thumbnails follow the step, sideways only.
+      out.thumbnails = { scrolls: strip.scrollWidth > strip.clientWidth, atEnd: visible(), pageMoved: Math.abs(scrollY - pageY) > 1 };
+      document.querySelector('.mm-timeline li:nth-child(1) button').click(); await wait(900);
+      out.thumbnails.atStart = visible();
+      // Touch targets of the step dots: what a finger hits around each dot, and whether neighbours overlap.
+      const dots = [...document.querySelectorAll('.mm-scrubber__track button')];
+      dots[0].scrollIntoView({ block: 'center' }); await wait(100);
+      const centres = dots.map(dot => { const r = dot.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      const hits = (dot, centre, dx, dy) => document.elementFromPoint(centre.x + dx, centre.y + dy) === dot;
+      out.targets = {
+        count: dots.length,
+        reach: dots.every((dot, index) => hits(dot, centres[index], 0, 11) && hits(dot, centres[index], 0, -11) && hits(dot, centres[index], 11, 0) && hits(dot, centres[index], -11, 0)),
+        spacing: Math.min(...centres.slice(1).map((centre, index) => centre.x - centres[index].x)),
+      };
+      return out;`);
+    const phone = viewport[2];
+    expectThat(name, page.viewBox === (phone ? '0 0 520 600' : '0 0 960 540'), `unexpected canvas ${page.viewBox}`);
+    expectThat(name, !page.scrollX, 'the page scrolls sideways');
+    expectThat(name, page.fill > .9, `the figure fills only ${Math.round(page.fill * 100)} % of the canvas height`);
+    for (const [kind, size] of Object.entries(page.text)) expectThat(name, size === null || size >= 9.5, `${kind} text is ${size?.toFixed(1)} px on screen`);
+    expectThat(name, page.previousAtStart.focused && page.previousAtStart.disabled === 'true' && !page.previousAtStart.native && page.previousAtStart.step === 0, `Previous at the first step: ${JSON.stringify(page.previousAtStart)}`);
+    expectThat(name, page.nextAtEnd.focused && page.nextAtEnd.disabled === 'true' && !page.nextAtEnd.native && page.nextAtEnd.step === page.nextAtEnd.last, `Next at the last step: ${JSON.stringify(page.nextAtEnd)}`);
+    expectThat(name, !page.thumbnails.scrolls || (page.thumbnails.atEnd && page.thumbnails.atStart), `the current thumbnail is not in view: ${JSON.stringify(page.thumbnails)}`);
+    expectThat(name, !page.thumbnails.pageMoved, 'following the thumbnail moved the page');
+    expectThat(name, page.targets.reach, 'a step dot cannot be hit 11 px from its centre');
+    expectThat(name, page.targets.spacing >= 22, `step dots are ${page.targets.spacing.toFixed(1)} px apart: their touch targets overlap`);
+
+    // Reduced motion: nothing animates, in the figure or in the controls, and steps still settle.
+    await open('homologous-recombination', viewport, true);
+    const calm = await evaluate(`
+      const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const stage = document.querySelector('.viewer__canvas');
+      const durations = selector => { const element = document.querySelector(selector); return element ? getComputedStyle(element).transitionDuration : null; };
+      const out = { durations: Object.fromEntries(['.viewer__canvas .mm-actor', '.viewer__canvas [data-layer=acids]', '.mm-icon-button', '.mm-controls__play', '.mm-scrubber__track button', '.mm-timeline__step', '.mm-thumbnail'].map(selector => [selector, durations(selector)])) };
+      document.querySelector('.mm-timeline li:nth-child(8) button').click(); await wait(300);
+      const next = document.querySelector('[aria-label="Next step"]');
+      next.click(); await wait(60);
+      const strand = () => stage.querySelector('[data-layer="pairings"] .mm-dna__tube')?.getAttribute('d') ?? null;
+      const early = strand();
+      out.running = document.getAnimations().filter(animation => stage.contains(animation.effect?.target)).length;
+      await wait(900);
+      out.settledAtOnce = early !== null && early === strand();
+      const strip = document.querySelector('.mm-thumbnails');
+      document.querySelector('.mm-timeline li:last-child button').click(); await wait(120);
+      const a = strip.querySelector('[aria-current]').getBoundingClientRect(), b = strip.getBoundingClientRect();
+      out.thumbnailAtOnce = strip.scrollWidth <= strip.clientWidth || (a.left >= b.left - 1 && a.right <= b.right + 1);
+      return out;`);
+    for (const [selector, duration] of Object.entries(calm.durations)) expectThat(`${name} reduced motion`, duration === null || duration.split(',').every(item => parseFloat(item) === 0), `${selector} still transitions (${duration})`);
+    expectThat(`${name} reduced motion`, calm.running === 0, `${calm.running} animations running in the figure`);
+    expectThat(`${name} reduced motion`, calm.settledAtOnce, 'the paired strand did not settle at once');
+    expectThat(`${name} reduced motion`, calm.thumbnailAtOnce, 'the current thumbnail was not in view at once');
+  }
+  // One tab stop for copies that are identical in a step, and one each as soon as anything tells them apart.
+  await open('egfr-dimerization', VIEWPORTS['1440×900']);
+  const tabs = await evaluate(`
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const stage = document.querySelector('.viewer__canvas');
+    const stops = () => [...stage.querySelectorAll('[data-actor][role=button]')].map(actor => actor.dataset.actor + ':' + actor.getAttribute('tabindex') + ':' + actor.getAttribute('aria-label'));
+    const first = stops();
+    document.querySelector('[aria-label="Next step"]').click(); await wait(1200);
+    return { first, second: stops() };`);
+  expectThat('tab stops', tabs.first.join(' | ') === 'egfr#1:0:EGFR, inactive, 2 identical copies | egfr#2:-1:EGFR, inactive', `identical copies: ${tabs.first.join(' | ')}`);
+  expectThat('tab stops', tabs.second.filter(stop => stop.startsWith('egfr#')).every(stop => stop.split(':')[1] === '0'), `copies bound to different ligands: ${tabs.second.join(' | ')}`);
+  await open('homologous-recombination', VIEWPORTS['1440×900']);
+  const filament = await evaluate(`
+    document.querySelector('.mm-timeline li:nth-child(7) button').click(); await new Promise(resolve => setTimeout(resolve, 1200));
+    return [...document.querySelectorAll('.viewer__canvas [data-actor^="rad51#"][role=button]')].map(actor => actor.getAttribute('tabindex'));`);
+  expectThat('tab stops', filament.length === 6 && filament.every(index => index === '0'), `RAD51 copies on different nucleotides: ${filament.join(',')}`);
+  failures.push(...polish);
   socket.close();
-  console.log(`ghost → present: ${checked} transitions sampled in mid-flight; strands: ${strandsChecked} changing paths sampled in mid-flight; ${failures.length} failed`);
+  console.log(`ghost → present: ${checked} transitions sampled in mid-flight; strands: ${strandsChecked} changing paths sampled in mid-flight; viewer: ${polishChecked} checks at 1440×900 and 390×844; ${failures.length} failed`);
   for (const failure of failures) console.log(`  ✗ ${failure}`);
   if (!checked) { console.error('nothing was checked'); process.exitCode = 1; }
   if (failures.length) process.exitCode = 1;

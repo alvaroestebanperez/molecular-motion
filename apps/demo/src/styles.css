@@ -75,7 +75,7 @@ h1, h2, h3 { letter-spacing: -.012em; }
 .collapse { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 .collapse:hover { background: var(--accent-soft); color: var(--accent); }
 .collapse[aria-expanded="false"] svg { transform: rotate(180deg); }
-.viewer__stage { grid-area: stage; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.viewer__stage { grid-area: stage; align-self: start; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .viewer__stage:fullscreen { border-radius: 0; background: var(--surface); }
 .viewer__caption { padding: 22px 28px 14px; }
 .viewer__caption p { margin: 0 0 4px; color: var(--muted); font-size: 13.5px; font-weight: 500; }
