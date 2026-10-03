@@ -41,7 +41,7 @@ describe('actor instances (RFC 0005 §3)', () => {
   it('validates copies', () => {
     expect(() => parseMechanism(doc([{ id: 'a', type: 'protein', copies: 1 }]))).toThrow(/copies must be an integer ≥ 2 \(omit it for a single copy\)/);
     expect(() => parseMechanism(doc([{ id: 'a', type: 'protein', copies: 2.5 }]))).toThrow(/copies must be an integer ≥ 2/);
-    expect(() => parseMechanism(doc([{ id: 'dna', type: 'dna', copies: 2, sites: [] }]))).toThrow(/copies is not allowed on dna and rna: pairing nucleic-acid molecules is out of scope/);
+    expect(() => parseMechanism(doc([{ id: 'dna', type: 'dna', copies: 2, sites: [] }]))).toThrow(/copies is not allowed on dna and rna: each nucleic-acid molecule is its own actor/);
     expect(() => parseMechanism(doc([{ id: 'a#1', type: 'protein' }]))).toThrow(/id must not contain "#"/);
   });
 });
@@ -52,6 +52,6 @@ describe('v3 → v4 migration (RFC 0005 §8)', () => {
     expect(migrateV3(v3)).toEqual({ ...v3, schemaVersion: 4 });
     const v4 = { schemaVersion: 4 };
     expect(migrateV3(v4)).toBe(v4);
-    expect(parseMechanism({ ...doc([{ id: 'a', type: 'protein' }]), schemaVersion: 3 }).schemaVersion).toBe(4);
+    expect(parseMechanism({ ...doc([{ id: 'a', type: 'protein' }]), schemaVersion: 3 }).schemaVersion).toBe(5);
   });
 });

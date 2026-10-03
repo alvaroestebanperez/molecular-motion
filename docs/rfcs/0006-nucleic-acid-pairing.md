@@ -144,6 +144,13 @@ alignments:
 
 - 3′ end paired **in cis**: RFC 0004 behaviour, unchanged.
 - 3′ end paired **in trans**: the template is the partner strand, continuing past the end of the pairing. The new nucleotides become `nascent` on the extending molecule, and the pairing grows to cover them, in the same action. A new strand is base-paired to its template, as in-molecule `extend` creates a duplex implicitly.
+- **This is the continuation of an existing pairing, not an implicit `pair`.** The pairing already joins the 3′ end to the strand being used as template, and `extend` only prolongs it:
+  - a valid trans pairing must exist at the initial 3′ end;
+  - `extend` prolongs that pairing and no other. It never looks for, or creates, a different partner;
+  - the coordinate correspondence comes from the existing pairing's polarity and its alignment;
+  - conflicts, alignment and molecule limits, and continuity of the pairing are all enforced;
+  - the synthesised range is `nascent` and paired in trans for as long as it stays on the template.
+- Later, `unpair` removes only the trans pairing. The synthesised range stays `nascent` and `open` (§6.2), and cis pairing reappears only through an explicit `anneal`.
 - The template nucleotides must be present and unpaired, and inside the alignment. Opening the donor further is an explicit `unwind`. Nothing is displaced silently (D6).
 
 ### 6.2 What happens on the extending molecule (D8)
@@ -247,8 +254,8 @@ Each PR keeps every frozen fixture (v1–v4) byte-identical in render and identi
 | PR | Scope | Tests | Output change |
 |---|---|---|---|
 | **0. Baseline** | Freeze the three v4 examples as fixtures; SHA-256 of full, compact and ghosted renders; per-step semantic projection; keep `schema.v4.json` | the baselines themselves | none |
-| **1. Schema v5, alignments, pairings** | `schemaVersion: 5` and identity migration v4 → v5; `alignments` in types, schema and validation (nucleic actors, ranges inside the molecules, equal lengths); `state.pairings` with normalised segments and diff keys; `partnerOf` and `pairingConflicts`; `pair`, `unpair`, alias `invade`; `degrade` removes pairings | migration; alignment validation; correspondence for `top~bottom` and `top~top`; the invariant; normalisation and merge; determinism and seek; parallel-conflict keys | none |
-| **2. Layer rules** | Guards on `anneal` and `resect`; footprint forms read `partnerOf`; occupants re-checked on both molecules after `pair` and `unpair`; a second occupancy of one instance on another molecule (engagement) | each guard; `single`/`duplex`/`any` against cis, trans and unpaired; RPA on a strand whose opposite is nascent and `open` | none |
+| **1. Schema v5, alignments, pairings** | `schemaVersion: 5` and identity migration v4 → v5; `alignments` in types, schema and validation (nucleic actors, ranges inside the molecules, equal lengths); `state.pairings` with normalised segments and diff keys; `partnerOf` and `pairingConflicts`; `pair`, `unpair`, alias `invade`; `degrade` removes pairings; one generic post-check on `resect`, `extend`, `unwind` and `anneal` so no strand action can break a pairing | migration; alignment validation; correspondence for `top~bottom` and `top~top`; the invariant; normalisation and merge; determinism and seek; parallel-conflict keys | none |
+| **2. Layer rules** | Footprint forms read `partnerOf`; occupants re-checked on both molecules after `pair` and `unpair`; a second occupancy of one instance on another molecule (engagement) | `single`/`duplex`/`any` against cis, trans and unpaired; RPA on a strand whose opposite is nascent and `open` | none |
 | **3. Templated synthesis** | `extend` through a pairing (template from the 3′ end, pairing grows, range `open` on the extending molecule); `extend` on a `single` molecule paired in trans; derived bridged rule; `ligate` across a bridged break | SDSA end to end (§8), including that removing any action makes a later one fail; annealing of two single strands; dHJ formation, branch migration and dissolution | none |
 | **4. Rendering** | Layout for several nucleic acids; strands paired in trans; rungs between partners; structural description; keys | geometry and contact tests; description; legacy SHA baselines | only for documents with pairings |
 | **5. Example and docs** | HR continues from the filament to an intact chromosome (§8): `sister` actor, alignment, RAD51 `form: any`; README roadmap; notes in RFC 0004 §10.7–10.9 and RFC 0005 §6 pointing here | new HR baseline | intended |

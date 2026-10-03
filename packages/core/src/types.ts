@@ -74,6 +74,22 @@ export interface ActorDefinition {
   initial?: { present?: boolean; visible?: boolean; activity?: Activity };
 }
 
+/** One side of an alignment: an interbase range of a nucleic acid. */
+export interface AlignmentSide { acid: string; span: [number, number] }
+
+/**
+ * A declared correspondence between two ranges of nucleic acids (RFC 0006 §4): their strands *may*
+ * pair, position for position. It is authored data and never state. The core has no sequence, so it
+ * makes no claim about why the ranges correspond (homology, complementarity, design).
+ * `same`: a strand pairs with the other molecule's opposite strand; `opposite`: with the strand of the same name.
+ */
+export interface AlignmentDefinition { id: string; a: AlignmentSide; b: AlignmentSide; orientation: 'same' | 'opposite' }
+
+/** Authoring form: `between` + `range` is shorthand for the same range on both molecules. */
+export type AlignmentInput =
+  | { id: string; between: [string, string]; range: [number, number]; orientation?: 'same' | 'opposite' }
+  | { id: string; a: AlignmentSide; b: AlignmentSide; orientation?: 'same' | 'opposite' };
+
 export interface CompartmentDefinition {
   id: string;
   kind: CompartmentKind;
@@ -116,18 +132,21 @@ export interface MechanismStep {
 }
 
 export interface MechanismDefinition {
-  schemaVersion: 4;
+  schemaVersion: 5;
   mechanism: { id: string; name: string; description?: string; references?: string[] };
   references: ReferenceDefinition[];
   compartments: CompartmentDefinition[];
   actors: ActorDefinition[];
+  /** Ranges of nucleic acids whose strands may pair (RFC 0006 §4). */
+  alignments: AlignmentDefinition[];
   steps: MechanismStep[];
 }
 
 /** Authoring form: compartments may use the string shorthand and may be omitted. */
-export interface MechanismInput extends Omit<MechanismDefinition, 'compartments' | 'references'> {
+export interface MechanismInput extends Omit<MechanismDefinition, 'compartments' | 'references' | 'alignments'> {
   compartments?: (string | CompartmentDefinition)[];
   references?: ReferenceDefinition[];
+  alignments?: AlignmentInput[];
 }
 
 /** One copy of an actor. Its state lives in `MechanismState.actors[id]`; identity comes from `actor`. */
@@ -201,6 +220,15 @@ export interface Occupancy {
   orientation?: Orientation;
 }
 
+/** Nucleotides of one strand of one molecule, as an interbase interval [from, to). */
+export interface StrandSpan { acid: string; strand: StrandId; from: number; to: number }
+
+/**
+ * Base pairing between two strand spans of equal length (RFC 0006 §3). Which nucleotide meets which
+ * follows from strand polarity, so nothing else is stored: no kind, no name, no alignment.
+ */
+export interface Pairing { ends: [StrandSpan, StrandSpan] }
+
 export interface MechanismState {
   actors: Record<string, ActorState>;
   sites: Record<string, SiteState>;
@@ -208,6 +236,8 @@ export interface MechanismState {
   interactions: Record<string, Interaction>;
   /** Instances on nucleic acids. */
   occupancy: Record<string, Occupancy>;
+  /** Base pairing between strands (in trans), keyed by strand pair; lists are normalised. Cis pairing stays derived. */
+  pairings: Record<string, Pairing[]>;
 }
 
 export interface Presentation { verb: string; tone?: 'activating' | 'inhibitory' | 'neutral' }

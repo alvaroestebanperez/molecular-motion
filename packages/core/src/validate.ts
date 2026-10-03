@@ -1,10 +1,10 @@
 import { builtinRegistry } from './actions';
 import { normalizeCompartments } from './compartments';
 import { instanceIds, INSTANCE_SEPARATOR } from './instances';
-import { migrateV1, migrateV2, migrateV3 } from './migrate';
+import { migrateV1, migrateV2, migrateV3, migrateV4 } from './migrate';
 import { nucleicForm, nucleicLength } from './nucleic';
 import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
-import type { ActionSpec, ActorDefinition, MechanismDefinition } from './types';
+import type { ActionSpec, ActorDefinition, AlignmentDefinition, MechanismDefinition } from './types';
 
 const ACTOR_TYPES = new Set(['dna', 'rna', 'protein', 'molecule', 'complex']);
 const ACTIVITIES = new Set(['active', 'inactive', 'inhibited']);
@@ -30,15 +30,15 @@ interface References {
 }
 
 /**
- * Structural and referential validation. Accepts v1–v3 documents (migrated automatically) and
- * returns a normalised, deep-copied v4 definition. State-dependent checks happen later, during compilation.
+ * Structural and referential validation. Accepts v1–v4 documents (migrated automatically) and
+ * returns a normalised, deep-copied v5 definition. State-dependent checks happen later, during compilation.
  */
 export function validateMechanism(input: unknown, options: ValidateOptions = {}): MechanismDefinition {
   const registry = options.registry ?? builtinRegistry;
-  const value = migrateV3(migrateV2(migrateV1(input)));
+  const value = migrateV4(migrateV3(migrateV2(migrateV1(input))));
   const issues: string[] = [];
   if (!isObject(value)) throw new MechanismValidationError(['root must be an object']);
-  if (value.schemaVersion !== 4) issues.push('schemaVersion must be 1, 2, 3 or 4');
+  if (value.schemaVersion !== 5) issues.push('schemaVersion must be 1, 2, 3, 4 or 5');
   if (!isObject(value.mechanism)) issues.push('mechanism must be an object');
   else {
     requiredString(value.mechanism.id, 'mechanism.id', issues);
@@ -62,6 +62,7 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
   if (isObject(value.mechanism)) checkReferenceIds(value.mechanism.references, 'mechanism.references');
   const refs: References = { actors: new Map(), copies: new Map(), compartments: new Set(compartments.map(compartment => compartment.id)) };
   const actorIds = new Set<string>();
+  const acids = new Map<string, NucleicDescriptor>();
 
   if (Array.isArray(value.actors)) value.actors.forEach((actor, index) => {
     const path = `actors[${index}]`;
@@ -88,6 +89,7 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     if (actor.interfaces !== undefined) validateInterfaces(actor, path, issues);
     if (actor.footprint !== undefined) validateFootprint(actor, path, issues);
     const acid = nucleicDescriptor(actor);
+    if (acid && typeof actor.id === 'string') acids.set(actor.id, acid);
     if (actor.nucleic !== undefined) {
       if (!acid) issues.push(`${path}.nucleic is only allowed on dna and rna actors`);
       else validateNucleic(actor.nucleic, `${path}.nucleic`, issues);
@@ -100,7 +102,10 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
     });
   });
 
-  const definition = { ...value, references, compartments } as unknown as MechanismDefinition;
+  if (value.alignments !== undefined && !Array.isArray(value.alignments)) issues.push('alignments must be an array');
+  const alignments = validateAlignments(Array.isArray(value.alignments) ? value.alignments : [], acids, issues);
+
+  const definition = { ...value, references, compartments, alignments } as unknown as MechanismDefinition;
   const stepIds = new Set<string>();
   if (Array.isArray(value.steps)) value.steps.forEach((step, stepIndex) => {
     const path = `steps[${stepIndex}]`;
@@ -260,6 +265,54 @@ function validateSiteGeometry(site: Record<string, unknown>, path: string, acid:
   }
 }
 
+const ALIGNMENT_ID = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * Alignments (RFC 0006 §4): two ranges of equal length on nucleic acids. Returns them in the
+ * normalised `a`/`b` form; `between` + `range` is shorthand for the same range on both molecules.
+ */
+function validateAlignments(alignments: unknown[], acids: Map<string, NucleicDescriptor>, issues: string[]): AlignmentDefinition[] {
+  const ids = new Set<string>();
+  const out: AlignmentDefinition[] = [];
+  alignments.forEach((alignment, index) => {
+    const path = `alignments[${index}]`;
+    if (!isObject(alignment)) return issues.push(`${path} must be an object`);
+    const before = issues.length;
+    if (typeof alignment.id !== 'string' || !ALIGNMENT_ID.test(alignment.id)) issues.push(`${path}.id must be a lowercase id such as "sister"`);
+    else if (ids.has(alignment.id)) issues.push(`${path}.id duplicates "${alignment.id}"`);
+    else ids.add(alignment.id);
+    for (const key of Object.keys(alignment)) if (!['id', 'between', 'range', 'a', 'b', 'orientation'].includes(key)) issues.push(`${path}.${key} is not supported`);
+    if (alignment.orientation !== undefined && alignment.orientation !== 'same' && alignment.orientation !== 'opposite') issues.push(`${path}.orientation must be one of: same, opposite`);
+    const shorthand = alignment.between !== undefined || alignment.range !== undefined;
+    const explicit = alignment.a !== undefined || alignment.b !== undefined;
+    if (shorthand === explicit) return issues.push(`${path} needs either between and range, or a and b`);
+    const between = alignment.between;
+    if (shorthand && !(Array.isArray(between) && between.length === 2)) return issues.push(`${path}.between must name two nucleic acids`);
+    const sides = shorthand
+      ? (between as unknown[]).map(acid => ({ acid, span: alignment.range }))
+      : [alignment.a, alignment.b];
+    const checked = sides.map((side, sideIndex) => {
+      const at = shorthand ? `${path}.between[${sideIndex}]` : `${path}.${sideIndex ? 'b' : 'a'}`;
+      if (!isObject(side) || Object.keys(side).some(key => key !== 'acid' && key !== 'span')) { issues.push(`${at} must be { acid, span }`); return undefined; }
+      const acid = typeof side.acid === 'string' ? acids.get(side.acid) : undefined;
+      if (!acid) { issues.push(`${at} references "${String(side.acid)}", which is not a dna or rna actor`); return undefined; }
+      const length = nucleicLength(acid);
+      const span = side.span;
+      if (!(Array.isArray(span) && span.length === 2 && span.every(item => Number.isInteger(item) && item >= 0 && item <= length) && span[0] < span[1])) {
+        issues.push(`${shorthand ? `${path}.range` : `${at}.span`} must be [from, to] with 0 ≤ from < to ≤ ${length} on "${side.acid as string}"`);
+        return undefined;
+      }
+      return { acid: side.acid as string, span: [span[0], span[1]] as [number, number] };
+    });
+    const [a, b] = checked;
+    if (!a || !b) return;
+    if (a.span[1] - a.span[0] !== b.span[1] - b.span[0]) issues.push(`${path} aligns ${a.span[1] - a.span[0]} nt with ${b.span[1] - b.span[0]} nt; both ranges must have the same length`);
+    if (a.acid === b.acid && a.span[0] < b.span[1] && b.span[0] < a.span[1]) issues.push(`${path} aligns "${a.acid}" with itself over overlapping ranges`);
+    if (issues.length === before) out.push({ id: alignment.id as string, a, b, orientation: (alignment.orientation as 'same' | 'opposite' | undefined) ?? 'same' });
+  });
+  return out;
+}
+
 /** Interfaces: unique ids, valence an integer ≥ 1; nucleic acids bind by occupancy and declare none. */
 function validateInterfaces(actor: Record<string, unknown>, path: string, issues: string[]) {
   if (actor.type === 'dna' || actor.type === 'rna') return issues.push(`${path}.interfaces is not allowed on dna and rna: proteins rest on them by occupancy`);
@@ -288,7 +341,7 @@ function validateFootprint(actor: Record<string, unknown>, path: string, issues:
 function validateCopies(actor: Record<string, unknown>, path: string, issues: string[]): number | undefined {
   if (actor.copies === undefined) return undefined;
   if (!Number.isInteger(actor.copies) || (actor.copies as number) < 2) { issues.push(`${path}.copies must be an integer ≥ 2 (omit it for a single copy)`); return undefined; }
-  if (actor.type === 'dna' || actor.type === 'rna') { issues.push(`${path}.copies is not allowed on dna and rna: pairing nucleic-acid molecules is out of scope`); return undefined; }
+  if (actor.type === 'dna' || actor.type === 'rna') { issues.push(`${path}.copies is not allowed on dna and rna: each nucleic-acid molecule is its own actor`); return undefined; }
   return actor.copies as number;
 }
 

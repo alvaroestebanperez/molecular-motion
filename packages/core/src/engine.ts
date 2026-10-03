@@ -91,7 +91,7 @@ export function compileMechanism(input: unknown, options: CompileOptions = {}): 
     const resolved = structuredClone(state);
     return deepFreeze({
       stepIndex, step, definition, actors: resolved.actors, sites: resolved.sites,
-      interactions: resolved.interactions, occupancy: resolved.occupancy, timeline, duration: end,
+      interactions: resolved.interactions, occupancy: resolved.occupancy, pairings: resolved.pairings, timeline, duration: end,
     });
   });
 
@@ -123,7 +123,7 @@ export function initialState(definition: MechanismDefinition): MechanismState {
     };
     for (const site of actor.sites ?? []) sites[`${id}.${site.id}`] = {};
   }
-  return { actors, sites, interactions: {}, occupancy: {} };
+  return { actors, sites, interactions: {}, occupancy: {}, pairings: {} };
 }
 
 function applyContext(state: MechanismState, definition: MechanismDefinition): ApplyContext {
@@ -162,6 +162,8 @@ function flatten(state: MechanismState): Map<string, unknown> {
   // One key per binding: parallel branches conflict only when they touch the same edge or occupancy.
   for (const interaction of Object.values(state.interactions)) out.set(`interactions.${interaction.id}`, interaction);
   for (const occupancy of Object.values(state.occupancy)) out.set(`occupancy.${occupancy.id}`, occupancy);
+  // One key per strand pair: a pairing that grows or shrinks stays the same key.
+  for (const [key, pairings] of Object.entries(state.pairings)) out.set(`pairings.${key}`, pairings);
   return out;
 }
 
