@@ -160,6 +160,38 @@ describe('strands paired across two molecules (RFC 0006 §10)', () => {
     expect(svg).not.toContain('data-layer="pairings"');
     // The free 3′ end of the new strand is labelled on its own molecule while it is unpaired.
     const labels = [...svg.matchAll(/class="mm-dna__polarity" x="([\d.]+)" y="([\d.]+)">([35])′/g)].map(match => [Number(match[1]), match[3]]);
-    expect(labels).toContainEqual([275, '3']);
+    expect(labels).toContainEqual([278, '3']);
+    // Unpaired is not annealed: the new strand keeps its unwound level right up to its free end, well
+    // apart from the strand that lies past it, which is back on the helix. Nothing joins the two.
+    const upper = scene.nucleicAcids[0]!;
+    expect(helixY(upper, 1, 264 + 8, 960)).toBeCloseTo(upper.y + 40);
+    expect(Math.abs(helixY(upper, 1, 264 - 8, 960) - (upper.y + 40))).toBeGreaterThan(12);
+    // The other strand of the region is continuous there, so it still eases back onto the helix.
+    expect(helixY(upper, 0, 264 + 8, 960)).toBeGreaterThan(upper.y - 40);
+    // Annealed, the strand reads as continuous again and follows the helix.
+    const annealed = sceneOf([paired, grown, [{ type: 'unpair', target: 'upper' }, { type: 'anneal', target: 'lower.facing' }], [{ type: 'anneal', target: 'upper.left' }]]).nucleicAcids[0]!;
+    expect(annealed.open).toBeUndefined();
+    expect(Math.abs(helixY(annealed, 1, 264 + 8, 960) - annealed.y)).toBeLessThanOrEqual(30);
+  });
+
+  it('marks the nucleotides an instance also holds on another molecule', () => {
+    const engaged: ActionNode[] = [...resected, { type: 'occupy', actor: 'coat', target: 'upper', span: [46, 52] }, { type: 'occupy', actor: 'coat', target: 'lower', span: [46, 52] }];
+    const scene = sceneOf([engaged]);
+    // The body is drawn once, on the first molecule it occupies; the other occupancy is a mark on that molecule.
+    expect(scene.actors.filter(actor => actor.id === 'coat')).toHaveLength(1);
+    expect(scene.actors.find(actor => actor.id === 'coat')!.y).toBeLessThan(scene.nucleicAcids[1]!.y - 60);
+    expect(scene.footprints).toMatchObject([{ id: 'coat@lower', instance: 'coat', acid: 'lower', from: 46, to: 52, x: 553, width: 70 }]);
+    const lower = scene.nucleicAcids[1]!;
+    const [mark] = scene.footprints;
+    expect(mark!.y).toBeLessThan(lower.y - 30);
+    expect(mark!.y + mark!.height).toBeGreaterThan(lower.y + 30);
+    const svg = renderSvg(scene);
+    expect(svg.indexOf('data-layer="footprints"')).toBeLessThan(svg.indexOf('data-layer="acids"'));
+    expect(svg).toContain('data-key="footprint:coat@lower"');
+    expect(describeScene(scene)).toContain('Occupancy: Coat also on Lower 46–52.');
+    // One occupancy only: nothing to mark, and no layer.
+    const single = sceneOf([[...resected, { type: 'occupy', actor: 'coat', target: 'upper', span: [46, 52] }]]);
+    expect(single.footprints).toEqual([]);
+    expect(renderSvg(single)).not.toContain('data-layer="footprints"');
   });
 });

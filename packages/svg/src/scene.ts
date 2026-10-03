@@ -99,6 +99,25 @@ export interface SceneActor extends Point {
 export interface SceneConnection { source: string; target: string; from: Point; to: Point; kind?: 'contact' | 'relation' }
 export interface SceneLesion extends Point { target: string; type: LesionType; strand: SiteStrand }
 
+/**
+ * Nucleotides an instance covers on a molecule other than the one it is drawn on (RFC 0005 §5: one
+ * instance may occupy several nucleic acids). The body is drawn once; this marks the other place it
+ * holds, so the occupancy is visible there too.
+ */
+export interface SceneFootprint {
+  /** Occupancy id, `<instance>@<acid>`. Keys the DOM. */
+  id: string;
+  instance: string;
+  /** Definition id, for the label of the description. */
+  actor: string;
+  label: string;
+  color: string;
+  acid: string;
+  from: number; to: number;
+  /** Box around the covered strand(s). */
+  x: number; y: number; width: number; height: number;
+}
+
 export interface SvgScene {
   width: number;
   height: number;
@@ -110,6 +129,8 @@ export interface SvgScene {
   lesions: SceneLesion[];
   /** Base pairing between molecules; empty for a document without pairings. */
   pairings: ScenePairing[];
+  /** Occupancies held away from where their instance is drawn; empty for most documents. */
+  footprints: SceneFootprint[];
 }
 
 export interface SceneOptions {
@@ -131,15 +152,34 @@ const RELAX = 16;
  * 0 outside `[x0, x1]`, easing to 1 within `RELAX` of the edges. A stretch shorter than four
  * `RELAX` relaxes proportionally less, so a few-nucleotide gap does not kink the strand.
  */
-function relaxation(x: number, ranges: readonly { x0: number; x1: number }[]): number {
+function relaxation(x: number, ranges: readonly { x0: number; x1: number; abrupt?: readonly [boolean, boolean] }[]): number {
   let weight = 0;
   for (const range of ranges) {
-    const depth = Math.min(x - range.x0, range.x1 - x);
+    if (x <= range.x0 || x >= range.x1) continue;
+    // An abrupt edge does not ease back: the strand ends there, at its relaxed level.
+    const depth = Math.min(range.abrupt?.[0] ? Infinity : x - range.x0, range.abrupt?.[1] ? Infinity : range.x1 - x);
     if (depth <= 0) continue;
     const t = Math.min(1, depth / RELAX);
     weight = Math.max(weight, t * t * (3 - 2 * t) * Math.min(1, (range.x1 - range.x0) / (4 * RELAX)));
   }
   return weight;
+}
+
+/**
+ * Free 3′ ends of newly synthesised stretches inside an unwound region, as `[strand, x]`. The new strand
+ * is paired with nothing there, so it is not joined to what lies past its end: it is drawn as an end
+ * until the region is annealed (RFC 0006 §10). Past the end the strand must be there, on this molecule.
+ */
+export function freeStrandEnds(acid: Pick<SceneNucleicAcid, 'missing' | 'nascent' | 'open' | 'away'>, width: number): [0 | 1, number][] {
+  if (!acid.nascent || !acid.open) return [];
+  const within = (list: readonly SceneStrandRange[] | undefined, strand: 0 | 1, x: number) => (list ?? []).some(range => strandIndex(range.strand) === strand && x > range.x0 && x < range.x1);
+  return acid.nascent.flatMap((range): [0 | 1, number][] => {
+    const strand = strandIndex(range.strand);
+    const x = strand === 0 ? range.x1 : range.x0;
+    const [inside, beyond] = strand === 0 ? [x - 1, x + 1] : [x + 1, x - 1];
+    const unwound = acid.open!.some(region => x >= region.x0 && x <= region.x1);
+    return unwound && beyond > 0 && beyond < width && !within(acid.missing, strand, beyond) && !within(acid.away, strand, beyond) && !within(acid.away, strand, inside) ? [[strand, x]] : [];
+  });
 }
 
 /** True where `strand` is not drawn on this molecule at `x`: no nucleotides, or drawn beside another molecule. */
@@ -155,13 +195,17 @@ export const singleStranded = (acid: Pick<SceneNucleicAcid, 'missing'>, strand: 
  * (RFC 0004 §7): a single-stranded stretch relaxes into a shallow wave on its own side of the axis,
  * and in an unwound bubble both strands bow apart; an intact molecule is the plain double helix.
  */
-export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites' | 'missing' | 'open'>, strand: 0 | 1, x: number, width: number): number {
+export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites' | 'missing' | 'open' | 'nascent' | 'away'>, strand: 0 | 1, x: number, width: number): number {
   const phaseX = acid.sites[0]?.x ?? width / 2;
   const side = strand === 0 ? -1 : 1;
   const helical = acid.y + side * HELIX.amplitude * Math.cos(2 * Math.PI / HELIX.wavelength * (x - phaseX));
   if (!acid.missing && !acid.open) return helical;
   const single = relaxation(x, singleStranded(acid, strand));
-  const open = relaxation(x, acid.open ?? []);
+  // Where this strand has a free end at the edge of an unwound region it keeps its unwound level up to
+  // the end, so it is seen apart from the strand that lies past it instead of running into it.
+  const ends = freeStrandEnds(acid, width).filter(([index]) => index === strand).map(([, at]) => at);
+  const abrupt = (edge: number) => ends.some(at => Math.abs(at - edge) < .5);
+  const open = relaxation(x, ends.length ? (acid.open ?? []).map(range => ({ ...range, abrupt: [abrupt(range.x0), abrupt(range.x1)] as const })) : acid.open ?? []);
   if (!single && !open) return helical;
   const relaxed = open >= single
     ? acid.y + side * (HELIX.amplitude + 10)
@@ -299,6 +343,8 @@ const SLOTS = [-0.08, -2.2, -0.95, -3.05, 0.75];
 const MOLECULE_SLOTS = [2.95, -2.6, 0.35];
 /** Gap between neighbours resting on the same site: they share the site but do not touch. */
 const SIDE_GAP = 8;
+/** Clear space kept between an actor's body and the side edges of the canvas, in px. */
+const CANVAS_MARGIN = 6;
 
 const isNucleic = (type: ActorType) => type === 'dna' || type === 'rna';
 
@@ -743,8 +789,10 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (definition.position) Object.assign(actor, { x: definition.position.x, y: definition.position.y });
     else {
       // A docked actor must not sink into a nucleic acid nor into an actor already placed (other than its
-      // partner): tilt its slot towards "up" until it clears.
-      const clears = (fit: FirstContact) => nucleicAcids.every(acid => clearance(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, acid, width) >= 0)
+      // partner), nor leave the canvas sideways: tilt its slot towards "up" until it clears.
+      const [reachLeft, reachRight] = extentX(actor);
+      const onCanvas = (fit: FirstContact) => partner.x + fit.offset.x + reachLeft >= CANVAS_MARGIN && partner.x + fit.offset.x + reachRight <= width - CANVAS_MARGIN;
+      const clears = (fit: FirstContact) => onCanvas(fit) && nucleicAcids.every(acid => clearance(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, acid, width) >= 0)
         && [...placed.values()].every(other => other === partner || other.ghost || !bodiesOverlap(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, other));
       let fit = contactAlong(partner, actor, angle);
       for (let step = 0; step < 10 && !clears(fit); step++) {
@@ -779,6 +827,25 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     return actor;
   };
   proteins.forEach(place);
+
+  // An assembly that floats free (nothing in it rests on a nucleic acid) is moved as a whole to keep
+  // every member on the canvas. One anchored to a molecule stays where its anchor is.
+  for (const root of free) {
+    if (root.position) continue;
+    const members: SceneActor[] = [];
+    const collect = (id: string) => { const actor = placed.get(id); if (!actor || members.includes(actor)) return; members.push(actor); for (const child of children.get(id) ?? []) collect(child.id); };
+    collect(root.id);
+    const spans = members.map(member => { const [left, right] = extentX(member); return [member.x + left, member.x + right] as const; });
+    const [left, right] = [Math.min(...spans.map(span => span[0])), Math.max(...spans.map(span => span[1]))];
+    const shift = left < CANVAS_MARGIN ? CANVAS_MARGIN - left : right > width - CANVAS_MARGIN ? width - CANVAS_MARGIN - right : 0;
+    if (!shift || right - left > width - 2 * CANVAS_MARGIN) continue;
+    const moved = Math.round(shift * 10) / 10;
+    for (const member of members) {
+      member.x = Math.round((member.x + moved) * 10) / 10;
+      const contact = contacts.get(member.id);
+      if (contact) contacts.set(member.id, { x: Math.round((contact.x + moved) * 10) / 10, y: contact.y });
+    }
+  }
 
   // 4. Upcoming actors wait out of focus in the upper background, away from the action.
   const upcoming = views.filter(definition => ghosts.has(definition.id) && !placed.has(definition.id) && !isNucleic(definition.type));
@@ -835,6 +902,22 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const to = siteIndex.get(reference) ?? actorIndex.get(reference.split('.')[0]!) ?? (acid && { x: actor.x, y: acid.y - HELIX.amplitude });
     return to ? [{ source: actor.id, target: reference, from: { x: actor.x, y: actor.y }, to: { x: to.x, y: to.y }, kind: 'relation' }] : [];
   });
+  // An instance is drawn on the first molecule it occupies. Any other span it holds is marked there.
+  const footprints: SceneFootprint[] = Object.values(snapshot.occupancy).flatMap((occupancy): SceneFootprint[] => {
+    const actor = actorIndex.get(occupancy.instance);
+    const acid = acidIndex.get(occupancy.acid);
+    if (!actor || actor.ghost || !acid || !occupancy.span || spanOf(occupancy.instance) === occupancy) return [];
+    const scale = width / (acid.length ?? 100);
+    const [x0, x1] = [occupancy.span.from * scale, occupancy.span.to * scale];
+    const strands = occupancy.strand === 'top' ? [0] as const : occupancy.strand === 'bottom' ? [1] as const : [0, 1] as const;
+    const ys = strands.flatMap(strand => [0, .25, .5, .75, 1].map(part => helixY(acid, strand, x0 + (x1 - x0) * part, width)));
+    const [top, bottom] = [Math.min(...ys) - HELIX.tube / 2 - 4, Math.max(...ys) + HELIX.tube / 2 + 4];
+    const tenth = (value: number) => Math.round(value * 10) / 10;
+    return [{
+      id: occupancy.id, instance: occupancy.instance, actor: actor.actor, label: actor.label, color: actor.color, acid: acid.id,
+      from: occupancy.span.from, to: occupancy.span.to, x: tenth(x0 + 1), y: tenth(top), width: tenth(x1 - x0 - 2), height: tenth(bottom - top),
+    }];
+  });
   const lesions = nucleicAcids.flatMap(acid => acid.sites.flatMap((site): SceneLesion[] => site.lesion
     ? [{ target: site.reference, type: site.lesion, strand: site.lesionStrands!.length > 1 ? 'both' : site.lesionStrands![0]!, x: site.x, y: site.y }]
     : []));
@@ -843,7 +926,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions, pairings,
+    nucleicAcids, actors, connections, lesions, pairings, footprints,
   };
 }
 

@@ -1,6 +1,6 @@
 import type { LesionType } from '@molecular-motion/core';
 import {
-  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, freeStrandEnds, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
   type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
@@ -47,6 +47,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
   const { acids, pairings } = nucleicLayerMarkup(geometryFrame(scene), prefix);
+  const footprints = scene.footprints.map(mark => `<rect class="mm-footprint" data-key="footprint:${escape(mark.id)}" x="${round(mark.x)}" y="${round(mark.y)}" width="${round(mark.width)}" height="${round(mark.height)}" rx="7" style="--mm-actor:${escape(mark.color)}" aria-hidden="true"/>`).join('');
   const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false)).join('');
   const labels = compact ? '' : [
@@ -60,6 +61,8 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   return `<svg class="mm-svg${compact ? ' mm-svg--compact' : ''}" viewBox="${viewBox}" role="img" aria-labelledby="${prefix}-title ${prefix}-description" xmlns="http://www.w3.org/2000/svg">`
     + `<title id="${prefix}-title">${escape(scene.title)}</title><desc id="${prefix}-description">${escape([scene.description, summary].filter(Boolean).join(' '))}</desc>`
     + `<g data-layer="defs">${defs}</g>`
+    // Under the molecules: a mark on the strands an instance also holds, without hiding them.
+    + (footprints ? `<g class="mm-layer" data-layer="footprints">${footprints}</g>` : '')
     + `<g class="mm-layer" data-layer="acids">${acids}</g>`
     // Only documents with pairings get this layer, so every other document renders exactly as before.
     + (pairings ? `<g class="mm-layer" data-layer="pairings">${pairings}</g>` : '')
@@ -148,8 +151,15 @@ export function describeScene(scene: SvgScene): string {
   const span = (item: { acid: string; strand: string; from: number; to: number }) => `${labels.get(item.acid) ?? item.acid} ${item.strand} strand ${item.from}–${item.to}`;
   const paired = scene.pairings.flatMap(pairing => pairing.segments.map(segment =>
     [`${span(segment.traveller)} paired with ${span(segment.host)}`, ...segment.unpaired.map(item => `${span(item)} unpaired`)].join('; ')));
+  // One sentence per molecule species and molecule it also rests on.
+  const held = new Map<string, { label: string; acid: string; from: number; to: number; count: number }>();
+  for (const mark of scene.footprints) {
+    const entry = held.get(`${mark.actor}@${mark.acid}`) ?? { label: mark.label, acid: mark.acid, from: mark.from, to: mark.to, count: 0 };
+    held.set(`${mark.actor}@${mark.acid}`, { ...entry, from: Math.min(entry.from, mark.from), to: Math.max(entry.to, mark.to), count: entry.count + 1 });
+  }
+  const resting = [...held.values()].map(item => `${item.label}${item.count > 1 ? ` ×${item.count}` : ''} also on ${labels.get(item.acid) ?? item.acid} ${item.from}–${item.to}`);
   return [
-    parts.length && `Shown: ${parts.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`,
+    parts.length && `Shown: ${parts.join('; ')}.`, resting.length && `Occupancy: ${resting.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`,
     strands.length && `Strands: ${strands.join('. ')}.`, paired.length && `Pairing: ${paired.join('. ')}.`,
   ].filter(Boolean).join(' ');
 }
@@ -186,6 +196,9 @@ export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm'): { aci
 
 // ---- Nucleic acids ----
 
+/** Half-width of the gap drawn at a free strand end, in px. */
+const FREE_END = 7;
+
 function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   const { wavelength } = HELIX;
   const k = (2 * Math.PI) / wavelength;
@@ -208,14 +221,8 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     && !ranges(acid.missing, strand).some(range => Math.abs(range.x0 - x) < .5 || Math.abs(range.x1 - x) < .5);
   // Where synthesis stopped inside an unwound region, the new strand's 3′ end is free: it is paired with
   // nothing there, so it is drawn as an end. Once annealed it reads as continuous again (RFC 0004 §5).
-  const inOpen = (x: number) => (acid.open ?? []).some(range => x >= range.x0 && x <= range.x1);
-  const freeEnds: [0 | 1, number][] = (acid.nascent ?? []).flatMap((range): [0 | 1, number][] => {
-    const strand = strandIndex(range.strand);
-    const x = strand === 0 ? range.x1 : range.x0;
-    const beyond = strand === 0 ? x + 1 : x - 1;
-    return inOpen(x) && beyond > 0 && beyond < width && !strandMissingAt(acid, strand, beyond) && !away(strand, strand === 0 ? x - 1 : x + 1) ? [[strand, x]] : [];
-  });
-  const gaps: [0 | 1, number, number][] = freeEnds.map(([strand, x]) => [strand, x - 4, x + 4]);
+  const freeEnds = freeStrandEnds(acid, width);
+  const gaps: [0 | 1, number, number][] = freeEnds.map(([strand, x]) => [strand, x - FREE_END, x + FREE_END]);
   for (const site of acid.sites) {
     const strands = (site.lesionStrands ?? ['top']).map(strandIndex).filter(strand => site.lesion === 'double-strand-break' ? !bridges(strand, site.x) : !touched(strand, site.x));
     if (site.lesion === 'single-strand-break') for (const strand of strands) gaps.push([strand, site.x - 12, site.x + 12]);
@@ -227,7 +234,7 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   // of a DSB. A nick or SSB keeps its strand continuous for labelling, so no 5′/3′ crowds the lesion.
   const polarityCuts: [0 | 1, number, number][] = [
     ...acid.sites.filter(site => site.lesion === 'double-strand-break').flatMap(site => ([0, 1] as const).filter(strand => !bridges(strand, site.x)).map((strand): [0 | 1, number, number] => [strand, site.x - 15, site.x + 15])),
-    ...freeEnds.map(([strand, x]): [0 | 1, number, number] => [strand, x - 4, x + 4]),
+    ...freeEnds.map(([strand, x]): [0 | 1, number, number] => [strand, x - FREE_END, x + FREE_END]),
     ...[...acid.missing ?? [], ...acid.away ?? []].map((range): [0 | 1, number, number] => [strandIndex(range.strand), range.x0, range.x1]),
   ];
   // A strand that leaves for another molecule does not end there, so those edges carry no label.
@@ -280,7 +287,7 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     if (away(strand, (range.x0 + range.x1) / 2)) continue;
     // Stop short of a free end, so the end shows.
     const free = (x: number) => freeEnds.some(([s, end]) => s === strand && Math.abs(end - x) < .5);
-    const [start, stop] = [range.x0 + (free(range.x0) ? 4 : 0), range.x1 - (free(range.x1) ? 4 : 0)];
+    const [start, stop] = [range.x0 + (free(range.x0) ? FREE_END : 0), range.x1 - (free(range.x1) ? FREE_END : 0)];
     let current: string[] = [];
     let currentFront = isFront(strand, start);
     const flush = () => { if (current.length > 1) nascent[currentFront ? 'front' : 'back'].push(`M${current.join('L')}`); current = []; };
@@ -439,6 +446,7 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
   return `<g class="mm-label mm-label--alert" data-key="lesion:${escape(lesion.target)}" style="transform:translate(${round(lesion.x)}px,${round(lesion.y)}px)" aria-hidden="true">${markup}</g>`;
 }
 
+
 /** Callout text: the label, with the number of visible copies when it speaks for a group. */
 const calloutText = (actor: SceneActor) => actor.group && actor.group.size > 1 ? `${actor.label} ×${actor.group.size}` : actor.label;
 
@@ -494,6 +502,7 @@ export const molecularMotionCss = `
 .mm-dna__shine{fill:none;stroke:#fff;stroke-opacity:.3;stroke-width:3;stroke-linecap:round;transform:translateY(-2.5px)}
 .mm-dna__nascent{fill:none;stroke:var(--mm-dna-new);stroke-width:${HELIX.tube - 3};stroke-linecap:round;stroke-linejoin:round}.mm-dna__nascent--back{stroke-width:${HELIX.backTube - 3};opacity:.55}
 .mm-dna__polarity{fill:var(--mm-muted);font-size:11px;font-weight:700;text-anchor:middle}
+.mm-footprint{fill:color-mix(in srgb,var(--mm-actor) 30%,transparent);stroke:color-mix(in srgb,var(--mm-actor) 70%,transparent);stroke-width:1.5;stroke-dasharray:4 3;transition:opacity .6s ease}
 .mm-binding{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}.mm-binding--relation path{stroke:var(--mm-muted);opacity:.72}
 .mm-lesion__glow{animation:mm-pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
 .mm-lesion__dot{fill:var(--mm-alert);stroke:var(--mm-surface);stroke-width:1.5}.mm-lesion__ring{fill:var(--mm-surface);stroke:var(--mm-alert);stroke-width:2}
