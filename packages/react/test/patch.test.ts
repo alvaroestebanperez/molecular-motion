@@ -71,7 +71,7 @@ describe('patchSvg', () => {
     expect(layers()).toEqual(['defs', 'acids', 'connections', 'actors', 'labels']);
     // Strands pair across the two molecules: the layer appears between the molecules and what sits on them.
     patchSvg(container, step('invasion'));
-    expect(layers()).toEqual(['defs', 'acids', 'pairings', 'connections', 'actors', 'labels']);
+    expect(layers()).toEqual(['defs', 'footprints', 'acids', 'pairings', 'connections', 'actors', 'labels']);
     const pairing = container.querySelector('[data-key^="pairing:"]')!;
     // The pairing grows by synthesis: the same element, redrawn.
     patchSvg(container, step('synthesis'));

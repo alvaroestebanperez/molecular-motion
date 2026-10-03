@@ -43,15 +43,15 @@
   },
   {
     "step": "engagement",
-    "full": "e4bd207f6b4adafc60ab6fbd50bac23a0a73ed04c11aa7b21315d4f0553d3903",
-    "compact": "9287a9198d2e61ab2606def9c295b82287e8626214fae0d013bf7443ce54e5c0",
-    "ghosts": "b63a83b6fbde5bc319dae05cee21e096cb28d133ef41837da3f0475b93dce830"
+    "full": "50830f3b3d59cfd34b4c99ff6441c396846eb11ba95a31e0c685dcba36192bd0",
+    "compact": "f8864e1b78e30c4a760c5c2a113de4cfddf82ae85984372e34b43e221dcde304",
+    "ghosts": "c149de5bdae8cee92a7b56fc34d7b0f76dcc178540d475c4793f3a66bb60c018"
   },
   {
     "step": "invasion",
-    "full": "e2aa9b2ec61238a4488a38a2891e6c5e665f54c12a5db556e847133c025679bc",
-    "compact": "2c65f36e3ff79d034ee645b3ee8655a396d2ba9f6276637cc56e454b0afc484b",
-    "ghosts": "65ce48864741b3d1e9bf317386474b3253013a383b3de7d80bf60a36197b29c1"
+    "full": "6da7ea3c577547fde4d7a825c27422de0ab61e2293a6ff779030c03fc1051153",
+    "compact": "14fe5cf05451bbfc4abe791d588d0de52f533e55a527d159f08c86bbb2e2acfa",
+    "ghosts": "596f3a23324415e3a18f258a721629718337c2e22416217298c9c455ab977b7f"
   },
   {
     "step": "synthesis",
@@ -61,9 +61,9 @@
   },
   {
     "step": "displacement",
-    "full": "3ce4f9242b4c7dc5b9f7efcca343bf188024516fd6b48b89e4e11037368e3b67",
-    "compact": "cb8df2e6c5d475efef78f455f9b33df4d7c535b2f6aca704c7745234c7c4875e",
-    "ghosts": "3ce4f9242b4c7dc5b9f7efcca343bf188024516fd6b48b89e4e11037368e3b67"
+    "full": "08ba9f85f2b78d439907260c573ae8e82685ae367bffd5a19018e76b4f8e620e",
+    "compact": "f71668efa209162f9475cd6d517b483134ad08c903cd7ea7fbb03bec3c7ab48d",
+    "ghosts": "08ba9f85f2b78d439907260c573ae8e82685ae367bffd5a19018e76b4f8e620e"
   },
   {
     "step": "annealing",

@@ -112,6 +112,18 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
     }));
   });
 
+  it.each([['wide', {}], ['narrow', { width: 640, height: 620 }]] as const)('keeps every actor on the %s canvas', (_size, options) => {
+    const mechanism = compiled(name);
+    for (let index = 0; index < mechanism.length; index++) {
+      const scene = buildSvgScene(mechanism.at(index), options);
+      for (const actor of scene.actors.filter(item => !item.ghost)) {
+        const xs = outline(placed(actor)).map(point => point.x);
+        expect(Math.min(...xs), `${scene.title}: ${actor.id}`).toBeGreaterThanOrEqual(0);
+        expect(Math.max(...xs), `${scene.title}: ${actor.id}`).toBeLessThanOrEqual(scene.width);
+      }
+    }
+  });
+
   it('no dashed connection stands in for contact', () => {
     for (const scene of steps) {
       const bound = scene.actors.filter(actor => !actor.ghost && actor.boundTo);
