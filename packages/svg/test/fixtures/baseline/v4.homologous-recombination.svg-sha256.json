@@ -1,0 +1,44 @@
+[
+  {
+    "step": "break",
+    "full": "59695dec2f30f196bad9582432a68583284f53e04bea81a2f5d679baeeb9b60a",
+    "compact": "e943b9cc8f41da48ba8f57c987cdd5f310aaa2bae43e71a14b4473758d3fa799",
+    "ghosts": "d81d60e4992e22f8b641fc027577c72a3f58599c42045bfd581fe7220d437d51"
+  },
+  {
+    "step": "sensing",
+    "full": "457c4a61408b860578ff9773510672a58e851cbc3d0fca9d37969442b313f9f6",
+    "compact": "81308a1aea55ecc598c257b897a79756bb311a668c80f2173e9e379a76c54bdd",
+    "ghosts": "d86bdfffad75602bd1dd8a79fe3a7d71a2ad84a6233101ed58efaf505cd25c29"
+  },
+  {
+    "step": "short-range",
+    "full": "a2cf6e5b02fa59ad559e30754bce4b8d62458dfddc3e7b37da779c08db119e6f",
+    "compact": "7017f37256f31282b1e0934cf6d28a9d5a8c922799383b1aefe4bf2fa34128de",
+    "ghosts": "900637a30090cfce0c5613622003d38e72e54af12a6bf561f7312e0b3123e9a5"
+  },
+  {
+    "step": "long-range",
+    "full": "a6dacacfe94b3a383a7f79e3f7c48539cfeb73e0e90727d2d2cab9f4be2d0c0b",
+    "compact": "62a738ac540340dfa9664a28da4cb47e784e23e8ef515073eb0753b6b3f26a37",
+    "ghosts": "b8edfabc59495b85c3ec4c1cfd57f72e81aa52ac6a335d12d7e6bba01dff14b9"
+  },
+  {
+    "step": "rpa-coating",
+    "full": "1869ecbab9f7f906ede4f33623c18bf5f53787b02dafbb127e48ee0d2fac6de9",
+    "compact": "6c71118040019838156a96b6ff654efe2b64ce3e4f995b6e7f55a062b8212826",
+    "ghosts": "baf7e949131ded30f241c671aed0f2549fa74af0c3ba4e0c93fd69454438de81"
+  },
+  {
+    "step": "nucleation",
+    "full": "3498b3835a5b8de7f346736aecbe9d2f410c2e12a5c295c464fa80958cd48501",
+    "compact": "d1acbfaba886aa1ddb1822b6bd2173f1be32703068700b00ade82ed36d7d2079",
+    "ghosts": "ba7f8c53629a64000dde08a6a8812e826bf8df8ce4c39e389e87d49c6d2d901f"
+  },
+  {
+    "step": "filament",
+    "full": "32060552bc224e836dcaac83011b74d28cb262721382c44d9d15927c3230ae89",
+    "compact": "72d46a5c073388f0bb7df854a79a461d210ac0e8e169b8601cc16d0e5b1d8a8b",
+    "ghosts": "32060552bc224e836dcaac83011b74d28cb262721382c44d9d15927c3230ae89"
+  }
+]

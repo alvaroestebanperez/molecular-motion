@@ -1,0 +1,1374 @@
+[
+  {
+    "step": "intact",
+    "interactions": {},
+    "occupancy": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [],
+    "duration": 0
+  },
+  {
+    "step": "lesion",
+    "interactions": {},
+    "occupancy": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "base-damage"
+    },
+    "timeline": [
+      {
+        "path": "steps[1].actions[0]",
+        "type": "damage",
+        "primitive": "set-state",
+        "subject": "dna.lesion",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "excision",
+    "interactions": {},
+    "occupancy": {
+      "ogg1@dna": {
+        "id": "ogg1@dna",
+        "instance": "ogg1",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.lesion",
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "abasic-site"
+    },
+    "timeline": [
+      {
+        "path": "steps[2].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "ogg1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[2].actions[1]",
+        "type": "excise",
+        "primitive": "set-state",
+        "subject": "dna.lesion",
+        "agent": "ogg1",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "incision",
+    "interactions": {},
+    "occupancy": {
+      "ape1@dna": {
+        "id": "ape1@dna",
+        "instance": "ape1",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.lesion",
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[3].actions[0].parallel[0].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "ogg1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[0].parallel[0].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "ogg1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[0].parallel[1]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "ape1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[1]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "dna.lesion",
+        "agent": "ape1",
+        "start": 1200,
+        "duration": 600
+      }
+    ],
+    "duration": 1800
+  },
+  {
+    "step": "binding",
+    "interactions": {},
+    "occupancy": {
+      "parp1@dna": {
+        "id": "parp1@dna",
+        "instance": "parp1",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": "dna.lesion",
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[4].actions[0].parallel[0].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "ape1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[0].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "ape1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[0].parallel[1]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "parp1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "activation",
+    "interactions": {
+      "nad~parp1": {
+        "id": "nad~parp1",
+        "ends": [
+          {
+            "instance": "nad"
+          },
+          {
+            "instance": "parp1"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "parp1@dna": {
+        "id": "parp1@dna",
+        "instance": "parp1",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "active",
+          "by": "dna"
+        },
+        "partner": "dna.lesion",
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "parp1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[5].actions[0]",
+        "type": "activate",
+        "primitive": "set-state",
+        "subject": "parp1",
+        "agent": "dna",
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[5].actions[1]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "nad",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "parylation",
+    "interactions": {},
+    "occupancy": {
+      "parp1@dna": {
+        "id": "parp1@dna",
+        "instance": "parp1",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "active",
+          "by": "dna"
+        },
+        "partner": "dna.lesion",
+        "modifications": [
+          {
+            "id": "parylation",
+            "kind": "parylation",
+            "label": "PAR",
+            "length": 12
+          }
+        ],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[6].actions[0]",
+        "type": "parylate",
+        "primitive": "modify",
+        "subject": "parp1",
+        "agent": "parp1",
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[1].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "nad",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[6].actions[1].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "nad",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      }
+    ],
+    "duration": 1800
+  },
+  {
+    "step": "scaffold",
+    "interactions": {
+      "xrcc1~parp1": {
+        "id": "xrcc1~parp1",
+        "ends": [
+          {
+            "instance": "xrcc1"
+          },
+          {
+            "instance": "parp1"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "parp1@dna": {
+        "id": "parp1@dna",
+        "instance": "parp1",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "active",
+          "by": "dna"
+        },
+        "partner": "dna.lesion",
+        "modifications": [
+          {
+            "id": "parylation",
+            "kind": "parylation",
+            "label": "PAR",
+            "length": 12
+          }
+        ],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "parp1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[7].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "xrcc1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "gap-filling",
+    "interactions": {
+      "xrcc1~parp1": {
+        "id": "xrcc1~parp1",
+        "ends": [
+          {
+            "instance": "xrcc1"
+          },
+          {
+            "instance": "parp1"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "parp1@dna": {
+        "id": "parp1@dna",
+        "instance": "parp1",
+        "acid": "dna",
+        "site": "lesion"
+      },
+      "polb@dna": {
+        "id": "polb@dna",
+        "instance": "polb",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "active",
+          "by": "dna"
+        },
+        "partner": "dna.lesion",
+        "modifications": [
+          {
+            "id": "parylation",
+            "kind": "parylation",
+            "label": "PAR",
+            "length": 12
+          }
+        ],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "parp1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.lesion",
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.lesion": "nick"
+    },
+    "timeline": [
+      {
+        "path": "steps[8].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "polb",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[8].actions[1]",
+        "type": "fill-gap",
+        "primitive": "set-state",
+        "subject": "dna.lesion",
+        "agent": "polb",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "ligation",
+    "interactions": {
+      "xrcc1~parp1": {
+        "id": "xrcc1~parp1",
+        "ends": [
+          {
+            "instance": "xrcc1"
+          },
+          {
+            "instance": "parp1"
+          }
+        ]
+      },
+      "lig3~xrcc1": {
+        "id": "lig3~xrcc1",
+        "ends": [
+          {
+            "instance": "lig3"
+          },
+          {
+            "instance": "xrcc1"
+          }
+        ]
+      }
+    },
+    "occupancy": {
+      "parp1@dna": {
+        "id": "parp1@dna",
+        "instance": "parp1",
+        "acid": "dna",
+        "site": "lesion"
+      },
+      "polb@dna": {
+        "id": "polb@dna",
+        "instance": "polb",
+        "acid": "dna",
+        "site": "lesion"
+      }
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "active",
+          "by": "dna"
+        },
+        "partner": "dna.lesion",
+        "modifications": [
+          {
+            "id": "parylation",
+            "kind": "parylation",
+            "label": "PAR",
+            "length": 12
+          }
+        ],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "parp1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "dna.lesion",
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "xrcc1",
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[9].actions[0]",
+        "type": "recruit",
+        "primitive": "bind",
+        "subject": "lig3",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[9].actions[1]",
+        "type": "ligate",
+        "primitive": "ligate",
+        "subject": "dna.lesion",
+        "agent": "lig3",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "repaired",
+    "interactions": {},
+    "occupancy": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ogg1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ape1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "parp1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": {
+          "state": "active",
+          "by": "dna"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "nad": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "xrcc1": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "polb": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "lig3": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[10].actions[0].parallel[0].sequence[0]",
+        "type": "modify",
+        "primitive": "modify",
+        "subject": "parp1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[0].sequence[1]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "parp1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[0].sequence[2]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "parp1",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[1].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "xrcc1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[1].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "xrcc1",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[2].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "polb",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[2].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "polb",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[3].sequence[0]",
+        "type": "unbind",
+        "primitive": "unbind",
+        "subject": "lig3",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[10].actions[0].parallel[3].sequence[1]",
+        "type": "hide",
+        "primitive": "set-state",
+        "subject": "lig3",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1800
+  }
+]

@@ -1,0 +1,579 @@
+[
+  {
+    "step": "monomers",
+    "interactions": {},
+    "occupancy": {},
+    "actors": {
+      "egf#1": {
+        "present": true,
+        "visible": false,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "egf#2": {
+        "present": true,
+        "visible": false,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "grb2": {
+        "present": true,
+        "visible": false,
+        "compartment": "cytoplasm",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[0].actions[0].parallel[0]",
+        "type": "show",
+        "primitive": "set-state",
+        "subject": "egfr#1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[0].actions[0].parallel[1]",
+        "type": "show",
+        "primitive": "set-state",
+        "subject": "egfr#2",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "ligand",
+    "interactions": {
+      "egf#1~egfr#1:ligand": {
+        "id": "egf#1~egfr#1:ligand",
+        "ends": [
+          {
+            "instance": "egf#1"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egf#2~egfr#2:ligand": {
+        "id": "egf#2~egfr#2:ligand",
+        "ends": [
+          {
+            "instance": "egf#2"
+          },
+          {
+            "instance": "egfr#2",
+            "interface": "ligand"
+          }
+        ]
+      }
+    },
+    "occupancy": {},
+    "actors": {
+      "egf#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egf#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#2",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "grb2": {
+        "present": true,
+        "visible": false,
+        "compartment": "cytoplasm",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[1].actions[0].parallel[0]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "egf#1",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[1].actions[0].parallel[1]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "egf#2",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "dimer",
+    "interactions": {
+      "egf#1~egfr#1:ligand": {
+        "id": "egf#1~egfr#1:ligand",
+        "ends": [
+          {
+            "instance": "egf#1"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egf#2~egfr#2:ligand": {
+        "id": "egf#2~egfr#2:ligand",
+        "ends": [
+          {
+            "instance": "egf#2"
+          },
+          {
+            "instance": "egfr#2",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egfr#1:dimer~egfr#2:dimer": {
+        "id": "egfr#1:dimer~egfr#2:dimer",
+        "ends": [
+          {
+            "instance": "egfr#2",
+            "interface": "dimer"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "dimer"
+          }
+        ],
+        "symmetric": true
+      }
+    },
+    "occupancy": {},
+    "actors": {
+      "egf#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egf#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#2",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": "egfr#2",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "inactive"
+        },
+        "partner": "egfr#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "grb2": {
+        "present": true,
+        "visible": false,
+        "compartment": "cytoplasm",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[2].actions[0]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "egfr#2",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "autophosphorylation",
+    "interactions": {
+      "egf#1~egfr#1:ligand": {
+        "id": "egf#1~egfr#1:ligand",
+        "ends": [
+          {
+            "instance": "egf#1"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egf#2~egfr#2:ligand": {
+        "id": "egf#2~egfr#2:ligand",
+        "ends": [
+          {
+            "instance": "egf#2"
+          },
+          {
+            "instance": "egfr#2",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egfr#1:dimer~egfr#2:dimer": {
+        "id": "egfr#1:dimer~egfr#2:dimer",
+        "ends": [
+          {
+            "instance": "egfr#2",
+            "interface": "dimer"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "dimer"
+          }
+        ],
+        "symmetric": true
+      }
+    },
+    "occupancy": {},
+    "actors": {
+      "egf#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egf#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#2",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "active",
+          "by": "egfr#2"
+        },
+        "partner": "egfr#2",
+        "modifications": [
+          {
+            "id": "phosphorylation@Y1068",
+            "kind": "phosphorylation",
+            "label": "P",
+            "site": "Y1068"
+          }
+        ],
+        "nucleic": null
+      },
+      "egfr#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "active",
+          "by": "egfr#1"
+        },
+        "partner": "egfr#1",
+        "modifications": [
+          {
+            "id": "phosphorylation@Y1068",
+            "kind": "phosphorylation",
+            "label": "P",
+            "site": "Y1068"
+          }
+        ],
+        "nucleic": null
+      },
+      "grb2": {
+        "present": true,
+        "visible": false,
+        "compartment": "cytoplasm",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[3].actions[0].parallel[0]",
+        "type": "activate",
+        "primitive": "set-state",
+        "subject": "egfr#1",
+        "agent": "egfr#2",
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[0].parallel[1]",
+        "type": "activate",
+        "primitive": "set-state",
+        "subject": "egfr#2",
+        "agent": "egfr#1",
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[1].parallel[0]",
+        "type": "phosphorylate",
+        "primitive": "modify",
+        "subject": "egfr#1",
+        "agent": "egfr#2",
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[1].parallel[1]",
+        "type": "phosphorylate",
+        "primitive": "modify",
+        "subject": "egfr#2",
+        "agent": "egfr#1",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "adaptor",
+    "interactions": {
+      "egf#1~egfr#1:ligand": {
+        "id": "egf#1~egfr#1:ligand",
+        "ends": [
+          {
+            "instance": "egf#1"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egf#2~egfr#2:ligand": {
+        "id": "egf#2~egfr#2:ligand",
+        "ends": [
+          {
+            "instance": "egf#2"
+          },
+          {
+            "instance": "egfr#2",
+            "interface": "ligand"
+          }
+        ]
+      },
+      "egfr#1:dimer~egfr#2:dimer": {
+        "id": "egfr#1:dimer~egfr#2:dimer",
+        "ends": [
+          {
+            "instance": "egfr#2",
+            "interface": "dimer"
+          },
+          {
+            "instance": "egfr#1",
+            "interface": "dimer"
+          }
+        ],
+        "symmetric": true
+      },
+      "grb2:sh2~egfr#1.y1068": {
+        "id": "grb2:sh2~egfr#1.y1068",
+        "ends": [
+          {
+            "instance": "grb2",
+            "interface": "sh2"
+          },
+          {
+            "instance": "egfr#1",
+            "site": "y1068"
+          }
+        ]
+      }
+    },
+    "occupancy": {},
+    "actors": {
+      "egf#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#1",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egf#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "extracellular",
+        "activity": null,
+        "partner": "egfr#2",
+        "modifications": [],
+        "nucleic": null
+      },
+      "egfr#1": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "active",
+          "by": "egfr#2"
+        },
+        "partner": "egfr#2",
+        "modifications": [
+          {
+            "id": "phosphorylation@Y1068",
+            "kind": "phosphorylation",
+            "label": "P",
+            "site": "Y1068"
+          }
+        ],
+        "nucleic": null
+      },
+      "egfr#2": {
+        "present": true,
+        "visible": true,
+        "compartment": "membrane",
+        "activity": {
+          "state": "active",
+          "by": "egfr#1"
+        },
+        "partner": "egfr#1",
+        "modifications": [
+          {
+            "id": "phosphorylation@Y1068",
+            "kind": "phosphorylation",
+            "label": "P",
+            "site": "Y1068"
+          }
+        ],
+        "nucleic": null
+      },
+      "grb2": {
+        "present": true,
+        "visible": true,
+        "compartment": "cytoplasm",
+        "activity": null,
+        "partner": "egfr#1.y1068",
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[4].actions[0]",
+        "type": "bind",
+        "primitive": "bind",
+        "subject": "grb2",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  }
+]
