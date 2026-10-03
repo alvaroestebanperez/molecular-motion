@@ -80,6 +80,8 @@ export interface SceneActor extends Point {
   ghost: boolean;
   /** Which side the label callout sits on. */
   labelSide: -1 | 1;
+  /** Extra height of the callout above its usual place, when both sides were taken. */
+  labelLift?: number;
   /** Modification with a length (PAR chain, filament), drawn as beads along `angle` (radians). */
   chain?: { label: string; length: number; angle: number };
   /** Modifications without a length, drawn as small badges. */
@@ -333,6 +335,21 @@ export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneSt
       continues: [goesOn(traveller.from + NEAR, traveller.from - NEAR, !top), goesOn(traveller.to - NEAR, traveller.to + NEAR, top)],
     }];
   }
+}
+
+/** Callout text: the label, with the number of visible copies when it speaks for a group. */
+export const calloutText = (actor: Pick<SceneActor, 'label' | 'group'>) => actor.group && actor.group.size > 1 ? `${actor.label} ×${actor.group.size}` : actor.label;
+
+/** Where an actor's callout pill is drawn, as `[x0, y0, x1, y1]`, for a side and lift (its own by default). */
+export function labelBox(actor: SceneActor, side: -1 | 1 = actor.labelSide, lift = actor.labelLift ?? 0): [number, number, number, number] {
+  const small = actor.type === 'molecule';
+  const width = Math.max(48, calloutText(actor).length * 8.4 + 24);
+  const anchor = actor.x + side * (actor.radius + (small ? 14 : 22));
+  // The callout is already lifted clear of a chain leaving on the same side.
+  const chainLift = actor.chain && Math.sign(Math.cos(actor.chain.angle)) === side ? 44 : 0;
+  const y = actor.y + (small ? -actor.radius - 20 : -actor.radius - 18) - chainLift - lift;
+  const left = side === 1 ? anchor : anchor - width;
+  return [left, y - 14, left + width, y + 14];
 }
 
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
@@ -892,6 +909,41 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (definition.copies === undefined) continue;
     const copies = actors.filter(actor => actor.actor === definition.id && !actor.ghost);
     copies.forEach((actor, index) => { actor.group = { size: copies.length, lead: index === 0 }; });
+  }
+  // A callout that still lies on another body or callout, or off the canvas, looks for a free place: the
+  // other side, then higher on either side. One that is already clear is left exactly where it was.
+  const bodies = actors.filter(actor => !actor.ghost).map(actor => {
+    const outline = contactOutline(actorContactShape(actor));
+    const [xs, ys] = [outline.map(point => actor.x + point.x), outline.map(point => actor.y + point.y)];
+    return { actor, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as [number, number, number, number] };
+  });
+  // Chains and their own callouts are in the way too.
+  const chains = actors.filter(actor => !actor.ghost && actor.chain).flatMap(actor => {
+    const { beads } = chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor));
+    const reach = (chainBase(actor) + chainReach(actor.chain!.length)) * .72;
+    const tip = { x: actor.x + Math.cos(actor.chain!.angle) * reach, y: actor.y + Math.sin(actor.chain!.angle) * reach };
+    return [
+      ...beads.map(bead => [actor.x + bead.x - bead.r, actor.y + bead.y - bead.r, actor.x + bead.x + bead.r, actor.y + bead.y + bead.r]),
+      [tip.x - 64, tip.y - 40, tip.x - 64 + (actor.chain!.label.length + 6) * 6.8, tip.y - 22],
+    ];
+  });
+  const meets = (a: readonly number[], b: readonly number[]) => Math.min(a[2]!, b[2]!) - Math.max(a[0]!, b[0]!) > 4 && Math.min(a[3]!, b[3]!) - Math.max(a[1]!, b[1]!) > 4;
+  const settledLabels: [number, number, number, number][] = [];
+  for (const actor of actors.filter(item => !item.ghost && item.group?.lead !== false)) {
+    const cost = (side: -1 | 1, lift: number) => {
+      const box = labelBox(actor, side, lift);
+      return bodies.filter(body => body.actor !== actor && meets(box, body.box)).length + settledLabels.filter(other => meets([box[0] - 10, box[1] - 6, box[2] + 10, box[3] + 6], other)).length
+        + (chains.some(other => meets(box, other)) ? 1 : 0)
+        + (box[0] < 4 || box[2] > width - 4 || box[1] < 4 ? 3 : 0);
+    };
+    if (cost(actor.labelSide, 0) > 0) {
+      const other = -actor.labelSide as -1 | 1;
+      const options = [0, 40, 80, 120].flatMap(lift => [[actor.labelSide, lift], [other, lift]] as [-1 | 1, number][]);
+      const best = options.reduce((chosen, option) => (cost(...option) < cost(...chosen) ? option : chosen));
+      actor.labelSide = best[0];
+      if (best[1]) actor.labelLift = best[1];
+    }
+    settledLabels.push(labelBox(actor));
   }
   const actorIndex = new Map(actors.map(actor => [actor.id, actor]));
   const connections = actors.filter(actor => !actor.ghost && actor.boundTo).flatMap((actor): SceneConnection[] => {

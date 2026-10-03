@@ -1,6 +1,6 @@
 import type { LesionType } from '@molecular-motion/core';
 import {
-  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, freeStrandEnds, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, freeStrandEnds, labelBox, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
   type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
@@ -436,9 +436,12 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
   // Chains count as obstacles too: a callout must not sit on top of the beads.
   const beads = actors.filter(actor => !actor.ghost && actor.chain).flatMap(actor => chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor)).beads
     .map(bead => ({ x: actor.x + bead.x, y: actor.y + bead.y, radius: bead.r + 2, ghost: false })));
+  // So do the callouts of actors: two labels must not lie on each other.
+  const pills = actors.filter(actor => !actor.ghost && actor.group?.lead !== false).map(actor => labelBox(actor));
   const blocked = (x0: number, x1: number) => [...actors, ...beads].some(actor => !actor.ghost
     && actor.x + actor.radius > lesion.x + x0 && actor.x - actor.radius < lesion.x + x1
-    && actor.y + actor.radius > lesion.y - 52 && actor.y - actor.radius < lesion.y - 20);
+    && actor.y + actor.radius > lesion.y - 52 && actor.y - actor.radius < lesion.y - 20)
+    || pills.some(([left, top, right, bottom]) => right > lesion.x + x0 && left < lesion.x + x1 && bottom > lesion.y - 48 && top < lesion.y - 26);
   let markup: string;
   if (!blocked(84, 92 + width)) markup = callout(92, -34, 12, -6, text);
   else if (!blocked(-92 - width, -84)) markup = callout(-92, -34, -12, -6, text, 'end');
@@ -447,9 +450,6 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
 }
 
 
-/** Callout text: the label, with the number of visible copies when it speaks for a group. */
-const calloutText = (actor: SceneActor) => actor.group && actor.group.size > 1 ? `${actor.label} ×${actor.group.size}` : actor.label;
-
 function actorLabel(actor: SceneActor): string {
   const side = actor.labelSide;
   const r = actor.radius;
@@ -457,7 +457,7 @@ function actorLabel(actor: SceneActor): string {
   const x = side * (r + (small ? 14 : 22));
   // Lift the callout clear of a chain leaving on the same side.
   const chainSide = actor.chain ? Math.sign(Math.cos(actor.chain.angle)) : 0;
-  const y = (small ? -r - 20 : -r - 18) - (chainSide === side ? 44 : 0);
+  const y = (small ? -r - 20 : -r - 18) - (chainSide === side ? 44 : 0) - (actor.labelLift ?? 0);
   const tx = side * r * (small ? .5 : .55);
   const ty = -r * (small ? .6 : .72);
   const classes = ['mm-label', actor.ghost && 'mm-label--ghost'].filter(Boolean).join(' ');
