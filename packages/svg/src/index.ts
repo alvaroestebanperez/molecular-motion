@@ -1,5 +1,5 @@
-export { buildSvgScene, chainReach, defaultColor, HELIX } from './scene';
-export type { SceneActor, SceneConnection, SceneLesion, SceneNucleicAcid, SceneOptions, SceneSite, SvgScene } from './scene';
+export { buildSvgScene, chainReach, defaultColor, HELIX, PAIRING, pairingGeometry } from './scene';
+export type { PairingGeometry, SceneActor, SceneConnection, SceneLesion, SceneNucleicAcid, SceneOptions, ScenePairing, ScenePairingSegment, SceneSite, SceneStrandSpan, SvgScene } from './scene';
 export { describeScene, LESION_LABELS, mix, molecularMotionCss, renderSvg, THEME_TOKENS } from './render';
 export type { RenderOptions } from './render';
 export { exportPng, exportSvg } from './export';
