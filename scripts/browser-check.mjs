@@ -151,9 +151,11 @@ try {
       out.previousAtStart = { focused: document.activeElement === previous, disabled: previous.getAttribute('aria-disabled'), native: previous.disabled, step: current() };
       const strip = document.querySelector('.mm-thumbnails');
       const visible = () => { const a = strip.querySelector('[aria-current]').getBoundingClientRect(), b = strip.getBoundingClientRect(); return a.left >= b.left - 1 && a.right <= b.right + 1; };
+      // From the top of the page and without the scroll a focus brings, so only the strip can move things.
+      scrollTo(0, 0); await wait(50);
       const pageY = scrollY;
       const last = document.querySelectorAll('.mm-timeline__step').length - 1;
-      next.focus();
+      next.focus({ preventScroll: true });
       for (let index = 0; index < last + 2; index++) { next.click(); await wait(40); }
       await wait(900);
       out.nextAtEnd = { focused: document.activeElement === next, disabled: next.getAttribute('aria-disabled'), native: next.disabled, step: current(), last };
@@ -183,6 +185,23 @@ try {
     expectThat(name, !page.thumbnails.pageMoved, 'following the thumbnail moved the page');
     expectThat(name, page.targets.reach, 'a step dot cannot be hit 11 px from its centre');
     expectThat(name, page.targets.spacing >= 22, `step dots are ${page.targets.spacing.toFixed(1)} px apart: their touch targets overlap`);
+
+    // Lesion labels stay inside the canvas at every step, also when their text is enlarged.
+    for (const example of ['homologous-recombination', 'parp1-ssb-repair']) {
+      if (example !== 'homologous-recombination') await open(example, viewport);
+      const clipped = await evaluate(`
+        const stage = document.querySelector('.viewer__canvas').getBoundingClientRect();
+        const out = [];
+        for (const button of document.querySelectorAll('.mm-timeline li button')) {
+          button.click(); await new Promise(resolve => setTimeout(resolve, 1000));
+          for (const text of document.querySelectorAll('.viewer__canvas .mm-label--alert .mm-callout')) {
+            const box = text.getBoundingClientRect();
+            if (box.left < stage.left - 1 || box.right > stage.right + 1) out.push(document.querySelector('.viewer__caption h2').textContent);
+          }
+        }
+        return out;`);
+      expectThat(`${name} ${example}`, clipped.length === 0, `a lesion label runs off the canvas at: ${clipped.join(', ')}`);
+    }
 
     // Reduced motion: nothing animates, in the figure or in the controls, and steps still settle.
     await open('homologous-recombination', viewport, true);
