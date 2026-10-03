@@ -48,7 +48,8 @@ export function patchSvg(container: HTMLElement, markup: string, options: { keep
   }
   for (const stale of present.values()) {
     if (options.keep?.includes(stale.getAttribute('data-layer') ?? '')) continue;
-    if (!stale.hasAttribute('data-layer')) { stale.remove(); continue; }
+    // Nothing in it to fade out (the animator already emptied it): it goes at once.
+    if (!stale.hasAttribute('data-layer') || !stale.children.length) { stale.remove(); continue; }
     reconcile(stale, document.createElement('g'));
     stale.removeAttribute('data-layer');
     stale.setAttribute('data-leaving', '');

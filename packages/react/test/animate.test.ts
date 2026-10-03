@@ -60,6 +60,11 @@ describe('drawing a frame in place (ADR 0001 §5)', () => {
     expect(Array.from(svg.children).map(child => child.getAttribute('data-layer')).filter(Boolean)).toEqual(['defs', 'acids', 'pairings', 'connections', 'actors', 'labels']);
     applyGeometryFrame(svg, frame('engagement'), 'p');
     expect(layer(svg, 'pairings')!.children).toHaveLength(0);
+    // The settling patch finds the layer empty, so it removes it at once: the DOM is clean without waiting for a fade.
+    patchSvg(container, markup('engagement'));
+    const clean = document.createElement('div');
+    patchSvg(clean, markup('engagement'));
+    expect(Array.from(svg.children).map(child => child.getAttribute('data-layer'))).toEqual(Array.from(clean.firstElementChild!.children).map(child => child.getAttribute('data-layer')));
   });
 });
 
