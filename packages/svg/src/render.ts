@@ -16,6 +16,11 @@ export interface RenderOptions {
   compact?: boolean;
   /** Actors are focusable buttons (default). False for static output such as exported files. */
   interactive?: boolean;
+  /**
+   * One tab stop for copies that are identical in this step (`SceneActor.identical`): the first stays
+   * in the tab order and says how many it stands for; the others remain clickable. Off by default.
+   */
+  groupIdenticalCopies?: boolean;
 }
 
 const escape = (value: string) => value.replace(/[&<>"']/g, char => ({
@@ -49,7 +54,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   const { acids, pairings } = nucleicLayerMarkup(geometryFrame(scene), prefix);
   const footprints = scene.footprints.map(mark => `<rect class="mm-footprint" data-key="footprint:${escape(mark.id)}" x="${round(mark.x)}" y="${round(mark.y)}" width="${round(mark.width)}" height="${round(mark.height)}" rx="7" style="--mm-actor:${escape(mark.color)}" aria-hidden="true"/>`).join('');
   const connections = scene.connections.map(bindingConnection).join('');
-  const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false)).join('');
+  const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false, options.groupIdenticalCopies === true)).join('');
   const labels = compact ? '' : [
     ...actors.filter(actor => actor.group?.lead !== false).map(actor => actorLabel(actor)),
     ...actors.filter(actor => actor.chain).map(actor => chainLabel(actor)),
@@ -356,7 +361,7 @@ function lesionMarker(lesion: LesionType, x: number, y: number, prefix: string):
 
 // ---- Actors ----
 
-function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, inert: boolean): string {
+function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: string, selected: boolean, inert: boolean, groupIdentical = false): string {
   // Small molecules stay ball-and-stick; proteins and complexes share the catalog's unified surface.
   let shape: string;
   const topology = actor.type === 'molecule' ? moleculeTopology(actor.molecule) : undefined;
@@ -390,7 +395,7 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
   const scale = actor.ghost ? ' scale(.62)' : '';
   const interactive = actor.ghost || inert
     ? 'aria-hidden="true"'
-    : `role="button" tabindex="0" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity].filter(Boolean).join(', '))}"`;
+    : `role="button" tabindex="${groupIdentical && actor.identical && !actor.identical.first ? -1 : 0}" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity, groupIdentical && actor.identical?.first && `${actor.identical.size} identical copies`].filter(Boolean).join(', '))}"`;
   return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
     + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${actor.mirrored ? `<g transform="scale(-1 1)">${shape}</g>` : shape}${inhibition}${badges}</g></g>`;
 }
@@ -501,7 +506,7 @@ export const molecularMotionCss = `
 .mm-dna__tube{fill:none;stroke:var(--mm-dna);stroke-width:${HELIX.tube};stroke-linecap:round;stroke-linejoin:round}
 .mm-dna__shine{fill:none;stroke:#fff;stroke-opacity:.3;stroke-width:3;stroke-linecap:round;transform:translateY(-2.5px)}
 .mm-dna__nascent{fill:none;stroke:var(--mm-dna-new);stroke-width:${HELIX.tube - 3};stroke-linecap:round;stroke-linejoin:round}.mm-dna__nascent--back{stroke-width:${HELIX.backTube - 3};opacity:.55}
-.mm-dna__polarity{fill:var(--mm-muted);font-size:11px;font-weight:700;text-anchor:middle}
+.mm-dna__polarity{fill:var(--mm-muted);font-size:calc(11px*var(--mm-text-scale,1));font-weight:700;text-anchor:middle}
 .mm-footprint{fill:color-mix(in srgb,var(--mm-actor) 30%,transparent);stroke:color-mix(in srgb,var(--mm-actor) 70%,transparent);stroke-width:1.5;stroke-dasharray:4 3;transition:opacity .6s ease}
 .mm-binding{transition:transform .8s cubic-bezier(.22,.7,.2,1),opacity .6s ease}.mm-binding--relation path{stroke:var(--mm-muted);opacity:.72}
 .mm-lesion__glow{animation:mm-pulse 2.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
@@ -522,7 +527,7 @@ export const molecularMotionCss = `
 .mm-pill{fill:color-mix(in srgb,var(--mm-actor) 14%,var(--mm-surface));stroke:color-mix(in srgb,var(--mm-actor) 45%,var(--mm-surface));stroke-width:1}
 .mm-pill__text{fill:color-mix(in srgb,var(--mm-actor) 55%,var(--mm-ink));font-size:14px;font-weight:650;letter-spacing:.01em}
 .mm-leader{fill:none;stroke:var(--mm-muted);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}.mm-label--alert .mm-leader{stroke:var(--mm-alert)}
-.mm-callout{fill:var(--mm-ink);font-size:13px;font-weight:500}.mm-label--alert .mm-callout{fill:var(--mm-alert);font-weight:600}.mm-label--chain .mm-callout{fill:var(--mm-chain);font-size:12px}
+.mm-callout{fill:var(--mm-ink);font-size:calc(13px*var(--mm-text-scale,1));font-weight:500}.mm-label--alert .mm-callout{fill:var(--mm-alert);font-weight:600}.mm-label--chain .mm-callout{fill:var(--mm-chain);font-size:calc(12px*var(--mm-text-scale,1))}
 .mm-svg--compact .mm-halo{display:none}
 .mm-enter{opacity:0}.mm-exit{opacity:0!important;transition:opacity .45s ease}
 @keyframes mm-pulse{50%{transform:scale(1.18);opacity:.75}}@keyframes mm-breathe{50%{transform:scale(1.06);opacity:.8}}@keyframes mm-bead{from{transform:scale(0);opacity:0}}

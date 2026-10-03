@@ -16,8 +16,23 @@ export function useMolecularMotionStyles() {
   }, []);
 }
 
-/** Below this container width the scene is laid out on a squarer canvas so labels stay legible. */
-const NARROW = 620;
+/**
+ * The scene is laid out on a canvas that suits the room it has, so labels stay legible: the wide
+ * default, a squarer one in a narrow container, and a smaller one still on a phone.
+ */
+const CANVASES = [
+  { below: 420, width: 520, height: 600 },
+  { below: 620, width: 640, height: 620 },
+] as const;
+const WIDE = { width: 960, height: 540 } as const;
+export const canvasFor = (containerWidth: number) => CANVASES.find(canvas => containerWidth < canvas.below) ?? WIDE;
+/** Text that is not boxed (polarity, lesion and chain callouts) is kept at about this many px on screen. */
+const LEGIBLE = 10;
+/** How much to enlarge that text for a canvas drawn at `containerWidth`: never smaller, never more than half as large again. */
+export const textScaleFor = (containerWidth: number) => {
+  const drawn = containerWidth / canvasFor(containerWidth).width;
+  return Math.round(Math.min(1.5, Math.max(1, LEGIBLE / (11 * drawn))) * 100) / 100;
+};
 
 export interface MechanismStageProps {
   mechanism: CompiledMechanism;
@@ -36,21 +51,19 @@ export function MechanismStage({ mechanism, stepIndex, ghosts, selectedActor = n
   useMolecularMotionStyles();
   const ref = useRef<HTMLDivElement>(null);
   const idPrefix = `mm${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  const [narrow, setNarrow] = useState(false);
+  const [room, setRoom] = useState(Infinity);
 
   useEffect(() => {
     const element = ref.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? Infinity) < NARROW));
+    const observer = new ResizeObserver(([entry]) => setRoom(Math.round(entry?.contentRect.width ?? Infinity)));
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
-  const scene = useMemo(() => {
-    const size = narrow ? { width: 640, height: 620 } : {};
-    return buildSvgScene(mechanism.at(stepIndex), { ...size, ghosts });
-  }, [mechanism, stepIndex, ghosts, narrow]);
-  const markup = useMemo(() => renderSvg(scene, { idPrefix, selectedActor }), [scene, idPrefix, selectedActor]);
+  const canvas = canvasFor(room);
+  const scene = useMemo(() => buildSvgScene(mechanism.at(stepIndex), { width: canvas.width, height: canvas.height, ghosts }), [mechanism, stepIndex, ghosts, canvas.width, canvas.height]);
+  const markup = useMemo(() => renderSvg(scene, { idPrefix, selectedActor, groupIdenticalCopies: true }), [scene, idPrefix, selectedActor]);
 
   // The geometry on screen, and the transition drawing it if one is running (ADR 0001). Everything but
   // the nucleic layers is patched at once and moves by CSS; those layers are animated from what is
@@ -102,6 +115,7 @@ export function MechanismStage({ mechanism, stepIndex, ghosts, selectedActor = n
   return <div
     ref={ref}
     className={`mm-stage ${className}`.trim()}
+    style={{ ['--mm-text-scale' as string]: Number.isFinite(room) ? textScaleFor(room) : 1 }}
     tabIndex={onNavigate ? 0 : undefined}
     aria-roledescription={onNavigate ? 'mechanism viewer' : undefined}
     aria-keyshortcuts={onNavigate ? 'ArrowLeft ArrowRight' : undefined}

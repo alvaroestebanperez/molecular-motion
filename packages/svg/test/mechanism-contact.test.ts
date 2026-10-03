@@ -112,7 +112,7 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
     }));
   });
 
-  it.each([['wide', {}], ['narrow', { width: 640, height: 620 }]] as const)('keeps every actor on the %s canvas', (_size, options) => {
+  it.each([['wide', {}], ['narrow', { width: 640, height: 620 }], ['phone', { width: 520, height: 600 }]] as const)('keeps every actor on the %s canvas', (_size, options) => {
     const mechanism = compiled(name);
     for (let index = 0; index < mechanism.length; index++) {
       const scene = buildSvgScene(mechanism.at(index), options);
