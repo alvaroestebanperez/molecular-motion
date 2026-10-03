@@ -219,14 +219,19 @@ The line the check draws: pairings cover every structure made by changing **who 
 
 ## 10. Rendering (renderer decisions, no schema impact)
 
-The scene reads `NucleicState` and `pairings`. It never sees action types and has no notion of invasion, D-loop, donor or recipient.
+**Rule: all of this geometry is derived from `state.pairings` and from nucleic coordinates and strand state.** The scene never sees action types. It has no notion of invasion, D-loop, donor or recipient, and no case for HR, for `invade`, or for any actor id.
 
-- **Several molecules:** stacked, with room between them. Today's layout puts a second molecule at the bottom edge and must change.
-- **A strand paired in trans** leaves its molecule's axis at the edges of the paired span and runs beside its partner. Rungs are drawn between partners, whichever molecule they belong to. An unpaired strand in an `open` region bows away, as it does today.
-- **Nascent** nucleotides keep the RFC 0004 style wherever they are drawn.
-- **Polarity labels** stay per strand end.
-- **Description** is structural: "chromosome bottom strand 40–58 paired with sister top strand 40–58; sister bottom strand 40–58 unpaired".
-- **Keys:** each molecule stays one keyed group. Pairing geometry is redrawn between steps, as backbones are.
+- **Several molecules** are stacked in declaration order, with room between them. A single molecule keeps its place, so documents without a second molecule render as before.
+- **Only the pairing strand moves.** Of the two paired strands, the one whose molecule is less unwound over the pairing leaves its axis and runs beside the other. On a tie, the strand of the molecule declared first travels. The unwound molecule is drawn exactly as it would be with nothing paired into it.
+- **The fragment stays where it is.** Only the travelling strand curves. Rigid movement of a fragment towards the other molecule is not modelled.
+- **Beside the partner** the travelling strand runs at one level on the partner's inner side, with base pairs drawn between the two. The other strand of the unwound molecule keeps its bowed shape, so the unpaired strand is clearly apart.
+- **Entry and exit.** Where the strand continues on its own molecule, it eases back onto that molecule's axis in one smooth curve. A free end ends beside the partner and carries its polarity label there. The 3′ end of a newly synthesised stretch is a free end.
+- **Growth.** Each strand pair is one keyed element (`pairing:<state key>`). When `extend` prolongs the pairing, the element is the same and the part already paired does not move. As with backbones (RFC 0004 §7), its path is redrawn between steps, not morphed.
+- **Nascent** nucleotides keep the RFC 0004 style on the travelling strand.
+- **Occupants** follow the strand they sit on, including a stretch drawn beside another molecule.
+- **On its own molecule,** a strand synthesised across a double-strand break is drawn through it, and the free 3′ end of a new stretch inside an unwound region is drawn as an end until it is annealed.
+- **Description** is structural: "Upper bottom strand 40–58 paired with Lower top strand 40–58; Lower bottom strand 40–58 unpaired".
+- A strand paired within its own molecule is not drawn (RFC 0004 keeps molecules linear).
 
 ## 11. Decisions
 

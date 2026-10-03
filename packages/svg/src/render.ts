@@ -1,7 +1,7 @@
 import type { LesionType } from '@molecular-motion/core';
 import {
-  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, relaxedAt, strandIndex, strandMissingAt,
-  type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
+  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  type SceneActor, type SceneConnection, type SceneNucleicAcid, type ScenePairing, type SvgScene,
 } from './scene';
 import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
 
@@ -46,6 +46,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
   const acids = scene.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, scene.width, prefix)}</g>`).join('');
+  const pairings = scene.pairings.map(pairing => pairedStrands(scene, pairing)).join('');
   const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false)).join('');
   const labels = compact ? '' : [
@@ -60,6 +61,8 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<title id="${prefix}-title">${escape(scene.title)}</title><desc id="${prefix}-description">${escape([scene.description, summary].filter(Boolean).join(' '))}</desc>`
     + `<g data-layer="defs">${defs}</g>`
     + `<g class="mm-layer" data-layer="acids">${acids}</g>`
+    // Only documents with pairings get this layer, so every other document renders exactly as before.
+    + (pairings ? `<g class="mm-layer" data-layer="pairings">${pairings}</g>` : '')
     + `<g class="mm-layer" data-layer="connections">${connections}</g>`
     + `<g class="mm-layer" data-layer="actors">${actorMarkup}</g>`
     + `<g class="mm-layer" data-layer="labels">${labels}</g></svg>`;
@@ -100,6 +103,14 @@ function focusViewBox(scene: SvgScene, actors: SceneActor[]): string {
     const center = acid.sites[0]?.x ?? scene.width / 2;
     boxes.push([center - 150, acid.y - HELIX.amplitude - 30, center + 150, acid.y + HELIX.amplitude + 16]);
   }
+  // Strands paired across molecules are part of the action: keep the whole stretch and its partner in frame.
+  for (const segment of scene.pairings.flatMap(pairing => pairing.segments)) {
+    const points = pairingGeometry(scene, segment)?.points ?? [];
+    const host = scene.nucleicAcids.find(item => item.id === segment.host.acid);
+    if (!points.length || !host) continue;
+    const xs = points.map(point => point.x); const ys = points.map(point => point.y);
+    boxes.push([Math.min(...xs) - 20, Math.min(...ys, host.y - HELIX.amplitude - 20), Math.max(...xs) + 20, Math.max(...ys, host.y + HELIX.amplitude + 20)]);
+  }
   if (!boxes.length) return `0 0 ${scene.width} ${scene.height}`;
   let [x0, y0, x1, y1] = [Math.min(...boxes.map(b => b[0]!)), Math.min(...boxes.map(b => b[1]!)), Math.max(...boxes.map(b => b[2]!)), Math.max(...boxes.map(b => b[3]!))];
   const padding = 18;
@@ -133,7 +144,32 @@ export function describeScene(scene: SvgScene): string {
     ];
     return facts.length ? [`${acid.label}: ${facts.join('; ')}`] : [];
   });
-  return [parts.length && `Shown: ${parts.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`, strands.length && `Strands: ${strands.join('. ')}.`].filter(Boolean).join(' ');
+  // Structure only: which strand is paired with which, and what that leaves unpaired. No named structures.
+  const span = (item: { acid: string; strand: string; from: number; to: number }) => `${labels.get(item.acid) ?? item.acid} ${item.strand} strand ${item.from}–${item.to}`;
+  const paired = scene.pairings.flatMap(pairing => pairing.segments.map(segment =>
+    [`${span(segment.traveller)} paired with ${span(segment.host)}`, ...segment.unpaired.map(item => `${span(item)} unpaired`)].join('; ')));
+  return [
+    parts.length && `Shown: ${parts.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`,
+    strands.length && `Strands: ${strands.join('. ')}.`, paired.length && `Pairing: ${paired.join('. ')}.`,
+  ].filter(Boolean).join(' ');
+}
+
+/**
+ * Strands paired across two molecules (RFC 0006 §10): each travelling strand, its base pairs to the
+ * partner, and its free ends. One keyed group per strand pair, so a pairing that grows is the same element.
+ */
+function pairedStrands(scene: SvgScene, pairing: ScenePairing): string {
+  const line = (points: { x: number; y: number }[]) => `M${points.map(point => `${round(point.x)} ${round(point.y)}`).join('L')}`;
+  const parts = pairing.segments.flatMap(segment => pairingGeometry(scene, segment) ?? []);
+  const strands = parts.map(part => line(part.points)).join('');
+  const rungs = parts.flatMap(part => part.rungs.map(line)).join('');
+  const nascent = parts.flatMap(part => part.nascent.map(line)).join('');
+  const ends = parts.flatMap(part => part.ends).map(end => `<text class="mm-dna__polarity" x="${round(end.x)}" y="${round(end.y + 4)}">${end.label}</text>`).join('');
+  return `<g class="mm-dna mm-pairing" data-key="pairing:${escape(pairing.key)}" aria-hidden="true">`
+    + `<path class="mm-dna__rungs" d="${rungs}"/>`
+    + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${strands}"/><path class="mm-dna__shine" d="${strands}"/></g>`
+    + (nascent ? `<path class="mm-dna__nascent mm-dna__nascent--front" d="${nascent}"/>` : '')
+    + ends + '</g>';
 }
 
 // ---- Nucleic acids ----
@@ -150,25 +186,46 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   // Strand state on a single broken strand at the site (resected, re-synthesised) already shows the real
   // discontinuity there, so the lesion's fixed-width gap is not drawn on top of it. A DSB keeps its gap:
   // its two fragments stay apart whatever their overhangs.
+  // A stretch drawn beside another molecule is not drawn here, nor its newly synthesised part.
+  const away = (strand: 0 | 1, x: number) => (acid.away ?? []).some(range => strandIndex(range.strand) === strand && x > range.x0 && x < range.x1);
   const touched = (strand: 0 | 1, x: number) => [...acid.missing ?? [], ...acid.nascent ?? []]
     .some(range => strandIndex(range.strand) === strand && x >= range.x0 - 1 && x <= range.x1 + 1);
-  const gaps: [0 | 1, number, number][] = [];
+  // A strand synthesised across a double-strand break runs through it: that strand has no gap there.
+  const ranges = (list: SceneNucleicAcid['missing'], strand: 0 | 1) => (list ?? []).filter(range => strandIndex(range.strand) === strand);
+  const bridges = (strand: 0 | 1, x: number) => ranges(acid.nascent, strand).some(range => Math.abs(range.x0 - x) < .5 || Math.abs(range.x1 - x) < .5)
+    && !ranges(acid.missing, strand).some(range => Math.abs(range.x0 - x) < .5 || Math.abs(range.x1 - x) < .5);
+  // Where synthesis stopped inside an unwound region, the new strand's 3′ end is free: it is paired with
+  // nothing there, so it is drawn as an end. Once annealed it reads as continuous again (RFC 0004 §5).
+  const inOpen = (x: number) => (acid.open ?? []).some(range => x >= range.x0 && x <= range.x1);
+  const freeEnds: [0 | 1, number][] = (acid.nascent ?? []).flatMap((range): [0 | 1, number][] => {
+    const strand = strandIndex(range.strand);
+    const x = strand === 0 ? range.x1 : range.x0;
+    const beyond = strand === 0 ? x + 1 : x - 1;
+    return inOpen(x) && beyond > 0 && beyond < width && !strandMissingAt(acid, strand, beyond) && !away(strand, strand === 0 ? x - 1 : x + 1) ? [[strand, x]] : [];
+  });
+  const gaps: [0 | 1, number, number][] = freeEnds.map(([strand, x]) => [strand, x - 4, x + 4]);
   for (const site of acid.sites) {
-    const strands = (site.lesionStrands ?? ['top']).map(strandIndex).filter(strand => site.lesion === 'double-strand-break' || !touched(strand, site.x));
+    const strands = (site.lesionStrands ?? ['top']).map(strandIndex).filter(strand => site.lesion === 'double-strand-break' ? !bridges(strand, site.x) : !touched(strand, site.x));
     if (site.lesion === 'single-strand-break') for (const strand of strands) gaps.push([strand, site.x - 12, site.x + 12]);
     if (site.lesion === 'nick') for (const strand of strands) gaps.push([strand, site.x - 3, site.x + 3]);
     if (site.lesion === 'double-strand-break') for (const strand of strands) gaps.push([strand, site.x - 15, site.x + 15]);
   }
-  for (const range of acid.missing ?? []) gaps.push([strandIndex(range.strand), range.x0, range.x1]);
+  for (const range of [...acid.missing ?? [], ...acid.away ?? []]) gaps.push([strandIndex(range.strand), range.x0, range.x1]);
   // Polarity is labelled where it tells the story: the molecule's ends, resected ends and the two sides
   // of a DSB. A nick or SSB keeps its strand continuous for labelling, so no 5′/3′ crowds the lesion.
   const polarityCuts: [0 | 1, number, number][] = [
-    ...acid.sites.filter(site => site.lesion === 'double-strand-break').flatMap(site => [[0, site.x - 15, site.x + 15], [1, site.x - 15, site.x + 15]] as [0 | 1, number, number][]),
-    ...(acid.missing ?? []).map((range): [0 | 1, number, number] => [strandIndex(range.strand), range.x0, range.x1]),
+    ...acid.sites.filter(site => site.lesion === 'double-strand-break').flatMap(site => ([0, 1] as const).filter(strand => !bridges(strand, site.x)).map((strand): [0 | 1, number, number] => [strand, site.x - 15, site.x + 15])),
+    ...freeEnds.map(([strand, x]): [0 | 1, number, number] => [strand, x - 4, x + 4]),
+    ...[...acid.missing ?? [], ...acid.away ?? []].map((range): [0 | 1, number, number] => [strandIndex(range.strand), range.x0, range.x1]),
   ];
+  // A strand that leaves for another molecule does not end there, so those edges carry no label.
+  const continuing = (acid.away ?? []).flatMap((range): [0 | 1, number][] => [
+    ...(range.continues[0] ? [[strandIndex(range.strand), range.x0] as [0 | 1, number]] : []),
+    ...(range.continues[1] ? [[strandIndex(range.strand), range.x1] as [0 | 1, number]] : []),
+  ]);
   const inGap = (strand: 0 | 1, x: number) => gaps.some(([s, from, to]) => s === strand && x > from && x < to);
   // Base pairs need both strands, paired: none across a gap in either strand or inside a bubble.
-  const unpaired = (x: number) => strandState && (strandMissingAt(acid, 0, x) || strandMissingAt(acid, 1, x) || (acid.open ?? []).some(range => x > range.x0 && x < range.x1));
+  const unpaired = (x: number) => (strandState || acid.away) && (strandMissingAt(acid, 0, x) || strandMissingAt(acid, 1, x) || (acid.open ?? []).some(range => x > range.x0 && x < range.x1));
 
   const segments = { back: [] as string[], front: [] as string[] };
   for (const strand of [0, 1] as const) {
@@ -208,14 +265,18 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   const nascent = { back: [] as string[], front: [] as string[] };
   for (const range of acid.nascent ?? []) {
     const strand = strandIndex(range.strand);
+    if (away(strand, (range.x0 + range.x1) / 2)) continue;
+    // Stop short of a free end, so the end shows.
+    const free = (x: number) => freeEnds.some(([s, end]) => s === strand && Math.abs(end - x) < .5);
+    const [start, stop] = [range.x0 + (free(range.x0) ? 4 : 0), range.x1 - (free(range.x1) ? 4 : 0)];
     let current: string[] = [];
-    let currentFront = isFront(strand, range.x0);
+    let currentFront = isFront(strand, start);
     const flush = () => { if (current.length > 1) nascent[currentFront ? 'front' : 'back'].push(`M${current.join('L')}`); current = []; };
-    for (let x = range.x0; ; x = Math.min(x + 3, range.x1)) {
+    for (let x = start; ; x = Math.min(x + 3, stop)) {
       const front = isFront(strand, x);
       current.push(`${round(x)} ${round(strandY(strand, x))}`);
       if (front !== currentFront) { flush(); current.push(`${round(x)} ${round(strandY(strand, x))}`); currentFront = front; }
-      if (x >= range.x1) break;
+      if (x >= stop) break;
     }
     flush();
   }
@@ -225,7 +286,7 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     + `<path class="mm-dna__rungs" d="${rungs.join('')}"/>`
     + (damaged.length ? `<path class="mm-dna__rungs mm-dna__rungs--damaged" d="${damaged.join('')}"/>` : '')
     + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${segments.front.join('')}"/><path class="mm-dna__shine" d="${segments.front.join('')}"/></g>`
-    + nascentPath('front') + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts) : '');
+    + nascentPath('front') + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts, continuing) : '');
 }
 
 /**
@@ -233,7 +294,8 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
  * so a fragment of top reads 5′ … 3′ and a fragment of bottom 3′ … 5′. Fragments are delimited by
  * `cuts` (DSBs and missing nucleotides), so overhang ends are labelled too.
  */
-function polarityLabels(acid: SceneNucleicAcid, width: number, cuts: [0 | 1, number, number][]): string {
+function polarityLabels(acid: SceneNucleicAcid, width: number, cuts: [0 | 1, number, number][], continuing: [0 | 1, number][] = []): string {
+  const goesOn = (strand: 0 | 1, x: number) => continuing.some(([s, edge]) => s === strand && Math.abs(edge - x) < .5);
   const edge = 14;
   const labels: string[] = [];
   for (const strand of [0, 1] as const) {
@@ -248,8 +310,8 @@ function polarityLabels(acid: SceneNucleicAcid, width: number, cuts: [0 | 1, num
       const left = from === 0 ? edge : from + 7; const right = to === width ? width - edge : to - 7;
       if (right - left < 18) continue;
       const [leftEnd, rightEnd] = strand === 0 ? ['5′', '3′'] : ['3′', '5′'];
-      labels.push(`<text class="mm-dna__polarity" x="${round(left)}" y="${round(lane)}">${leftEnd}</text>`);
-      labels.push(`<text class="mm-dna__polarity" x="${round(right)}" y="${round(lane)}">${rightEnd}</text>`);
+      if (!goesOn(strand, from)) labels.push(`<text class="mm-dna__polarity" x="${round(left)}" y="${round(lane)}">${leftEnd}</text>`);
+      if (!goesOn(strand, to)) labels.push(`<text class="mm-dna__polarity" x="${round(right)}" y="${round(lane)}">${rightEnd}</text>`);
     }
   }
   return `<g class="mm-dna__polarities" data-acid="${escape(acid.id)}">${labels.join('')}</g>`;

@@ -1,6 +1,6 @@
 import { hashString } from './primitives/shared';
 import {
-  actorInstances, anonymousAttachment, lesionStrands, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
+  actorInstances, anonymousAttachment, lesionStrands, partnerOf, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
   type Modification, type Point, type SiteStrand, type StrandId,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
@@ -37,7 +37,29 @@ export interface SceneNucleicAcid {
   missing?: SceneStrandRange[];
   nascent?: SceneStrandRange[];
   open?: SceneRange[];
+  /**
+   * Stretches of this molecule's strands drawn beside another molecule's strand instead (RFC 0006 §10).
+   * `continues` says, for the lower and the higher end, whether the strand goes on along this molecule.
+   */
+  away?: Array<SceneStrandRange & { continues: [boolean, boolean] }>;
 }
+
+export interface SceneStrandSpan { acid: string; strand: StrandId; from: number; to: number }
+
+/**
+ * One stretch of base pairing between two molecules. The `traveller` strand leaves its own molecule's
+ * axis and runs beside the `host` strand, which stays where it is. Which is which is a drawing choice
+ * derived from strand state; the pairing itself has no direction.
+ */
+export interface ScenePairingSegment {
+  traveller: SceneStrandSpan;
+  host: SceneStrandSpan;
+  /** Stretches of the host molecule's other strand left without a partner opposite the pairing. */
+  unpaired: SceneStrandSpan[];
+}
+
+/** Every stretch between one pair of strands; `key` is the state's key, stable while the pairing grows. */
+export interface ScenePairing { key: string; segments: ScenePairingSegment[] }
 
 export interface SceneActor extends Point {
   /** Instance id (`rad51#3`); the actor id for single-copy actors. Keys the DOM. */
@@ -86,6 +108,8 @@ export interface SvgScene {
   actors: SceneActor[];
   connections: SceneConnection[];
   lesions: SceneLesion[];
+  /** Base pairing between molecules; empty for a document without pairings. */
+  pairings: ScenePairing[];
 }
 
 export interface SceneOptions {
@@ -118,9 +142,9 @@ function relaxation(x: number, ranges: readonly { x0: number; x1: number }[]): n
   return weight;
 }
 
-/** True where `strand` has no nucleotides at `x`. */
-export const strandMissingAt = (acid: Pick<SceneNucleicAcid, 'missing'>, strand: 0 | 1, x: number) =>
-  (acid.missing ?? []).some(range => strandIndex(range.strand) === strand && x > range.x0 && x < range.x1);
+/** True where `strand` is not drawn on this molecule at `x`: no nucleotides, or drawn beside another molecule. */
+export const strandMissingAt = (acid: Pick<SceneNucleicAcid, 'missing' | 'away'>, strand: 0 | 1, x: number) =>
+  [...acid.missing ?? [], ...acid.away ?? []].some(range => strandIndex(range.strand) === strand && x > range.x0 && x < range.x1);
 
 /** Ranges where `strand` is single-stranded: its partner is missing there. */
 export const singleStranded = (acid: Pick<SceneNucleicAcid, 'missing'>, strand: 0 | 1) =>
@@ -155,6 +179,87 @@ const helixTop = (acid: SceneNucleicAcid, x: number, width: number) => Math.min(
   ...([0, 1] as const).filter(strand => !strandMissingAt(acid, strand, x)).map(strand => helixY(acid, strand, x, width) - (strand === 0 ? HELIX.tube : HELIX.backTube) / 2),
   Infinity,
 );
+
+/** Pairing between molecules: how far inside its partner the travelling strand runs, and how it gets there. */
+export const PAIRING = { inset: 26, ramp: 72, rung: 18 } as const;
+
+const smooth = (t: number) => { const c = Math.max(0, Math.min(1, t)); return c * c * (3 - 2 * c); };
+
+export interface PairingGeometry {
+  /** Centre line of the travelling strand, from its lower coordinate to its higher one. */
+  points: Point[];
+  /** Base pairs: from the travelling strand to its partner. */
+  rungs: [Point, Point][];
+  /** Newly synthesised stretches of the travelling strand. */
+  nascent: Point[][];
+  /** Free ends of the travelling strand, to be labelled with their polarity. */
+  ends: Array<Point & { label: '5′' | '3′' }>;
+}
+
+/**
+ * Geometry of one stretch of pairing (RFC 0006 §10), from strand state and coordinates alone. The
+ * travelling strand runs beside its partner, on the partner's inner side. Where it continues on its
+ * own molecule it eases back onto that molecule's axis, so entry and exit are one smooth curve; a free
+ * end simply ends beside the partner.
+ */
+export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>, { traveller, host }: ScenePairingSegment): PairingGeometry | undefined {
+  const own = scene.nucleicAcids.find(acid => acid.id === traveller.acid);
+  const other = scene.nucleicAcids.find(acid => acid.id === host.acid);
+  if (!own || !other) return undefined;
+  const { width } = scene;
+  const [ownScale, otherScale] = [width / (own.length ?? 100), width / (other.length ?? 100)];
+  const [strand, partner] = [strandIndex(traveller.strand), strandIndex(host.strand)];
+  const mirrored = traveller.strand === host.strand;
+  const side = partner === 0 ? -1 : 1;
+  const reach = (traveller.to - traveller.from) * ownScale;
+  const ramp = Math.min(PAIRING.ramp, reach * .4);
+  const stretch = own.away?.find(range => range.strand === traveller.strand && range.from === traveller.from && range.to === traveller.to);
+  const continues = { from: stretch?.continues[0] ?? false, to: stretch?.continues[1] ?? false };
+  // Beside the partner the strand keeps one level: it does not follow the partner's own easing at the
+  // edges of its bubble, so a free end stays straight and clearly inside.
+  const [hostFrom, hostTo] = [host.from * otherScale, host.to * otherScale];
+  const settle = Math.min(RELAX, (hostTo - hostFrom) / 2);
+  const level = (x: number) => helixY(other, partner, Math.max(hostFrom + settle, Math.min(hostTo - settle, x)), width);
+  const weight = (p: number) => Math.min(
+    continues.from ? smooth((p - traveller.from) * ownScale / ramp) : 1,
+    continues.to ? smooth((traveller.to - p) * ownScale / ramp) : 1,
+  );
+  const partnerAt = (p: number): Point => {
+    const q = mirrored ? host.to - (p - traveller.from) : host.from + (p - traveller.from);
+    return { x: q * otherScale, y: helixY(other, partner, q * otherScale, width) };
+  };
+  const at = (p: number): Point => {
+    const w = weight(p);
+    const beside = partnerAt(p);
+    const home = { x: p * ownScale, y: helixY(own, strand, p * ownScale, width) };
+    return { x: home.x + (beside.x - home.x) * w, y: home.y + (level(beside.x) - side * PAIRING.inset - home.y) * w };
+  };
+  const trace = (from: number, to: number): Point[] => {
+    const steps = Math.max(2, Math.ceil((to - from) * ownScale / 3));
+    return Array.from({ length: steps + 1 }, (_, index) => at(from + (to - from) * index / steps));
+  };
+  const rungs: [Point, Point][] = [];
+  for (let offset = PAIRING.rung / 2; offset < reach; offset += PAIRING.rung) {
+    const p = traveller.from + offset / ownScale;
+    // A base pair is drawn only where both strands have settled side by side.
+    if (weight(p) >= .999 && Math.abs(partnerAt(p).y - level(partnerAt(p).x)) < 1) rungs.push([at(p), partnerAt(p)]);
+  }
+  const nascent = (own.nascent ?? []).filter(range => range.strand === traveller.strand && range.from < traveller.to && range.to > traveller.from)
+    .map(range => trace(Math.max(range.from, traveller.from), Math.min(range.to, traveller.to)));
+  // top runs 5′→3′ with the coordinate, bottom against it.
+  const labels = traveller.strand === 'top' ? { from: '5′', to: '3′' } as const : { from: '3′', to: '5′' } as const;
+  const points = trace(traveller.from, traveller.to);
+  // A free end is labelled just inside it, on the side away from the partner, where nothing else is drawn.
+  const end = (tip: Point, inner: Point, label: '5′' | '3′') => {
+    const length = Math.hypot(tip.x - inner.x, tip.y - inner.y) || 1;
+    return { x: tip.x - (tip.x - inner.x) / length * 26, y: tip.y - side * 18, label };
+  };
+  const ends = own.polarity ? [
+    ...(continues.from ? [] : [end(points[0]!, points[1]!, labels.from)]),
+    ...(continues.to ? [] : [end(points.at(-1)!, points.at(-2)!, labels.to)]),
+  ] : [];
+  return { points, rungs, nascent, ends };
+}
 
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
 const PALETTE = ['#8b78d0', '#5aa9a0', '#d5839a', '#dca064', '#7c9cc4', '#8fae86', '#c58fc9', '#6fa3c9'];
@@ -345,8 +450,12 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     return state.present && state.visible;
   });
 
-  const nucleicAcids = shown.filter(definition => isNucleic(definition.type)).map((definition, index): SceneNucleicAcid => {
-    const y = definition.position?.y ?? height * .74 + index * 120;
+  const acidViews = shown.filter(definition => isNucleic(definition.type));
+  // One molecule keeps its place near the bottom. Several are stacked in declaration order, with room
+  // between them for strands that pair across (RFC 0006 §10); the renderer gives them no roles.
+  const stack = acidViews.length > 1 ? { top: height * .56, gap: Math.min(150, height * .34 / (acidViews.length - 1)) } : { top: height * .74, gap: 120 };
+  const nucleicAcids = acidViews.map((definition, index): SceneNucleicAcid => {
+    const y = definition.position?.y ?? stack.top + index * stack.gap;
     const length = nucleicLength(definition);
     const x = (coordinate: number) => width * coordinate / length;
     const range = ({ from, to }: { from: number; to: number }): SceneRange => ({ from, to, x0: x(from), x1: x(to) });
@@ -375,6 +484,54 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   });
   const siteIndex = new Map(nucleicAcids.flatMap(acid => acid.sites.map(site => [site.reference, site] as const)));
   const acidIndex = new Map(nucleicAcids.map(acid => [acid.id, acid]));
+
+  // Pairing between molecules, from `state.pairings` and strand state only. Of the two paired strands,
+  // the one whose molecule is less unwound there travels to the other; on a tie the molecule declared
+  // first travels. A strand paired within its own molecule is not drawn (RFC 0004 keeps RNA and DNA linear).
+  const order = new Map(nucleicAcids.map((acid, index) => [acid.id, index]));
+  const openShare = (span: SceneStrandSpan) => (snapshot.actors[span.acid]?.nucleic?.open ?? [])
+    .reduce((sum, region) => sum + Math.max(0, Math.min(region.to, span.to) - Math.max(region.from, span.from)), 0) / (span.to - span.from);
+  const pairings: ScenePairing[] = Object.entries(snapshot.pairings).flatMap(([key, list]) => {
+    const segments = list.flatMap(({ ends: [a, b] }): ScenePairingSegment[] => {
+      if (a.acid === b.acid || !order.has(a.acid) || !order.has(b.acid)) return [];
+      const [shareA, shareB] = [openShare(a), openShare(b)];
+      const aTravels = shareA === shareB ? order.get(a.acid)! < order.get(b.acid)! : shareA < shareB;
+      const [traveller, host] = aTravels ? [a, b] : [b, a];
+      const facing: SceneStrandSpan = { ...host, strand: host.strand === 'top' ? 'bottom' : 'top' };
+      const unpaired = partnerOf(snapshot, snapshot.definition, facing).filter(item => item.partner === 'unpaired')
+        .map(item => ({ acid: facing.acid, strand: facing.strand, from: item.from, to: item.to }));
+      return [{ traveller: { ...traveller }, host: { ...host }, unpaired }];
+    });
+    return segments.length ? [{ key, segments }] : [];
+  });
+  const travellers = pairings.flatMap(pairing => pairing.segments.map(segment => segment.traveller));
+  for (const traveller of travellers) {
+    const acid = acidIndex.get(traveller.acid)!;
+    const scale = width / (acid.length ?? 100);
+    const nucleic = snapshot.actors[traveller.acid]!.nucleic;
+    const on = (list: readonly { strand: StrandId; from: number; to: number }[] | undefined, nucleotide: number) =>
+      (list ?? []).some(range => range.strand === traveller.strand && range.from <= nucleotide && nucleotide < range.to);
+    // Past an end the strand goes on along its own molecule when the next nucleotide is there, on this
+    // molecule's axis, and is not where synthesis stopped: the 3′ end of a new stretch is a free end.
+    const top = traveller.strand === 'top';
+    const goesOn = (inside: number, outside: number, threePrime: boolean) => outside >= 0 && outside < (acid.length ?? 100)
+      && !on(nucleic?.missing, outside) && !on(travellers.filter(other => other.acid === traveller.acid), outside)
+      && !(threePrime && on(nucleic?.nascent, inside) && !on(nucleic?.nascent, outside));
+    acid.away = [...acid.away ?? [], {
+      strand: traveller.strand, from: traveller.from, to: traveller.to, x0: traveller.from * scale, x1: traveller.to * scale,
+      continues: [goesOn(traveller.from, traveller.from - 1, !top), goesOn(traveller.to - 1, traveller.to, top)],
+    }];
+  }
+  /** Where a strand stretch is drawn when it travels to another molecule: the point at coordinate `p`. */
+  const travelling = (acid: string, strand: SiteStrand | undefined, p: number): Point | undefined => {
+    for (const segment of pairings.flatMap(pairing => pairing.segments)) {
+      const { traveller } = segment;
+      if (traveller.acid !== acid || (strand && strand !== 'both' && strand !== traveller.strand) || p < traveller.from || p > traveller.to) continue;
+      const geometry = pairingGeometry({ width, nucleicAcids }, segment)!;
+      return geometry.points[Math.round((p - traveller.from) / (traveller.to - traveller.from) * (geometry.points.length - 1))];
+    }
+    return undefined;
+  };
 
   // A definition with a footprint is drawn at the size of the nucleotides it covers, on the scale of the
   // first molecule shown, so adjacent copies abut. It is one scale per definition: every copy keeps the
@@ -438,6 +595,15 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (!occupancy || !acid || definition.position) continue;
     const x = width * ((occupancy.span!.from + occupancy.span!.to) / 2) / (acid.length ?? 100);
     const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule };
+    // An occupant follows its strand: on a stretch drawn beside another molecule it rests there.
+    const moved = travelling(occupancy.acid, occupancy.strand, (occupancy.span!.from + occupancy.span!.to) / 2);
+    if (moved) {
+      const bottom = Math.max(...contactOutline(actorContactShape(body)).map(point => point.y));
+      const contact = { x: Math.round(moved.x * 10) / 10, y: Math.round((moved.y - HELIX.tube / 2) * 10) / 10 };
+      placed.set(definition.id, make(definition, { x: moved.x, y: contact.y - bottom + 1.5 }, -1));
+      contacts.set(definition.id, contact);
+      continue;
+    }
     const rest = restOnHelix(body, x, acid, width);
     placed.set(definition.id, make(definition, { x, y: rest.y }, -1));
     contacts.set(definition.id, rest.contact);
@@ -664,7 +830,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions,
+    nucleicAcids, actors, connections, lesions, pairings,
   };
 }
 
