@@ -198,12 +198,13 @@ describe('strand actions never break a pairing silently', () => {
   it('rejects annealing, resecting or synthesising across paired nucleotides', () => {
     expect(() => mechanism([[...invaded, { type: 'anneal', target: 'sister.donor' }]]))
       .toThrow(/sister top strand 40–58 is paired with chromosome bottom strand 40–58; unpair it first/);
-    // Filling in the top strand would pair the invading strand in cis as well.
+    // Filling in the top strand from a nick would pair the invading strand with its own molecule as well.
     expect(() => mechanism([[
       { type: 'cleave', target: 'chromosome.break' }, { type: 'resect', target: 'chromosome.break', length: 18 },
       { type: 'unwind', target: 'sister.donor' }, { type: 'pair', target: 'chromosome.right-overhang', with: 'sister' },
       { type: 'extend', target: 'chromosome.break', length: 18 },
     ]])).toThrow(/chromosome bottom strand 40–58 is paired with sister top strand 40–58; unpair it first/);
+    expect(() => mechanism([[...invaded, { type: 'resect', target: 'chromosome.break', length: 4 }]])).not.toThrow();
   });
 
   it('allows them again once unpaired', () => {
@@ -258,6 +259,166 @@ describe('where the layers meet (RFC 0006 §7)', () => {
       .toThrow(/it needs both strands paired with each other, but the top strand 44–48 is paired with chromosome/);
     expect(() => mechanism([[...invaded, { type: 'unpair', target: 'sister' }, { type: 'occupy', actor: 'tf', target: 'sister', span: [44, 48] }]]))
       .toThrow(/it needs paired DNA, but 44–48 is unwound/);
+  });
+});
+
+describe('templated synthesis (RFC 0006 §6)', () => {
+  const dloop: ActionNode[] = [...invaded, { type: 'unwind', target: 'sister.ahead' }];
+  const synthesis: ActionNode = { type: 'extend', target: 'chromosome.break', strand: 'bottom', length: 18 };
+
+  it('copies the strand the 3′ end is paired with, and prolongs that pairing', () => {
+    const snapshot = mechanism([[...dloop, synthesis]]).at(0);
+    expect(pairs(snapshot)).toEqual({ 'chromosome.bottom~sister.top': ['22-58~22-58'] });
+    expect(snapshot.actors.chromosome!.nucleic).toEqual({
+      missing: [{ strand: 'top', from: 40, to: 58 }],
+      nascent: [{ strand: 'bottom', from: 22, to: 40 }],
+      // The new strand is paired with its template only: it faces the other end's overhang unpaired.
+      open: [{ from: 22, to: 40 }],
+    });
+    expect(partners(snapshot, 'chromosome', 'top', 22, 40)).toEqual(['22-40:unpaired']);
+    expect(partners(snapshot, 'chromosome', 'bottom', 22, 58)).toEqual(['22-58:trans']);
+    expect(snapshot.actors.sister!.nucleic).toEqual({ missing: [], nascent: [], open: [{ from: 22, to: 58 }] });
+    expect(snapshot.timeline.at(-1)!.changes.map(change => change.key).sort())
+      .toEqual(['actors.chromosome.nucleic.missing', 'actors.chromosome.nucleic.nascent', 'actors.chromosome.nucleic.open', 'pairings.chromosome.bottom~sister.top']);
+  });
+
+  it('continues in steps, and never past the gap', () => {
+    const steps = mechanism([[...dloop, { ...synthesis, length: 6 }, { ...synthesis, length: 12 }]]).at(0);
+    expect(steps.pairings).toEqual(mechanism([[...dloop, synthesis]]).at(0).pairings);
+    expect(() => mechanism([[...dloop, { ...synthesis, length: 19 }]])).toThrow(/extending 19 nt overfills the 18-nt gap on the bottom strand/);
+  });
+
+  it('only prolongs the pairing at the 3′ end: it never unwinds the template or looks for another one', () => {
+    expect(() => mechanism([[...invaded, synthesis]])).toThrow(/no template: sister top strand 22–40 is paired with its own bottom strand; unwind it first/);
+    // Without a pairing at the 3′ end there is no template across the break, however close the sister is.
+    expect(() => mechanism([[...resected, { type: 'unwind', target: 'sister.donor' }, { type: 'unwind', target: 'sister.ahead' }, synthesis]]))
+      .toThrow(/extension at a double-strand break needs a template from another molecule: pair the 3′ end first/);
+    // Unpairing the 3′ end removes the template, even though the rest of the strand is still paired.
+    expect(() => mechanism([[...dloop, { type: 'unpair', target: 'chromosome', span: [40, 44] }, synthesis]]))
+      .toThrow(/extension at a double-strand break needs a template from another molecule/);
+  });
+
+  it('stays inside the alignment and the template molecule', () => {
+    const short = [{ id: 'sister', between: ['chromosome', 'sister'], range: [30, 80] }];
+    expect(() => mechanism([[...dloop, synthesis]], short)).toThrow(/extending 18 nt runs past the alignment between "chromosome" and "sister"/);
+    expect(pairs(mechanism([[...dloop, { ...synthesis, length: 10 }]], short).at(0))).toEqual({ 'chromosome.bottom~sister.top': ['30-58~30-58'] });
+  });
+
+  it('extends a single strand paired with another, mirrored by polarity', () => {
+    const actors = [
+      { id: 'primer', type: 'dna', nucleic: { length: 20, form: 'single' }, sites: [{ id: 'cut', at: 8 }, { id: 'head', span: [0, 8] }] },
+      { id: 'template', type: 'dna', nucleic: { length: 20, form: 'single' }, sites: [] },
+    ];
+    const compiled = compileMechanism({
+      schemaVersion: 5, mechanism: { id: 'x', name: 'X' }, actors,
+      alignments: [{ id: 'duplex', between: ['primer', 'template'], range: [0, 20], orientation: 'opposite' }],
+      steps: [{ id: 's', title: 'S', actions: [
+        { type: 'cleave', target: 'primer.cut' }, { type: 'resect', target: 'primer.cut', length: 12 },
+        { type: 'pair', target: 'primer.head', with: 'template' },
+        { type: 'extend', target: 'primer.cut', length: 5 },
+      ] }],
+    });
+    // primer 0–8 meets template 12–20; five more nucleotides read the template towards its 5′ end.
+    expect(pairs(compiled.at(0))).toEqual({ 'primer.top~template.top': ['0-13~7-20'] });
+    expect(compiled.at(0).actors.primer!.nucleic).toEqual({ missing: [{ strand: 'top', from: 13, to: 20 }], nascent: [{ strand: 'top', from: 8, to: 13 }], open: [] });
+  });
+
+  it('keeps a single-stranded footprint on the other end while the new strand is on the donor', () => {
+    const coated: ActionNode[] = [...dloop, { type: 'occupy', actor: 'rpa#1', target: 'chromosome', span: [22, 28] }, synthesis];
+    expect(mechanism([coated]).at(0).occupancy['rpa#1@chromosome']!.strand).toBe('top');
+    expect(() => mechanism([[...coated, { type: 'unpair', target: 'chromosome' }, { type: 'anneal', target: 'chromosome.left-overhang' }]]))
+      .toThrow(/"rpa#1" occupies chromosome 22–28 and would no longer fit \(it needs single-stranded DNA, but the bottom strand is present within 22–28\); vacate it first/);
+  });
+});
+
+describe('SDSA from explicit actions (RFC 0006 §8)', () => {
+  const sdsa: ActionNode[] = [
+    { type: 'cleave', target: 'chromosome.break', lesion: 'double-strand-break' },
+    { type: 'resect', target: 'chromosome.break', length: 18 },
+    { type: 'unwind', target: 'sister.donor' },
+    { type: 'invade', target: 'chromosome.right-overhang', with: 'sister' },
+    { type: 'unwind', target: 'sister.ahead' },
+    { type: 'extend', target: 'chromosome.break', strand: 'bottom', length: 18 },
+    { type: 'unpair', target: 'chromosome' },
+    { type: 'anneal', target: 'sister.donor' },
+    { type: 'anneal', target: 'chromosome.left-overhang' },
+    { type: 'extend', target: 'chromosome.break', strand: 'top', length: 18 },
+    { type: 'ligate', target: 'chromosome.break' },
+  ];
+  const final = (actions: ActionNode[]) => { const { actors, sites, pairings } = mechanism([actions]).at(0); return JSON.stringify({ actors, sites, pairings }); };
+
+  it('ends with an intact chromosome, two nascent tracts and an untouched sister', () => {
+    const snapshot = mechanism([sdsa]).at(0);
+    expect(snapshot.pairings).toEqual({});
+    expect(snapshot.sites['chromosome.break']).toEqual({});
+    expect(snapshot.actors.sister!.nucleic).toBeUndefined();
+    expect(snapshot.actors.chromosome!.nucleic).toEqual({ missing: [], nascent: [{ strand: 'top', from: 40, to: 58 }, { strand: 'bottom', from: 22, to: 40 }], open: [] });
+    expect(partners(snapshot, 'chromosome', 'top', 0, 80)).toEqual(['0-80:cis']);
+  });
+
+  it('unpair leaves the new strand nascent and unpaired; only anneal pairs it with the other end', () => {
+    const released = mechanism([sdsa.slice(0, 7)]).at(0);
+    expect(released.pairings).toEqual({});
+    expect(released.actors.chromosome!.nucleic).toMatchObject({ nascent: [{ strand: 'bottom', from: 22, to: 40 }], open: [{ from: 22, to: 40 }] });
+    expect(partners(released, 'chromosome', 'bottom', 22, 40)).toEqual(['22-40:unpaired']);
+    expect(partners(mechanism([sdsa.slice(0, 9)]).at(0), 'chromosome', 'bottom', 22, 40)).toEqual(['22-40:cis']);
+  });
+
+  it('the break is bridged only once the new strand is annealed to the other end', () => {
+    const untilUnpair = sdsa.slice(0, 8);
+    expect(() => mechanism([[...untilUnpair, sdsa[9]!]])).toThrow(/the top strand has no template across the break|needs a template from another molecule/);
+    expect(() => mechanism([[...sdsa.slice(0, 9), sdsa[10]!]])).toThrow(/the top strand is missing nucleotides at "chromosome.break"; fill the gap with extend before ligating/);
+  });
+
+  it('is the consequence of every action: without any one of them a later one fails, or the end state differs', () => {
+    const complete = final(sdsa);
+    sdsa.forEach((_, index) => {
+      const without = sdsa.filter((__, other) => other !== index);
+      let result: string | undefined;
+      try { result = final(without); } catch { result = undefined; }
+      expect(result, `without action ${index}`).not.toBe(complete);
+    });
+  });
+});
+
+describe('double Holliday junction: formation, branch migration, dissolution (RFC 0006 §9)', () => {
+  const formed: ActionNode[] = [
+    ...invaded, { type: 'unwind', target: 'sister.ahead' },
+    { type: 'extend', target: 'chromosome.break', strand: 'bottom', length: 18 },
+    // Second-end capture: the displaced donor strand pairs with the other overhang.
+    { type: 'pair', target: 'chromosome.left-overhang', with: 'sister' },
+    { type: 'extend', target: 'chromosome.break', strand: 'top', length: 18 },
+    { type: 'ligate', target: 'chromosome.break' },
+  ];
+
+  it('forms from pairings alone: all four strands are paired in trans over one range', () => {
+    const snapshot = mechanism([formed]).at(0);
+    expect(pairs(snapshot)).toEqual({ 'chromosome.bottom~sister.top': ['22-58~22-58'], 'chromosome.top~sister.bottom': ['22-58~22-58'] });
+    for (const [acid, strand] of [['chromosome', 'top'], ['chromosome', 'bottom'], ['sister', 'top'], ['sister', 'bottom']] as const) {
+      expect(partners(snapshot, acid, strand, 0, 80)).toEqual(['0-22:cis', '22-58:trans', '58-80:cis']);
+    }
+    expect(snapshot.sites['chromosome.break']).toEqual({});
+    expect(snapshot.actors.chromosome!.nucleic!.open).toEqual([{ from: 22, to: 58 }]);
+  });
+
+  it('moves a junction: unpair behind it, then anneal each molecule over the same span', () => {
+    const migrated = mechanism([[...formed,
+      { type: 'unpair', target: 'chromosome', span: [22, 30] },
+      { type: 'anneal', target: 'chromosome.left-overhang', span: [22, 30] },
+      { type: 'anneal', target: 'sister.ahead', span: [22, 30] },
+    ]]).at(0);
+    expect(pairs(migrated)).toEqual({ 'chromosome.bottom~sister.top': ['30-58~30-58'], 'chromosome.top~sister.bottom': ['30-58~30-58'] });
+    expect(partners(migrated, 'sister', 'top', 0, 80)).toEqual(['0-30:cis', '30-58:trans', '58-80:cis']);
+    expect(() => mechanism([[...formed, { type: 'anneal', target: 'chromosome.left-overhang', span: [22, 30] }]])).toThrow(/is paired with sister .* strand 22–58; unpair it first/);
+    expect(() => mechanism([[...formed, { type: 'unpair', target: 'chromosome', span: [22, 30] }, { type: 'anneal', target: 'chromosome.left-overhang', span: [10, 30] }]]))
+      .toThrow(/10–30 is not inside the unwound region 22–58/);
+  });
+
+  it('dissolves without a crossover: unpair both pairings, anneal both molecules', () => {
+    const dissolved = mechanism([[...formed, { type: 'unpair', target: 'chromosome' }, { type: 'anneal', target: 'chromosome.break' }, { type: 'anneal', target: 'sister.donor' }]]).at(0);
+    expect(dissolved.pairings).toEqual({});
+    expect(dissolved.actors.sister!.nucleic).toBeUndefined();
+    expect(dissolved.actors.chromosome!.nucleic).toEqual({ missing: [], nascent: [{ strand: 'top', from: 40, to: 58 }, { strand: 'bottom', from: 22, to: 40 }], open: [] });
   });
 });
 

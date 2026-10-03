@@ -117,8 +117,15 @@ export function partnerOf(state: TopologyState, definition: Definition, span: St
     } else if (duplex && !overlapsInterval(partnerMissing, piece) && !overlapsInterval(nucleic.open, piece)) segment = { ...piece, partner: 'cis' };
     else segment = { ...piece, partner: 'unpaired' };
     const last = out.at(-1);
-    // Stretches with the same kind of partner read as one; a trans stretch stays per pairing segment.
-    if (last && last.partner === segment.partner && segment.partner !== 'trans') last.to = segment.to;
+    // Stretches with the same partner read as one; a trans stretch only while its partner span continues too.
+    if (last && last.partner === 'trans' && segment.partner === 'trans') {
+      const [before, next] = [last.with, segment.with];
+      const mirror = next.strand === span.strand;
+      if (before.acid === next.acid && before.strand === next.strand && (mirror ? next.to === before.from : next.from === before.to)) {
+        last.to = segment.to;
+        last.with = mirror ? { ...before, from: next.from } : { ...before, to: next.to };
+      } else out.push(segment);
+    } else if (last && last.partner === segment.partner) last.to = segment.to;
     else out.push(segment);
   }
   return out;

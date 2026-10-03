@@ -960,7 +960,7 @@
         },
         {
           "type": "object",
-          "description": "Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the opposite strand.",
+          "description": "Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the strand that 3′ end is paired with: its own molecule's, or another molecule's through an existing pairing, which it prolongs.",
           "required": [
             "type",
             "target",
@@ -1034,7 +1034,7 @@
         },
         {
           "type": "object",
-          "description": "Re-pair the unwound bubble at a site.",
+          "description": "Re-pair the unwound bubble at a site, or only part of it.",
           "required": [
             "type",
             "target"
@@ -1056,6 +1056,22 @@
               "type": "string",
               "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
               "description": "Site with a coordinate inside or at the edge of the bubble."
+            },
+            "span": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Close only these nucleotides of the bubble (a junction moving along it). Without it the whole bubble closes."
             }
           },
           "additionalProperties": false

@@ -86,7 +86,9 @@ describe('extend', () => {
     const both = [{ type: 'cleave', target: 'dna.both' }, { type: 'resect', target: 'dna.both', length: 4 }];
     expect(() => mechanism([[...both, { type: 'extend', target: 'dna.both', length: 2 }]])).toThrow(/both strands have a 3′ end facing a gap at "dna.both"; set strand/);
     expect(nucleic([[...both, { type: 'extend', target: 'dna.both', length: 2, strand: 'top' }]])!.nascent).toEqual([{ strand: 'top', from: 60, to: 62 }]);
-    expect(() => mechanism([[{ type: 'extend', target: 'dna.break', length: 2 }]], { form: 'single' })).toThrow(/single-stranded; this action needs a duplex/);
+    // A single-stranded molecule has no template of its own: its 3′ end must be paired with another molecule (RFC 0006 §6.1).
+    expect(() => mechanism([[{ type: 'cleave', target: 'dna.break' }, { type: 'resect', target: 'dna.break', length: 4 }, { type: 'extend', target: 'dna.break', length: 2 }]], { form: 'single' }))
+      .toThrow(/no template: "dna" is single-stranded, so its 3′ end must be paired with another molecule/);
   });
 });
 
