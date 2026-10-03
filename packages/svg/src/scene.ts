@@ -1,6 +1,6 @@
 import { hashString } from './primitives/shared';
 import {
-  actorInstances, anonymousAttachment, lesionStrands, partnerOf, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
+  actorInstances, anonymousAttachment, lesionStrands, partnerOf, partnersOf, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
   type Modification, type Point, type SiteStrand, type StrandId,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
@@ -90,6 +90,12 @@ export interface SceneActor extends Point {
   mirrored?: true;
   /** Visible copies of one definition share a callout: `lead` carries "label ×size", the others none. */
   group?: { size: number; lead: boolean };
+  /**
+   * Copies of one definition that are equivalent in this snapshot: same state, same occupancy and the
+   * same interactions. `first` is true on the one that stands for them, and `size` is how many there
+   * are. Absent when a copy differs from every other in any of those.
+   */
+  identical?: { size: number; first: boolean };
 }
 
 /**
@@ -910,6 +916,19 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const copies = actors.filter(actor => actor.actor === definition.id && !actor.ghost);
     copies.forEach((actor, index) => { actor.group = { size: copies.length, lead: index === 0 }; });
   }
+  // Copies are interchangeable only when nothing tells them apart in this snapshot: the same state, the
+  // same occupancy and the same interactions, partner for partner. A copy that sits on other nucleotides
+  // or binds another instance is its own thing, whatever its definition.
+  const signature = (actor: SceneActor) => {
+    const { id: _id, ...state } = snapshot.actors[actor.id]!;
+    const held = Object.values(snapshot.occupancy).filter(item => item.instance === actor.id).map(({ id: _key, instance: _instance, ...where }) => where);
+    const bound = partnersOf(snapshot, actor.id).map(({ id: _key, ...partner }) => partner);
+    return JSON.stringify([actor.actor, state, held, bound]);
+  };
+  const alike = new Map<string, SceneActor[]>();
+  for (const actor of actors.filter(item => !item.ghost && item.id !== item.actor)) alike.set(signature(actor), [...alike.get(signature(actor)) ?? [], actor]);
+  for (const copies of alike.values()) if (copies.length > 1) copies.forEach((actor, index) => { actor.identical = { size: copies.length, first: index === 0 }; });
+
   // A callout that still lies on another body or callout, or off the canvas, looks for a free place: the
   // other side, then higher on either side. One that is already clear is left exactly where it was.
   const bodies = actors.filter(actor => !actor.ghost).map(actor => {

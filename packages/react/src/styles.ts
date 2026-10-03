@@ -15,7 +15,7 @@ export const uiCss = `
 .mm-stage .mm-svg{--mm-accent:var(--mm-ui-accent)}
 
 .mm-icon-button,.mm-controls__play{display:inline-grid;place-items:center;flex:none;border:0;background:transparent;color:var(--mm-ui-ink);cursor:pointer;transition:background .2s,color .2s,transform .2s}
-.mm-icon-button{width:36px;height:36px;border-radius:9px}.mm-icon-button:hover:not(:disabled){background:var(--mm-ui-accent-soft);color:var(--mm-ui-accent)}.mm-icon-button:disabled{opacity:.3;cursor:default}
+.mm-icon-button{width:36px;height:36px;border-radius:9px}.mm-icon-button:hover:not(:disabled,[aria-disabled=true]){background:var(--mm-ui-accent-soft);color:var(--mm-ui-accent)}.mm-icon-button:is(:disabled,[aria-disabled=true]){opacity:.3;cursor:default}
 .mm-controls__play{width:48px;height:48px;border-radius:50%;background:var(--mm-ui-accent);color:var(--mm-ui-on-accent);box-shadow:0 6px 18px -8px var(--mm-ui-accent)}.mm-controls__play:hover{transform:scale(1.04)}
 :is(.mm-icon-button,.mm-controls__play,.mm-timeline__step,.mm-thumbnail,.mm-tabs button,.mm-scrubber button):focus-visible{outline:2px solid var(--mm-ui-accent);outline-offset:2px}
 
@@ -23,10 +23,11 @@ export const uiCss = `
 .mm-scrubber{position:relative;flex:1;min-width:120px;margin:0 14px;padding-top:18px}
 .mm-scrubber__count{position:absolute;top:-2px;left:50%;transform:translateX(-50%);color:var(--mm-ui-ink);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mm-scrubber__track{display:flex;justify-content:space-between;align-items:center;margin:0;padding:0;list-style:none;background:linear-gradient(var(--mm-ui-line),var(--mm-ui-line)) center/100% 2px no-repeat}
-.mm-scrubber__track button{display:block;width:12px;height:12px;padding:0;border:2px solid var(--mm-ui-surface);border-radius:50%;background:var(--mm-ui-line);box-shadow:0 0 0 1px var(--mm-ui-line);cursor:pointer;transition:transform .2s,background .2s}
+.mm-scrubber__track button{position:relative;display:block;width:12px;height:12px;padding:0;border:2px solid var(--mm-ui-surface);border-radius:50%;background:var(--mm-ui-line);box-shadow:0 0 0 1px var(--mm-ui-line);cursor:pointer;transition:transform .2s,background .2s}
 .mm-scrubber__track button.is-past{background:color-mix(in srgb,var(--mm-ui-accent) 45%,var(--mm-ui-line));box-shadow:none}
 .mm-scrubber__track button.is-active{transform:scale(1.35);background:var(--mm-ui-accent);box-shadow:0 0 0 3px var(--mm-ui-accent-soft)}
 .mm-scrubber__track button:hover{transform:scale(1.25)}
+.mm-scrubber__track button::after{content:"";position:absolute;inset:-10px -8px}
 
 .mm-switch{display:inline-flex;align-items:center;gap:8px;margin:0 6px;color:var(--mm-ui-muted);font-size:13px;cursor:pointer;user-select:none}
 .mm-switch input{position:absolute;opacity:0;pointer-events:none}.mm-switch i{position:relative;width:34px;height:20px;border-radius:99px;background:var(--mm-ui-line);transition:background .2s}
@@ -93,6 +94,6 @@ export const uiCss = `
 .mm-vocabulary-glyph{display:grid;place-items:center;align-self:end;width:100%;min-width:0;transition:opacity .3s,filter .3s,transform .3s}.mm-vocabulary-glyph .mm-vocab__svg{width:100%;height:auto;color:var(--mm-ui-ink)}
 .mm-vocabulary-glyph[data-state=inactive]{opacity:.38;filter:saturate(.35);transform:scale(.96)}.mm-vocabulary-glyph[data-state=active]{filter:drop-shadow(0 0 10px color-mix(in srgb,var(--mm-ui-accent) 42%,transparent));animation:mm-vocabulary-active 2.4s ease-in-out infinite}
 @keyframes mm-vocabulary-active{50%{transform:translateY(-2px)}}
-@media(prefers-reduced-motion:reduce){.mm-vocabulary-glyph{transition:none}.mm-vocabulary-glyph[data-state=active]{animation:none}}
+@media(prefers-reduced-motion:reduce){.mm-vocabulary-glyph{transition:none}.mm-vocabulary-glyph[data-state=active]{animation:none}:is(.mm-icon-button,.mm-controls__play,.mm-scrubber__track button,.mm-switch i,.mm-switch i::after,.mm-timeline__step,.mm-timeline__number,.mm-thumbnail,.mm-actors li){transition:none}:is(.mm-controls__play,.mm-scrubber__track button):hover{transform:none}.mm-scrubber__track button.is-active{transform:scale(1.35)}}
 @media(max-width:640px){.mm-controls{flex-wrap:wrap}.mm-scrubber{order:-1;flex-basis:100%;margin:0 4px 6px}.mm-switch span{display:none}}
 `;
