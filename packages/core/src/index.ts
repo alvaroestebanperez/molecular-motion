@@ -3,12 +3,14 @@ export type { CompiledMechanism, CompileOptions } from './engine';
 export { parseMechanism } from './parse';
 export { MechanismValidationError, validateMechanism } from './validate';
 export type { ValidateOptions } from './validate';
-export { migrateV1, migrateV2, migrateV3 } from './migrate';
+export { migrateV1, migrateV2, migrateV3, migrateV4 } from './migrate';
 export {
   anonymousAttachment, boundTo, componentOf, interactionId, occupancyId, partnersOf, primaryPartner,
 } from './bindings';
 export type { Partner } from './bindings';
 export { occupancyConflicts, occupancyMisfit } from './occupancy';
+export { alignedSpan, normalizePairings, pairingConflicts, pairingKey, partnerOf } from './pairings';
+export type { PartnerSegment } from './pairings';
 export { actorIdOf, actorInstances, instanceDefinition, instanceIds, INSTANCE_SEPARATOR } from './instances';
 export { ActionFailure, ActionRegistry, BASE_FIELDS, defineAlias, definePrimitive, field } from './registry';
 export type { ActionDefinition, AliasDefinition, ApplyContext, FieldSpec, PrimitiveDefinition, ResolvedAction, ValidationContext } from './registry';

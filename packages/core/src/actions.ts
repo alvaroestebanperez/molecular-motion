@@ -2,6 +2,7 @@ import {
   addInteraction, addOccupancy, boundTo, detachAnonymous, interactionId, interfaceUse, occupancyId, partnersOf, releaseAll,
 } from './bindings';
 import { defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
+import { addPairing, alignedSpan, alignmentRelates, brokenPairings, pairingConflicts, removePairings } from './pairings';
 import { actorIdOf, instanceDefinition } from './instances';
 import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
@@ -9,7 +10,7 @@ import {
 } from './nucleic';
 import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
 import type {
-  ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId,
+  ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId, StrandSpan,
 } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
@@ -433,6 +434,7 @@ export const resect = definePrimitive<ResectAction>({
     }
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requirePairingsHold(_state, ctx, actor.id);
   },
 });
 
@@ -478,6 +480,7 @@ export const extend = definePrimitive<ExtendAction>({
     state.nascent = withStrandIntervals(state.nascent, strand, addInterval(nascentRun(strand), range));
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requirePairingsHold(_state, ctx, actor.id);
   },
 });
 
@@ -509,6 +512,7 @@ export const unwind = definePrimitive<UnwindAction>({
     state.open = addInterval(state.open, range);
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requirePairingsHold(_state, ctx, actor.id);
   },
 });
 
@@ -527,6 +531,95 @@ export const anneal = definePrimitive<AnnealAction>({
     state.open = state.open.filter(region => region !== bubble);
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requirePairingsHold(_state, ctx, actor.id);
+  },
+});
+
+// ---- Nucleic topology (RFC 0006 §5): base pairing between strands of different molecules ----
+
+/** Strand actions never break a pairing silently: afterwards every pairing on the molecule must still hold. */
+function requirePairingsHold(state: MechanismState, ctx: ApplyContext, acid: string): void {
+  const broken = brokenPairings(state, ctx.definition, acid);
+  if (broken) ctx.fail(broken);
+}
+
+const spanLabel = (span: StrandSpan) => `${span.acid} ${span.strand} strand ${span.from}–${span.to}`;
+
+interface PairAction extends ActionSpec { target: string; with: string; strand?: StrandId; span?: [number, number]; alignment?: string }
+export const pair = definePrimitive<PairAction>({
+  type: 'pair',
+  description: 'Base-pair a strand span of one nucleic acid with the aligned strand span of another. Both must be present and unpaired: it never unwinds or displaces.',
+  fields: {
+    target: field.reference({ required: true, description: 'The nucleic acid, or a site with a span, whose strand pairs.' }),
+    with: field.actor({ required: true, description: 'The nucleic acid it pairs with; the span and strand follow from the alignment.' }),
+    strand: field.enum(['top', 'bottom'], { description: 'Strand of the target. Defaults to the site\'s strand, else the one unpaired strand across the span.' }),
+    span: field.interval({ description: 'Nucleotides of the target that pair, overriding the site.' }),
+    alignment: field.string({ description: 'Alignment to pair through; needed only when several relate the two molecules over the span.' }),
+  },
+  presentation: { verb: 'pairs with' },
+  validate(action, ctx) {
+    requireNucleicAcid(action.target, ctx);
+    requireNucleicAcid(action.with, ctx);
+    const site = locate(action.target, ctx.definition)?.site;
+    if (!action.span && !site?.span) ctx.issue('pair needs a span: a site with a span, or span');
+    const related = ctx.definition.alignments.filter(item => alignmentRelates(item, actorOf(action.target), action.with));
+    if (action.alignment && !ctx.definition.alignments.some(item => item.id === action.alignment)) ctx.issue(`unknown alignment "${action.alignment}"`);
+    else if (!related.some(item => !action.alignment || item.id === action.alignment)) {
+      ctx.issue(`no alignment${action.alignment ? ` "${action.alignment}"` : ''} relates "${actorOf(action.target)}" and "${action.with}"; declare one in alignments`);
+    }
+  },
+  apply(state, action, ctx) {
+    const acid = actorOf(action.target);
+    ctx.requirePresent(acid);
+    ctx.requirePresent(action.with);
+    const site = locate(action.target, ctx.definition)?.site;
+    const range = action.span ? { from: action.span[0], to: action.span[1] } : { from: site!.span![0], to: site!.span![1] };
+    const named = action.strand ?? (site?.strand === 'top' || site?.strand === 'bottom' ? site.strand : undefined);
+    const conflicts = (['top', 'bottom'] as const).map(strand => pairingConflicts(state, ctx.definition, { acid, strand, ...range }));
+    const free = (['top', 'bottom'] as const).filter((_, index) => !conflicts[index]);
+    if (!named && free.length === 2) ctx.fail(`both strands are unpaired across ${acid} ${range.from}–${range.to}; name the strand`);
+    if (!named && !free.length) ctx.fail(`no strand is unpaired across ${acid} ${range.from}–${range.to}: ${conflicts.join('; ')}`);
+    const own: StrandSpan = { acid, strand: named ?? free[0]!, ...range };
+    const partners = ctx.definition.alignments
+      .filter(item => !action.alignment || item.id === action.alignment)
+      .flatMap(item => alignedSpan(item, own, action.with) ?? []);
+    if (!partners.length) ctx.fail(`no alignment between "${acid}" and "${action.with}" covers ${acid} ${range.from}–${range.to}`);
+    if (partners.length > 1) ctx.fail(`several alignments between "${acid}" and "${action.with}" cover ${acid} ${range.from}–${range.to}; name one with alignment`);
+    const partner = partners[0]!;
+    for (const span of [own, partner]) {
+      const conflict = pairingConflicts(state, ctx.definition, span);
+      if (conflict) ctx.fail(`cannot pair ${spanLabel(own)} with ${spanLabel(partner)}: ${conflict}`);
+    }
+    addPairing(state, own, partner);
+  },
+});
+
+interface UnpairAction extends ActionSpec { target: string; strand?: StrandId; span?: [number, number] }
+export const unpair = definePrimitive<UnpairAction>({
+  type: 'unpair',
+  description: 'Separate a strand span from the strand of another molecule it is paired with. Both become unpaired: it never anneals.',
+  fields: {
+    target: field.reference({ required: true, description: 'The nucleic acid, or a site with a span. A bare molecule means its whole length.' }),
+    strand: field.enum(['top', 'bottom'], { description: 'Defaults to the site\'s strand, else both.' }),
+    span: field.interval({ description: 'Nucleotides to unpair, overriding the site.' }),
+  },
+  presentation: { verb: 'unpairs from' },
+  validate(action, ctx) {
+    requireNucleicAcid(action.target, ctx);
+    const site = locate(action.target, ctx.definition)?.site;
+    if (!action.span && site && !site.span) ctx.issue(`site "${action.target}" has no span; give a span`);
+  },
+  apply(state, action, ctx) {
+    const acid = actorOf(action.target);
+    ctx.requirePresent(acid);
+    const site = locate(action.target, ctx.definition)?.site;
+    const range = action.span ? { from: action.span[0], to: action.span[1] }
+      : site?.span ? { from: site.span[0], to: site.span[1] }
+      : { from: 0, to: nucleicLength(instanceDefinition(ctx.definition, acid)!) };
+    const named = action.strand ?? (site?.strand === 'top' || site?.strand === 'bottom' ? site.strand : undefined);
+    const strands: readonly StrandId[] = named ? [named] : ['top', 'bottom'];
+    const removed = strands.reduce((sum, strand) => sum + removePairings(state, { acid, strand, ...range }), 0);
+    if (!removed) ctx.fail(`nothing is paired with ${acid} ${named ? `${named} strand ` : ''}${range.from}–${range.to}`);
   },
 });
 
@@ -546,6 +639,14 @@ export const recruit = defineAlias<BindAction>({
   fields: bind.fields,
   presentation: { verb: 'recruits' },
   expand: action => ({ ...action, type: 'bind' }),
+});
+
+export const invade = defineAlias<PairAction>({
+  type: 'invade',
+  description: 'Pair a strand with another molecule, told as an invasion. Exactly a pair: the other duplex must already be unwound.',
+  fields: pair.fields,
+  presentation: { verb: 'invades' },
+  expand: action => ({ ...action, type: 'pair' }),
 });
 
 const visibility = (type: string, visible: boolean, verb: string) => defineAlias<ActorAction>({
@@ -599,7 +700,8 @@ export const builtinActions = [
   bind, unbind, setState, modify, translocate, synthesize, degrade, cleave, ligate,
   resect, extend, unwind, anneal,
   occupy, coat, vacate,
-  recruit,
+  pair, unpair,
+  recruit, invade,
   visibility('show', true, 'shows'),
   visibility('hide', false, 'hides'),
   activity('activate', 'active', 'activates', 'activating'),

@@ -31,8 +31,8 @@ export function projectToV1(mechanism: CompiledMechanism) {
 /** Every snapshot of a mechanism as plain JSON (drops the shared definition). */
 export const allStates = (mechanism: CompiledMechanism) =>
   Array.from({ length: mechanism.length }, (_, index) => {
-    const { actors, sites, interactions, occupancy, timeline, duration } = mechanism.at(index);
-    return JSON.parse(JSON.stringify({ actors, sites, interactions, occupancy, timeline, duration }));
+    const { actors, sites, interactions, occupancy, pairings, timeline, duration } = mechanism.at(index);
+    return JSON.parse(JSON.stringify({ actors, sites, interactions, occupancy, pairings, timeline, duration }));
   });
 
 /**

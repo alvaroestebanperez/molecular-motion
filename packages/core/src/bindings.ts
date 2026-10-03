@@ -1,3 +1,4 @@
+import { releasePairings } from './pairings';
 import type { Interaction, InteractionEnd, MechanismState, Occupancy } from './types';
 
 /**
@@ -54,8 +55,9 @@ export function detachAnonymous(state: BindingState, instance: string): boolean 
   return true;
 }
 
-/** Remove every binding that involves `instance`, including occupancies on it when it is a nucleic acid. */
-export function releaseAll(state: BindingState, instance: string): void {
+/** Remove every binding that involves `instance`, including occupancies on it and its pairings when it is a nucleic acid. */
+export function releaseAll(state: BindingState & Pick<MechanismState, 'pairings'>, instance: string): void {
+  releasePairings(state, instance);
   for (const edge of Object.values(state.interactions)) if (edge.ends.some(end => end.instance === instance)) delete state.interactions[edge.id];
   for (const occupancy of Object.values(state.occupancy)) if (occupancy.instance === instance || occupancy.acid === instance) delete state.occupancy[occupancy.id];
 }

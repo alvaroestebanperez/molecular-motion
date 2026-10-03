@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.dev/schema/v5.json",
+  "$id": "https://molecular-motion.dev/schema/v4.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
   "required": [
@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": 5
+      "const": 4
     },
     "mechanism": {
       "type": "object",
@@ -55,13 +55,6 @@
       "items": {
         "$ref": "#/$defs/actor"
       }
-    },
-    "alignments": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/alignment"
-      },
-      "description": "Ranges of nucleic acids whose strands may pair (RFC 0006). A declared correspondence, never state."
     },
     "steps": {
       "type": "array",
@@ -312,89 +305,6 @@
               }
             }
           }
-        }
-      }
-    },
-    "alignmentSide": {
-      "type": "object",
-      "required": [
-        "acid",
-        "span"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "acid": {
-          "$ref": "#/$defs/id"
-        },
-        "span": {
-          "$ref": "#/$defs/range"
-        }
-      }
-    },
-    "range": {
-      "type": "array",
-      "prefixItems": [
-        {
-          "type": "integer",
-          "minimum": 0
-        },
-        {
-          "type": "integer",
-          "minimum": 1
-        }
-      ],
-      "minItems": 2,
-      "maxItems": 2,
-      "description": "Interbase interval [from, to)."
-    },
-    "alignment": {
-      "type": "object",
-      "required": [
-        "id"
-      ],
-      "additionalProperties": false,
-      "oneOf": [
-        {
-          "required": [
-            "between",
-            "range"
-          ]
-        },
-        {
-          "required": [
-            "a",
-            "b"
-          ]
-        }
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/id"
-        },
-        "between": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/id"
-          },
-          "minItems": 2,
-          "maxItems": 2,
-          "description": "Two nucleic acids aligned over the same range."
-        },
-        "range": {
-          "$ref": "#/$defs/range"
-        },
-        "a": {
-          "$ref": "#/$defs/alignmentSide"
-        },
-        "b": {
-          "$ref": "#/$defs/alignmentSide"
-        },
-        "orientation": {
-          "enum": [
-            "same",
-            "opposite"
-          ],
-          "description": "same (default): a strand may pair with the other molecule's opposite strand, position for position. opposite: with the strand of the same name, mirrored."
         }
       }
     },
@@ -1225,118 +1135,6 @@
         },
         {
           "type": "object",
-          "description": "Base-pair a strand span of one nucleic acid with the aligned strand span of another. Both must be present and unpaired: it never unwinds or displaces.",
-          "required": [
-            "type",
-            "target",
-            "with"
-          ],
-          "properties": {
-            "type": {
-              "const": "pair"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/instance",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$",
-              "description": "The nucleic acid, or a site with a span, whose strand pairs."
-            },
-            "with": {
-              "$ref": "#/$defs/instance",
-              "description": "The nucleic acid it pairs with; the span and strand follow from the alignment."
-            },
-            "strand": {
-              "enum": [
-                "top",
-                "bottom"
-              ],
-              "description": "Strand of the target. Defaults to the site's strand, else the one unpaired strand across the span."
-            },
-            "span": {
-              "type": "array",
-              "prefixItems": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              ],
-              "minItems": 2,
-              "maxItems": 2,
-              "description": "Nucleotides of the target that pair, overriding the site."
-            },
-            "alignment": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Alignment to pair through; needed only when several relate the two molecules over the span."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Separate a strand span from the strand of another molecule it is paired with. Both become unpaired: it never anneals.",
-          "required": [
-            "type",
-            "target"
-          ],
-          "properties": {
-            "type": {
-              "const": "unpair"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/instance",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$",
-              "description": "The nucleic acid, or a site with a span. A bare molecule means its whole length."
-            },
-            "strand": {
-              "enum": [
-                "top",
-                "bottom"
-              ],
-              "description": "Defaults to the site's strand, else both."
-            },
-            "span": {
-              "type": "array",
-              "prefixItems": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              ],
-              "minItems": 2,
-              "maxItems": 2,
-              "description": "Nucleotides to unpair, overriding the site."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
           "description": "Bind an actor that is brought in by its target.",
           "required": [
             "type",
@@ -1372,67 +1170,6 @@
               "type": "string",
               "minLength": 1,
               "description": "Interface of the target used for this binding."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Pair a strand with another molecule, told as an invasion. Exactly a pair: the other duplex must already be unwound.",
-          "required": [
-            "type",
-            "target",
-            "with"
-          ],
-          "properties": {
-            "type": {
-              "const": "invade"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/instance",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?(\\.[a-z][a-z0-9-]*)?$",
-              "description": "The nucleic acid, or a site with a span, whose strand pairs."
-            },
-            "with": {
-              "$ref": "#/$defs/instance",
-              "description": "The nucleic acid it pairs with; the span and strand follow from the alignment."
-            },
-            "strand": {
-              "enum": [
-                "top",
-                "bottom"
-              ],
-              "description": "Strand of the target. Defaults to the site's strand, else the one unpaired strand across the span."
-            },
-            "span": {
-              "type": "array",
-              "prefixItems": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "integer",
-                  "minimum": 1
-                }
-              ],
-              "minItems": 2,
-              "maxItems": 2,
-              "description": "Nucleotides of the target that pair, overriding the site."
-            },
-            "alignment": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Alignment to pair through; needed only when several relate the two molecules over the span."
             }
           },
           "additionalProperties": false

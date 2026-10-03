@@ -44,13 +44,13 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://molecular-motion.dev/schema/v4.json',
+    $id: 'https://molecular-motion.dev/schema/v5.json',
     title: 'Molecular Motion mechanism',
     type: 'object',
     required: ['schemaVersion', 'mechanism', 'actors', 'steps'],
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: 4 },
+      schemaVersion: { const: 5 },
       mechanism: {
         type: 'object',
         required: ['id', 'name'],
@@ -65,6 +65,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
       references: { type: 'array', items: { $ref: '#/$defs/reference' } },
       compartments: { type: 'array', items: { $ref: '#/$defs/compartment' } },
       actors: { type: 'array', minItems: 1, items: { $ref: '#/$defs/actor' } },
+      alignments: { type: 'array', items: { $ref: '#/$defs/alignment' }, description: 'Ranges of nucleic acids whose strands may pair (RFC 0006). A declared correspondence, never state.' },
       steps: { type: 'array', minItems: 1, items: { $ref: '#/$defs/step' } },
     },
     $defs: {
@@ -136,6 +137,25 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
               type: 'object', additionalProperties: false, properties: { label: { type: 'string' } },
             }])),
           },
+        },
+      },
+      alignmentSide: {
+        type: 'object', required: ['acid', 'span'], additionalProperties: false,
+        properties: { acid: { $ref: '#/$defs/id' }, span: { $ref: '#/$defs/range' } },
+      },
+      range: { type: 'array', prefixItems: [{ type: 'integer', minimum: 0 }, { type: 'integer', minimum: 1 }], minItems: 2, maxItems: 2, description: 'Interbase interval [from, to).' },
+      alignment: {
+        type: 'object',
+        required: ['id'],
+        additionalProperties: false,
+        oneOf: [{ required: ['between', 'range'] }, { required: ['a', 'b'] }],
+        properties: {
+          id: { $ref: '#/$defs/id' },
+          between: { type: 'array', items: { $ref: '#/$defs/id' }, minItems: 2, maxItems: 2, description: 'Two nucleic acids aligned over the same range.' },
+          range: { $ref: '#/$defs/range' },
+          a: { $ref: '#/$defs/alignmentSide' },
+          b: { $ref: '#/$defs/alignmentSide' },
+          orientation: { enum: ['same', 'opposite'], description: 'same (default): a strand may pair with the other molecule\'s opposite strand, position for position. opposite: with the strand of the same name, mirrored.' },
         },
       },
       actor: {
