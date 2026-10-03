@@ -61,4 +61,30 @@ describe('patchSvg', () => {
       expect(walked.innerHTML).toBe(fresh.innerHTML);
     }
   });
+
+  it('adds a layer that only some steps have in its place, and removes it when it is gone', () => {
+    const hr = compileMechanism(parseMechanism(readFileSync('examples/homologous-recombination.yaml', 'utf8')));
+    const step = (id: string) => renderSvg(buildSvgScene(hr.at(id)), { idPrefix: 'p' });
+    const layers = () => [...container.querySelectorAll('svg > [data-layer]')].map(element => element.getAttribute('data-layer'));
+    patchSvg(container, step('filament'));
+    expect(layers()).toEqual(['defs', 'acids', 'connections', 'actors', 'labels']);
+    // Strands pair across the two molecules: the layer appears between the molecules and what sits on them.
+    patchSvg(container, step('invasion'));
+    expect(layers()).toEqual(['defs', 'acids', 'pairings', 'connections', 'actors', 'labels']);
+    const pairing = container.querySelector('[data-key^="pairing:"]')!;
+    // The pairing grows by synthesis: the same element, redrawn.
+    patchSvg(container, step('synthesis'));
+    expect(container.querySelector('[data-key^="pairing:"]')).toBe(pairing);
+    expect(pairing.innerHTML).toContain('mm-dna__nascent');
+    // Unpaired: the strand fades out and the layer goes with it.
+    patchSvg(container, step('displacement'));
+    expect(pairing.classList.contains('mm-exit')).toBe(true);
+    expect(layers()).toEqual(['defs', 'acids', 'connections', 'actors', 'labels']);
+    vi.advanceTimersByTime(500);
+    expect(pairing.isConnected).toBe(false);
+    container.querySelectorAll('.mm-enter').forEach(element => element.classList.remove('mm-enter'));
+    const fresh = document.createElement('div');
+    patchSvg(fresh, step('displacement'));
+    expect(container.innerHTML).toBe(fresh.innerHTML);
+  });
 });
