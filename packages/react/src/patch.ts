@@ -17,16 +17,29 @@ export function patchSvg(container: HTMLElement, markup: string): void {
   }
 
   syncAttributes(current, next);
+  // Some layers exist only in some steps (pairings between molecules). A layer that appears is put
+  // where a fresh render has it, so stacking order holds; one that is gone empties out and is removed.
+  let cursor: Element | null = null;
   for (const child of Array.from(next.children)) {
     const layer = child.getAttribute('data-layer');
-    const target = layer ? current.querySelector(`:scope > [data-layer="${layer}"]`) : current.querySelector(`:scope > ${child.tagName}`);
-    if (!target) { current.appendChild(document.importNode(child, true)); continue; }
+    let target = layer ? current.querySelector(`:scope > [data-layer="${layer}"]`) : current.querySelector(`:scope > ${child.tagName}`);
+    if (!target) {
+      target = document.importNode(child, false);
+      current.insertBefore(target, cursor ? cursor.nextSibling : current.firstChild);
+    }
+    cursor = target;
     if (!layer || layer === 'defs') {
       syncAttributes(target, child);
       if (target.innerHTML !== child.innerHTML) target.innerHTML = child.innerHTML;
       continue;
     }
     reconcile(target, child);
+  }
+  for (const stale of Array.from(current.querySelectorAll(':scope > [data-layer]'))) {
+    if (next.querySelector(`:scope > [data-layer="${stale.getAttribute('data-layer')}"]`)) continue;
+    reconcile(stale, document.createElement('g'));
+    stale.removeAttribute('data-layer');
+    window.setTimeout(() => stale.remove(), EXIT_MS);
   }
 }
 
