@@ -58,7 +58,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   const labels = compact ? '' : [
     ...actors.filter(actor => actor.group?.lead !== false).map(actor => actorLabel(actor)),
     ...actors.filter(actor => actor.chain).map(actor => chainLabel(actor)),
-    ...scene.lesions.map(lesion => lesionLabel(lesion, actors)),
+    ...scene.lesions.map(lesion => lesionLabel(lesion, actors, scene.width)),
   ].join('');
 
   const summary = describeScene(scene);
@@ -435,7 +435,7 @@ function callout(x: number, y: number, tx: number, ty: number, text: string, anc
 }
 
 /** Lesion callout above the helix on whichever side is free of actors; below the helix otherwise. */
-function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]): string {
+function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[], canvas: number): string {
   const text = LESION_LABELS[lesion.type];
   const width = text.length * 7.4;
   // Chains count as obstacles too: a callout must not sit on top of the beads.
@@ -447,10 +447,14 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
     && actor.x + actor.radius > lesion.x + x0 && actor.x - actor.radius < lesion.x + x1
     && actor.y + actor.radius > lesion.y - 52 && actor.y - actor.radius < lesion.y - 20)
     || pills.some(([left, top, right, bottom]) => right > lesion.x + x0 && left < lesion.x + x1 && bottom > lesion.y - 48 && top < lesion.y - 26);
+  // The text may be drawn up to half as large again (`--mm-text-scale`), so it is given that much room
+  // inside the canvas: a side it would run off is not used, and below the molecule it is pulled back in.
+  const room = width * 1.5 + 8;
+  const fits = (from: number, to: number) => lesion.x + from >= 0 && lesion.x + to <= canvas;
   let markup: string;
-  if (!blocked(84, 92 + width)) markup = callout(92, -34, 12, -6, text);
-  else if (!blocked(-92 - width, -84)) markup = callout(-92, -34, -12, -6, text, 'end');
-  else markup = callout(40, HELIX.amplitude * 2 + 44, 6, HELIX.amplitude * 2 + 4, text);
+  if (!blocked(84, 92 + width) && fits(92, 92 + room)) markup = callout(92, -34, 12, -6, text);
+  else if (!blocked(-92 - width, -84) && fits(-92 - room, -92)) markup = callout(-92, -34, -12, -6, text, 'end');
+  else markup = callout(Math.min(40, Math.max(-lesion.x + 8, canvas - room - lesion.x)), HELIX.amplitude * 2 + 44, 6, HELIX.amplitude * 2 + 4, text);
   return `<g class="mm-label mm-label--alert" data-key="lesion:${escape(lesion.target)}" style="transform:translate(${round(lesion.x)}px,${round(lesion.y)}px)" aria-hidden="true">${markup}</g>`;
 }
 
