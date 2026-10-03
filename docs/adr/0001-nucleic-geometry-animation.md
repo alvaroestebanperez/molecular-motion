@@ -18,7 +18,7 @@ The audit found the settled state always correct. What is missing is the process
 ## 2. Constraints
 
 1. **The scene of a step stays a pure function of its snapshot.** Animation is a function of two scenes, the one shown and the one wanted.
-2. **The renderer never learns which action caused a change.** It sees two states, not a verb.
+2. **The strategy is derived only from the geometry and state of the origin and the destination.** Neither `patchSvg` nor the transition renderer knows whether a change came from `extend`, `resect`, `pair`, `unpair`, `unwind`, `anneal` or any other action. They receive two scenes and nothing else: no timeline, no action type, no presentation verb, no step id.
 3. **The settled DOM of a step is a clean render of that step** (the invariant of #44). Static markup does not change, so every render baseline stays byte-identical.
 4. **Identity is stable.** Something that grows is the same element getting longer.
 5. **One mechanism** for growth, retraction, appearance, disappearance and movement between a molecule's own axis and a pairing.
@@ -38,6 +38,7 @@ scene B ─┘                                        t = 0 … 1, eased, one pe
 
 - At `t = 0` the frame draws A. At `t = 1` it draws B, and the content is exactly the clean render of B.
 - A frame is a transient value inside the animator. It is not an `SvgScene` and is never stored.
+- The only inputs are the two `SvgScene` values. `SvgScene` carries no action information today, and that stays so: the snapshot's `timeline` never reaches the scene or the animator.
 - Only the nucleic layers (`acids`, `pairings`) are redrawn per frame. Actors, labels and contacts keep their CSS transitions.
 
 ## 4. What is interpolated
@@ -59,6 +60,8 @@ A range that is entirely new, or entirely gone, has no shared part. Its anchor i
 3. **Otherwise the middle:** an isolated bubble opens from its centre.
 
 Removal runs the same rule backwards.
+
+Every rule above reads strand state and coordinates of A and B. None of them is a case for an action. "A gap opens from the break" is rule 1 applied to a missing range that touches a break site; the same rule applies whatever produced that range.
 
 ### 4.3 A strand between its own axis and a pairing
 
@@ -92,6 +95,10 @@ A travelling stretch has one extra number: how far it has moved from its own mol
 
 ## 7. Testing
 
+- **No knowledge of actions:**
+  - the frame function's signature takes two scenes and `t`, nothing else;
+  - two mechanisms that reach the same pair of states through different actions (for example a strand present after `extend` and after a different sequence that leaves the same ranges) produce identical frames at every `t`;
+  - a static check that the animation modules of `svg` and `react` import no action, registry or timeline type from the core.
 - **Pure:** `t = 0` equals A's geometry and `t = 1` equals B's; fronts are monotonic; a growing tract's drawn length never decreases; the shared part of a set never changes.
 - **Invariant (#44):** unchanged. After the animation the DOM is a clean render of B, for every pair of steps.
 - **Real browser (`npm run check:browser`):** sample mid-flight for the HR steps: the paired strand lies between its two positions, the nascent path is longer than at the start and shorter than at the end, and the `<path>` nodes are the same before and after.
