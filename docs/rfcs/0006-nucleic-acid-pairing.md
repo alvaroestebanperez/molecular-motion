@@ -131,7 +131,7 @@ alignments:
 
 | Action | Added rule |
 |---|---|
-| `anneal` | fails if any strand in the bubble is paired in trans: `unpair` first |
+| `anneal` | fails if a strand it would close is paired in trans: `unpair` first. An optional `span` closes only part of the bubble |
 | `resect` | fails across nucleotides paired in trans |
 | `unwind` | unchanged. An adjacent span merges into the existing bubble, which is how a bubble grows |
 | `degrade` (of a nucleic acid) | removes its pairings, as it removes edges and occupancies |
@@ -166,7 +166,7 @@ The nascent nucleotides fill `missing` coordinates of their own molecule. If the
 RFC 0004 forbids `extend` at a double-strand break because the 3′ end and its template lie on different fragments. That remains the default and becomes conditional:
 
 - `extend` at a DSB is allowed when the 3′ end is **paired in trans** (§6.1), or when the break is **bridged**.
-- A DSB is *bridged* when one strand is present at both nucleotides flanking the break, at least one of them is `nascent`, and that strand is paired in cis on both sides. Resection removed the original flanks, so only synthesis across the break, followed by annealing, satisfies this.
+- A DSB is *bridged* for a 3′ end when the template strand is present at both nucleotides flanking the break, at least one of them is `nascent`, and the 3′ end being extended is paired in cis with it. Resection removed the original flanks, so only synthesis across the break, followed by annealing to the other fragment, satisfies this. The template's far flank is necessarily unpaired: it is what is about to be copied.
 - `ligate` clears a DSB only when both strands are continuous across it. The existing gap guard already checks that.
 - "Bridged" is computed on demand from `missing`, `nascent`, `open` and `pairings`, including the cis-continuity condition. Nothing about it is persisted. As in RFC 0004, the nicks where new and old DNA meet are not separate lesions: the break site carries the lesion until `ligate`.
 
@@ -196,7 +196,7 @@ Starting state, from the current example: `chromosome` (length 80), DSB at 40, 1
 | 10 | `extend chromosome.break, strand: top, length: 18` | `chromosome.top [40, 58)` nascent, template in cis | RFC 0004 |
 | 11 | `ligate chromosome.break` | lesion cleared | RFC 0001 |
 
-The final state is an intact chromosome with two `nascent` tracts and an untouched sister. It is the fold of the eleven actions. Removing any of them makes a later one fail.
+The final state is an intact chromosome with two `nascent` tracts and an untouched sister. It is the fold of the eleven actions. Removing any of them makes a later one fail or leaves a different final state (without step 8 the sister simply stays open).
 
 ## 9. Generality check (not implemented by this RFC)
 
@@ -206,7 +206,7 @@ The final state is an intact chromosome with two `nascent` tracts and an untouch
 | **R-loop** (transcript or guide RNA in a duplex) | `open` on the DNA, a pairing from the RNA into it | no |
 | **Second-end capture** | the displaced donor strand pairs with the other overhang: a second `pair` | no |
 | **Double Holliday junction** | after second-end capture, synthesis and ligation: both strands of one molecule paired in trans with both strands of the other over one range | no |
-| **Branch migration** | `unwind` ahead, `pair`, `unpair` behind, `anneal` | no, but four actions per increment (D6) |
+| **Branch migration** | `unwind` ahead, `pair`, `unpair` behind, `anneal { span }` to close only part of a bubble | no, but four actions per increment (D6) |
 | **dHJ dissolution** (non-crossover) | `unpair` both pairings, `anneal` both molecules | no |
 | **Single-strand annealing, microhomology** | a molecule aligned with itself; pairing across the break | state: no. The 3′ flaps need a new trimming action |
 | **Hairpin, cruciform** | self-alignment `opposite`; a strand pairs with itself | state: no. Rendering excluded by RFC 0004 |

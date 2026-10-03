@@ -2,7 +2,7 @@ import {
   addInteraction, addOccupancy, boundTo, detachAnonymous, interactionId, interfaceUse, occupancyId, partnersOf, releaseAll,
 } from './bindings';
 import { defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
-import { addPairing, alignedSpan, alignmentRelates, brokenPairings, pairingConflicts, removePairings } from './pairings';
+import { addPairing, alignedSpan, alignmentRelates, brokenPairings, pairingConflicts, partnerOf, removePairings } from './pairings';
 import { actorIdOf, instanceDefinition } from './instances';
 import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
@@ -399,6 +399,7 @@ function strandTarget(reference: string, ctx: ApplyContext) {
 }
 
 const missingOn = (state: NucleicState, strand: StrandId) => strandIntervals(state.missing, strand);
+const spanLabel = (span: StrandSpan) => `${span.acid} ${span.strand} strand ${span.from}–${span.to}`;
 const rangeLabel = (strand: StrandId, range: Interval) => `${strand} strand ${range.from}–${range.to}`;
 
 interface ResectAction extends ActionSpec { target: string; length: number }
@@ -440,20 +441,18 @@ export const resect = definePrimitive<ResectAction>({
 interface ExtendAction extends ActionSpec { target: string; length: number; strand?: StrandId }
 export const extend = definePrimitive<ExtendAction>({
   type: 'extend',
-  description: 'Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the opposite strand.',
+  description: 'Synthesise nucleotides 5′→3′ from a 3′ end at a site into a gap, copying the strand that 3′ end is paired with: its own molecule\'s, or another molecule\'s through an existing pairing, which it prolongs.',
   fields: {
     target: field.site({ required: true, description: 'Site with a point coordinate (at) where the 3′ end sits.' }),
     length: field.integer({ required: true, min: 1, description: 'Nucleotides added.' }),
     strand: field.enum(['top', 'bottom'], { description: 'Strand to extend; needed only when both offer a 3′ end.' }),
   },
   presentation: { verb: 'extends', tone: 'activating' },
-  validate(action, ctx) { requireCoordinate(action.target, ctx, { point: true, duplex: true }); },
+  validate(action, ctx) { requireCoordinate(action.target, ctx, { point: true }); },
   apply(_state, action, ctx) {
-    if (ctx.site(action.target).lesion === 'double-strand-break') {
-      ctx.fail(`extension at a double-strand break needs a template from another molecule, which this model does not represent ("${action.target}")`);
-    }
-    const { site, actor, state, length } = strandTarget(action.target, ctx);
+    const { acid, site, actor, state, length } = strandTarget(action.target, ctx);
     const at = site.at!;
+    const duplex = nucleicForm(acid) === 'duplex';
     const nascentRun = (strand: StrandId) => strandIntervals(state.nascent, strand);
     // The 3′ end that faces a gap at the site, past anything already synthesised from it.
     const gapFrom = (strand: StrandId): Interval | undefined => {
@@ -467,21 +466,88 @@ export const extend = definePrimitive<ExtendAction>({
       const gap = missing.find(item => item.to === end);
       return gap && end < length ? gap : undefined;
     };
-    const candidates = (['top', 'bottom'] as const).filter(strand => (!action.strand || action.strand === strand) && gapFrom(strand));
+    const strands: readonly StrandId[] = duplex ? ['top', 'bottom'] : ['top'];
+    const candidates = strands.filter(strand => (!action.strand || action.strand === strand) && gapFrom(strand));
     if (!candidates.length) ctx.fail(`no 3′ end facing a gap${action.strand ? ` on the ${action.strand} strand` : ''} at "${action.target}"`);
+    // The template is whatever the 3′-terminal nucleotide is paired with (RFC 0006 §6.1): nothing is searched for.
+    const terminal = (strand: StrandId) => {
+      const gap = gapFrom(strand)!;
+      const nucleotide = strand === 'top' ? { from: gap.from - 1, to: gap.from } : { from: gap.to, to: gap.to + 1 };
+      return partnerOf(_state, ctx.definition, { acid: actor.id, strand, ...nucleotide })[0]!;
+    };
+    if (ctx.site(action.target).lesion === 'double-strand-break') {
+      // Across a break the 3′ end and its own molecule's template lie on different fragments (RFC 0004 §5).
+      // They are joined only when the template strand bridges the break and the 3′ end is paired with it.
+      const flank = (strand: StrandId, nucleotide: number) => !overlapsInterval(missingOn(state, strand), { from: nucleotide, to: nucleotide + 1 });
+      const bridged = (strand: StrandId) => {
+        const template = otherStrand(strand);
+        return terminal(strand).partner === 'cis' && flank(template, at - 1) && flank(template, at)
+          && Boolean(intervalAt(nascentRun(template), at - 1) ?? intervalAt(nascentRun(template), at));
+      };
+      if (!candidates.some(strand => terminal(strand).partner === 'trans' || bridged(strand))) {
+        ctx.fail(`extension at a double-strand break needs a template from another molecule: pair the 3′ end first, or anneal a strand that bridges the break ("${action.target}")`);
+      }
+      if (candidates.length === 1 && terminal(candidates[0]!).partner !== 'trans' && !bridged(candidates[0]!)) ctx.fail(`the ${candidates[0]} strand has no template across the break at "${action.target}"`);
+    }
     if (candidates.length > 1) ctx.fail(`both strands have a 3′ end facing a gap at "${action.target}"; set strand`);
     const strand = candidates[0]!;
     const gap = gapFrom(strand)!;
     if (action.length > gap.to - gap.from) ctx.fail(`extending ${action.length} nt overfills the ${gap.to - gap.from}-nt gap on the ${strand} strand`);
     const range = strand === 'top' ? { from: gap.from, to: gap.from + action.length } : { from: gap.to - action.length, to: gap.to };
+    const end = terminal(strand);
+    const fill = () => {
+      state.missing = withStrandIntervals(state.missing, strand, subtractInterval(missingOn(state, strand), range));
+      state.nascent = withStrandIntervals(state.nascent, strand, addInterval(nascentRun(strand), range));
+    };
+    if (end.partner === 'trans') {
+      // Prolong the pairing that holds the 3′ end, along the same correspondence. No other partner is considered.
+      const own: StrandSpan = { acid: actor.id, strand, ...range };
+      const template = continuePairing({ from: end.from, to: end.to }, end.with, own);
+      const donorLength = nucleicLength(instanceDefinition(ctx.definition, template.acid)!);
+      if (template.from < 0 || template.to > donorLength) ctx.fail(`extending ${action.length} nt runs past the end of the template (${spanLabel({ ...template, from: Math.max(template.from, 0), to: Math.min(template.to, donorLength) })})`);
+      const aligned = ctx.definition.alignments.some(item => {
+        const mapped = alignedSpan(item, own, template.acid);
+        return mapped && mapped.strand === template.strand && mapped.from === template.from && mapped.to === template.to;
+      });
+      if (!aligned) ctx.fail(`extending ${action.length} nt runs past the alignment between "${actor.id}" and "${template.acid}"`);
+      const conflict = pairingConflicts(_state, ctx.definition, template);
+      if (conflict) ctx.fail(`no template: ${conflict}`);
+      // The new strand is paired with its template and with nothing else: where its own molecule's other
+      // strand is present, the two stay unpaired until an explicit anneal (RFC 0006 §6.2).
+      const facing = duplex ? subtractAll([range], missingOn(state, otherStrand(strand))) : [];
+      fill();
+      state.open = facing.reduce((open, item) => addInterval(open, item), state.open);
+      writeNucleicState(actor, state);
+      addPairing(_state, own, template);
+      requireOccupantsFit(_state, ctx);
+      requirePairingsHold(_state, ctx, actor.id);
+      requirePairingsHold(_state, ctx, template.acid);
+      return;
+    }
+    if (!duplex) ctx.fail(`no template: "${actor.id}" is single-stranded, so its 3′ end must be paired with another molecule`);
     if (overlapsInterval(missingOn(state, otherStrand(strand)), range)) ctx.fail(`no template: the ${otherStrand(strand)} strand is missing across ${range.from}–${range.to}`);
-    state.missing = withStrandIntervals(state.missing, strand, subtractInterval(missingOn(state, strand), range));
-    state.nascent = withStrandIntervals(state.nascent, strand, addInterval(nascentRun(strand), range));
+    fill();
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
   },
 });
+
+/** Parts of `list` not covered by any of `cuts`. */
+const subtractAll = (list: readonly Interval[], cuts: readonly Interval[]) => cuts.reduce<Interval[]>((rest, cut) => subtractInterval(rest, cut), [...list]);
+
+/**
+ * The strand span that continues a pairing over `next`, given one paired nucleotide and its partner.
+ * Strands of different names run the same way along the coordinate; strands of the same name run mirrored.
+ */
+function continuePairing(paired: Interval, partner: StrandSpan, next: StrandSpan): StrandSpan {
+  if (partner.strand !== next.strand) {
+    const offset = partner.from - paired.from;
+    return { ...partner, from: next.from + offset, to: next.to + offset };
+  }
+  const sum = partner.from + paired.from;
+  return { ...partner, from: sum - next.to + 1, to: sum - next.from + 1 };
+}
 
 interface UnwindAction extends ActionSpec { target: string; length?: number }
 export const unwind = definePrimitive<UnwindAction>({
@@ -515,19 +581,26 @@ export const unwind = definePrimitive<UnwindAction>({
   },
 });
 
-interface AnnealAction extends ActionSpec { target: string }
+interface AnnealAction extends ActionSpec { target: string; span?: [number, number] }
 export const anneal = definePrimitive<AnnealAction>({
   type: 'anneal',
-  description: 'Re-pair the unwound bubble at a site.',
-  fields: { target: field.site({ required: true, description: 'Site with a coordinate inside or at the edge of the bubble.' }) },
+  description: 'Re-pair the unwound bubble at a site, or only part of it.',
+  fields: {
+    target: field.site({ required: true, description: 'Site with a coordinate inside or at the edge of the bubble.' }),
+    span: field.interval({ description: 'Close only these nucleotides of the bubble (a junction moving along it). Without it the whole bubble closes.' }),
+  },
   presentation: { verb: 'anneals' },
   validate(action, ctx) { requireCoordinate(action.target, ctx, { duplex: true }); },
   apply(_state, action, ctx) {
     const { site, actor, state } = strandTarget(action.target, ctx);
     const probe = siteInterval(site)!;
-    const bubble = state.open.find(region => region.from <= probe.to && probe.from <= region.to);
-    if (!bubble) ctx.fail(`no unwound region at "${action.target}" to anneal`);
-    state.open = state.open.filter(region => region !== bubble);
+    const bubble = state.open.find(region => region.from <= probe.to && probe.from <= region.to)
+      ?? ctx.fail(`no unwound region at "${action.target}" to anneal`);
+    if (action.span) {
+      const part = { from: action.span[0], to: action.span[1] };
+      if (part.from < bubble.from || part.to > bubble.to) ctx.fail(`${part.from}–${part.to} is not inside the unwound region ${bubble.from}–${bubble.to} at "${action.target}"`);
+      state.open = subtractInterval(state.open, part);
+    } else state.open = state.open.filter(region => region !== bubble);
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
@@ -541,8 +614,6 @@ function requirePairingsHold(state: MechanismState, ctx: ApplyContext, acid: str
   const broken = brokenPairings(state, ctx.definition, acid);
   if (broken) ctx.fail(broken);
 }
-
-const spanLabel = (span: StrandSpan) => `${span.acid} ${span.strand} strand ${span.from}–${span.to}`;
 
 interface PairAction extends ActionSpec { target: string; with: string; strand?: StrandId; span?: [number, number]; alignment?: string }
 export const pair = definePrimitive<PairAction>({
