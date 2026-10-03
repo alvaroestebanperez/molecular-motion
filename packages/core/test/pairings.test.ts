@@ -15,6 +15,9 @@ const ACTORS = [
   { id: 'probe', type: 'dna', nucleic: { length: 20, form: 'single' }, sites: [{ id: 'all', span: [0, 20] }] },
   { id: 'guide', type: 'rna', nucleic: { length: 20 }, sites: [{ id: 'spacer', span: [0, 20] }] },
   { id: 'nuclease', type: 'protein' },
+  { id: 'rad51', type: 'protein', copies: 2, footprint: { length: 3, form: 'any' } },
+  { id: 'rpa', type: 'protein', copies: 2, footprint: { length: 6, form: 'single' } },
+  { id: 'tf', type: 'protein', footprint: { length: 4, form: 'duplex' } },
 ];
 const ALIGNMENTS = [
   { id: 'sister', between: ['chromosome', 'sister'], range: [0, 80] },
@@ -210,6 +213,51 @@ describe('strand actions never break a pairing silently', () => {
 
   it('removes the pairings of a degraded molecule', () => {
     expect(mechanism([[...invaded, { type: 'degrade', actor: 'sister' }]]).at(0).pairings).toEqual({});
+  });
+});
+
+describe('where the layers meet (RFC 0006 §7)', () => {
+  it('engagement with the donor is occupancy, not pairing', () => {
+    const engaged: ActionNode[] = [...resected,
+      { type: 'occupy', actor: 'rad51#1', target: 'chromosome', span: [40, 43] },
+      { type: 'occupy', actor: 'rad51#1', target: 'sister', span: [40, 43] },
+    ];
+    const snapshot = mechanism([engaged]).at(0);
+    expect(snapshot.pairings).toEqual({});
+    expect(Object.values(snapshot.occupancy).map(item => [item.id, item.strand])).toEqual([['rad51#1@chromosome', 'bottom'], ['rad51#1@sister', 'both']]);
+    // A footprint without a form restriction stays through unwinding and pairing, and leaves by vacate.
+    const paired = mechanism([[...engaged, { type: 'unwind', target: 'sister.donor' }, { type: 'invade', target: 'chromosome.right-overhang', with: 'sister' }]]).at(0);
+    expect(Object.keys(paired.occupancy)).toEqual(['rad51#1@chromosome', 'rad51#1@sister']);
+    expect(Object.keys(paired.pairings)).toEqual(['chromosome.bottom~sister.top']);
+    expect(() => mechanism([[...engaged, { type: 'vacate', actor: 'rad51#1' }]])).toThrow(/"rad51#1" is on several nucleic acids; name one with target/);
+    expect(Object.keys(mechanism([[...engaged, { type: 'vacate', actor: 'rad51#1', target: 'sister' }]]).at(0).occupancy)).toEqual(['rad51#1@chromosome']);
+  });
+
+  it('a single-stranded footprint cannot stay on a strand that pairs', () => {
+    expect(() => mechanism([[...resected, { type: 'unwind', target: 'sister.donor' },
+      { type: 'occupy', actor: 'rpa#1', target: 'chromosome', span: [40, 46] },
+      { type: 'invade', target: 'chromosome.right-overhang', with: 'sister' },
+    ]])).toThrow(/"rpa#1" occupies chromosome 40–46 and would no longer fit \(it needs single-stranded DNA, but 40–46 is paired with sister top strand 40–46\); vacate it first/);
+  });
+
+  it('single means unpaired by any means: the displaced strand of a bubble takes it, and must lose it before annealing', () => {
+    const coated: ActionNode[] = [...invaded, { type: 'occupy', actor: 'rpa#1', target: 'sister', span: [40, 46] }];
+    expect(mechanism([coated]).at(0).occupancy['rpa#1@sister']!.strand).toBe('bottom');
+    expect(() => mechanism([[...invaded, { type: 'occupy', actor: 'rpa#1', target: 'sister', span: [40, 46], strand: 'top' }]]))
+      .toThrow(/it needs single-stranded DNA, but 40–46 is paired with chromosome bottom strand 40–46/);
+    expect(() => mechanism([[...coated, { type: 'unpair', target: 'sister' }, { type: 'anneal', target: 'sister.donor' }]]))
+      .toThrow(/"rpa#1" occupies sister 40–46 and would no longer fit \(it needs single-stranded DNA, but the top strand is present within 40–46\); vacate it first/);
+  });
+
+  it('duplex means paired in cis or in trans, and with each other when it covers both strands', () => {
+    const onHeteroduplex: ActionNode[] = [...invaded, { type: 'occupy', actor: 'tf', target: 'chromosome', span: [44, 48], strand: 'bottom' }];
+    expect(mechanism([onHeteroduplex]).at(0).occupancy['tf@chromosome']!.strand).toBe('bottom');
+    expect(() => mechanism([[...onHeteroduplex, { type: 'unpair', target: 'sister' }]]))
+      .toThrow(/"tf" occupies chromosome 44–48 and would no longer fit \(it needs duplex DNA across 44–48\); vacate it first/);
+    expect(() => mechanism([[...invaded, { type: 'occupy', actor: 'tf', target: 'sister', span: [44, 48] }]]))
+      .toThrow(/it needs both strands paired with each other, but the top strand 44–48 is paired with chromosome/);
+    expect(() => mechanism([[...invaded, { type: 'unpair', target: 'sister' }, { type: 'occupy', actor: 'tf', target: 'sister', span: [44, 48] }]]))
+      .toThrow(/it needs paired DNA, but 44–48 is unwound/);
   });
 });
 

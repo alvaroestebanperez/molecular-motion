@@ -40,9 +40,11 @@ export interface ActorSite {
 export interface InterfaceDefinition { id: string; valence?: number }
 
 /**
- * Nucleotides one copy covers on a nucleic acid, and what the covered strand(s) must be (RFC 0005 §5):
- * `single` needs its strand present and the partner missing, `duplex` both present and paired, `any`
- * only the occupied strand present. Authored data: the core knows no protein's footprint.
+ * Nucleotides one copy covers on a nucleic acid, and what the covered strand(s) must be (RFC 0005 §5,
+ * RFC 0006 §7): `single` needs its strand unpaired, `duplex` needs it paired (with its own molecule or
+ * another), `any` only needs the occupied strand present. `any` is the absence of a form restriction
+ * on this footprint, not a claim that the protein binds every form. Authored data: the core knows no
+ * protein's footprint.
  */
 export interface FootprintDefinition { length: number; form?: FootprintForm }
 

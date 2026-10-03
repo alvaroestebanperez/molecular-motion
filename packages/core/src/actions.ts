@@ -126,7 +126,7 @@ export const occupy = definePrimitive<OccupyAction>({
   },
   apply(state, action, ctx) {
     const actor = ctx.requirePresent(action.actor);
-    const { acid, site, length } = occupancyTarget(action.target, ctx);
+    const { acid, site } = occupancyTarget(action.target, ctx);
     if (state.occupancy[occupancyId(actor.id, acid)]) ctx.fail(`"${actor.id}" is already on ${acid}; vacate it first`);
     const footprint = instanceDefinition(ctx.definition, actor.id)!.footprint;
     let span: { from: number; to: number };
@@ -136,12 +136,11 @@ export const occupy = definePrimitive<OccupyAction>({
     if (!action.span && footprint && span.to - span.from !== footprint.length) {
       ctx.fail(`"${actor.id}" covers ${footprint.length} nt but "${action.target}" spans ${span.to - span.from}; give a span, or use coat for several copies`);
     }
-    const nucleic = readNucleicState(ctx.actor(acid));
-    const strand = action.strand ?? defaultStrand(nucleic, span, occupantForm(ctx, actor.id), ctx.fail);
+    const strand = action.strand ?? defaultStrand(state, ctx.definition, acid, span, occupantForm(ctx, actor.id), ctx.fail);
     placeOccupancy(state, ctx, {
       id: occupancyId(actor.id, acid), instance: actor.id, acid, ...(site && { site: site.id }), span, strand,
       ...(action.orientation && { orientation: action.orientation }),
-    }, length);
+    });
     actor.visible = true;
   },
 });
@@ -166,7 +165,7 @@ export const coat = definePrimitive<CoatAction>({
     }
   },
   apply(state, action, ctx) {
-    const { acid, site, length } = occupancyTarget(action.target, ctx);
+    const { acid, site } = occupancyTarget(action.target, ctx);
     const span = action.span ? { from: action.span[0], to: action.span[1] } : { from: site!.span![0], to: site!.span![1] };
     const sizes = action.actors.map(instance => instanceDefinition(ctx.definition, instance)!.footprint!.length);
     const total = sizes.reduce((sum, size) => sum + size, 0);
@@ -178,11 +177,11 @@ export const coat = definePrimitive<CoatAction>({
       const size = sizes[index]!;
       const covered = action.orientation === 'reverse' ? { from: cursor - size, to: cursor } : { from: cursor, to: cursor + size };
       cursor = action.orientation === 'reverse' ? covered.from : covered.to;
-      const strand = action.strand ?? defaultStrand(readNucleicState(ctx.actor(acid)), covered, occupantForm(ctx, instance), ctx.fail);
+      const strand = action.strand ?? defaultStrand(state, ctx.definition, acid, covered, occupantForm(ctx, instance), ctx.fail);
       placeOccupancy(state, ctx, {
         id: occupancyId(instance, acid), instance, acid, ...(site && { site: site.id }), span: covered, strand,
         ...(action.orientation && { orientation: action.orientation }),
-      }, length);
+      });
       actor.visible = true;
     });
   },
@@ -433,7 +432,7 @@ export const resect = definePrimitive<ResectAction>({
       state.nascent = withStrandIntervals(state.nascent, strand, subtractInterval(strandIntervals(state.nascent, strand), range));
     }
     writeNucleicState(actor, state);
-    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
   },
 });
@@ -479,7 +478,7 @@ export const extend = definePrimitive<ExtendAction>({
     state.missing = withStrandIntervals(state.missing, strand, subtractInterval(missingOn(state, strand), range));
     state.nascent = withStrandIntervals(state.nascent, strand, addInterval(nascentRun(strand), range));
     writeNucleicState(actor, state);
-    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
   },
 });
@@ -511,7 +510,7 @@ export const unwind = definePrimitive<UnwindAction>({
     if (overlapsInterval(state.open, range)) ctx.fail(`${range.from}–${range.to} is already unwound`);
     state.open = addInterval(state.open, range);
     writeNucleicState(actor, state);
-    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
   },
 });
@@ -530,7 +529,7 @@ export const anneal = definePrimitive<AnnealAction>({
     if (!bubble) ctx.fail(`no unwound region at "${action.target}" to anneal`);
     state.open = state.open.filter(region => region !== bubble);
     writeNucleicState(actor, state);
-    requireOccupantsFit(_state, ctx, actor.id, nucleicLength(instanceDefinition(ctx.definition, actor.id)!));
+    requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
   },
 });
@@ -591,6 +590,7 @@ export const pair = definePrimitive<PairAction>({
       if (conflict) ctx.fail(`cannot pair ${spanLabel(own)} with ${spanLabel(partner)}: ${conflict}`);
     }
     addPairing(state, own, partner);
+    requireOccupantsFit(state, ctx);
   },
 });
 
@@ -620,6 +620,7 @@ export const unpair = definePrimitive<UnpairAction>({
     const strands: readonly StrandId[] = named ? [named] : ['top', 'bottom'];
     const removed = strands.reduce((sum, strand) => sum + removePairings(state, { acid, strand, ...range }), 0);
     if (!removed) ctx.fail(`nothing is paired with ${acid} ${named ? `${named} strand ` : ''}${range.from}–${range.to}`);
+    requireOccupantsFit(state, ctx);
   },
 });
 
