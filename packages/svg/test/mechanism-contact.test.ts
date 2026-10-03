@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism, parseMechanism, type Occupancy } from '@molecular-motion/core';
 import { buildSvgScene, firstContact, PROTEIN_MORPHOLOGIES, proteinGeometry, proteinOutlineWidth, renderSvg, type SvgScene } from '../src';
 import { actorContactShape, helixY, HELIX, strandMissingAt, type SceneNucleicAcid } from '../src/scene';
 import { outline, outlineDistance, penetration, type Placed } from './contact';
@@ -23,6 +23,12 @@ const onAcid = (actor: SvgScene['actors'][number], acid: string) => actor.boundT
 const surface = (acid: SceneNucleicAcid, x: number, width: number) => Math.min(
   ...([0, 1] as const).filter(strand => !strandMissingAt(acid, strand, x)).map(strand => helixY(acid, strand, x, width) - (strand === 0 ? HELIX.tube : HELIX.backTube) / 2),
 );
+/**
+ * True for an occupant whose strand is drawn beside another molecule (RFC 0006 §10): it rides that
+ * strand between the molecules, so the backbone rules below do not apply to it (see pairings.test.ts).
+ */
+const riding = (scene: SvgScene, occupancy: readonly Occupancy[], actor: SvgScene['actors'][number]) => occupancy.some(item => item.instance === actor.id && item.span
+  && scene.nucleicAcids.find(acid => acid.id === item.acid)?.away?.some(range => (item.strand === 'both' || item.strand === range.strand) && range.from <= item.span!.from && item.span!.to <= range.to));
 const placed = (actor: SvgScene['actors'][number]): Placed => ({ ...actorContactShape(actor), margin: 0, x: actor.x, y: actor.y });
 
 describe('first contact', () => {
@@ -60,12 +66,10 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
   it('every protein bound to a DNA site rests on the backbone, the first one at the site itself', () => {
     let checked = 0;
     const mechanism = compiled(name);
-    steps.forEach((scene, index) => {
-      const acid = scene.nucleicAcids[0];
-      if (!acid) return;
+    steps.forEach((scene, index) => scene.nucleicAcids.forEach(acid => {
       const top = (x: number) => surface(acid, x, scene.width);
-      const occupancy = Object.values(mechanism.at(index).occupancy);
-      const onSite = scene.actors.filter(actor => onAcid(actor, acid.id));
+      const occupancy = Object.values(mechanism.at(index).occupancy).filter(item => item.acid === acid.id);
+      const onSite = scene.actors.filter(actor => onAcid(actor, acid.id) && !riding(scene, occupancy, actor));
       for (const actor of onSite) {
         // Signed clearance between the actor's outline and the backbone surface below it.
         const clearance = Math.min(...outline(placed(actor)).map(point => top(point.x) - point.y));
@@ -92,19 +96,20 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
         if (resected.length) expect(contact.from.x, `${scene.title}: ${first.id}`).toBeLessThanOrEqual(Math.max(...resected.map(range => range.x1)));
         else expect(Math.abs(contact.from.x - site.x), `${scene.title}: ${first.id}`).toBeLessThanOrEqual(30);
       }
-    });
+    }));
     if (steps.some(scene => scene.nucleicAcids.length)) expect(checked).toBeGreaterThan(0);
   });
 
   it('actors docked to another actor never sink into the DNA', () => {
-    for (const scene of steps) {
-      const acid = scene.nucleicAcids[0];
-      if (!acid) continue;
+    const mechanism = compiled(name);
+    steps.forEach((scene, index) => scene.nucleicAcids.forEach(acid => {
       const top = (x: number) => surface(acid, x, scene.width);
-      for (const actor of scene.actors.filter(item => !item.ghost && !onAcid(item, acid.id))) {
+      const occupancy = Object.values(mechanism.at(index).occupancy);
+      // Every actor laid out above a molecule stays above its surface; one resting on a lower molecule is simply below it.
+      for (const actor of scene.actors.filter(item => !item.ghost && !onAcid(item, acid.id) && item.y < acid.y && !riding(scene, occupancy, item))) {
         expect(Math.min(...outline(placed(actor)).map(point => top(point.x) - point.y)), `${scene.title}: ${actor.id}`).toBeGreaterThanOrEqual(0);
       }
-    }
+    }));
   });
 
   it('no dashed connection stands in for contact', () => {
@@ -121,7 +126,7 @@ describe.each(MECHANISMS)('%s: binding reads as physical contact', name => {
   it('is deterministic and keeps actors steady between steps', () => {
     const again = scenes(name);
     steps.forEach((scene, index) => expect(renderSvg(again[index]!)).toBe(renderSvg(scene)));
-    const shape = (scene: SvgScene) => JSON.stringify(scene.nucleicAcids.map(acid => [acid.missing, acid.open]));
+    const shape = (scene: SvgScene) => JSON.stringify(scene.nucleicAcids.map(acid => [acid.missing, acid.open, acid.away]));
     for (let index = 1; index < steps.length; index++) {
       const before = new Map(steps[index - 1]!.actors.filter(actor => !actor.ghost).map(actor => [actor.id, actor]));
       // Resection or unwinding reshapes the backbone, so actors resting on it may settle with it.
