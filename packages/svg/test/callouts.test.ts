@@ -129,6 +129,9 @@ describe('leader routing: open acceptance cases', () => {
   it.todo('HR synthesis: the Pol δ leader goes around RPA instead of through it');
   // p53 "Proteasome association": the Ub chain callout is squeezed between p53 and the 26S, with part of it covered.
   it.todo('p53 proteasome association: the Ub chain callout clears both p53 and the 26S');
+  // Frozen schema v3 HR document, "RAD51 filament formation": the chain callout found a place clear of every body,
+  // but it lies on the DNA strand, which chain callouts do not treat as an obstacle. It is not in `calloutConflicts`.
+  it.todo('HR v3 filament: the RAD51 chain callout clears the DNA strand');
 });
 
 describe('upcoming actors are soft obstacles', () => {

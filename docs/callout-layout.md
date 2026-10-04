@@ -34,9 +34,10 @@ writes `artifacts/callout-diff/remaining-conflicts.json` (every example, wide an
 
 ## Open acceptance cases
 
-Two hard conflicts remain on the wide canvas. They are acceptance cases for a future generic leader-routing system (a waypoint or a different curve), not to be solved with extra candidate places or per-actor exceptions:
+Three cases remain on the wide canvas. They are acceptance cases for a future generic leader-routing system (a waypoint or a different curve), not to be solved with extra candidate places or per-actor exceptions:
 
 - **HR, synthesis on the sister chromatid.** Every place for the Pol δ callout has a conflict, so its leader runs through an RPA ring.
 - **p53, proteasome association.** The Ub chain callout is squeezed between p53 and the 26S, with part of it covered.
+- **HR (frozen schema v3 document), RAD51 filament formation.** The "RAD51 chain" callout found a place clear of every body, but it lies on the DNA strand: chain callouts do not treat a nucleic acid as an obstacle. This one is not recorded in `calloutConflicts`, and its render baseline is kept as it is.
 
-Both are asserted as recorded diagnostics, with `it.todo` entries for the routed result, in `packages/svg/test/callouts.test.ts`.
+The first two are asserted as recorded diagnostics. All three have an `it.todo` for the routed result in `packages/svg/test/callouts.test.ts`.
