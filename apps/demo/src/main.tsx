@@ -287,7 +287,8 @@ function PlaygroundPage() {
       </label>
       <div className="playground__preview">
         {result.definition
-          ? <MolecularMechanism key={active} definition={result.definition} />
+          // The same presentation choices as the mechanism pages, by the id of what is being edited.
+          ? <MolecularMechanism key={active} definition={result.definition} proteinVisuals={PROTEIN_VISUALS[result.definition.mechanism.id]} />
           : <pre className="panel error" role="alert">{result.error}</pre>}
       </div>
     </div>
