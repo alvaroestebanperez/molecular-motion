@@ -42,10 +42,17 @@ describe('repeated modification presentation', () => {
     expect(x+w).toBeGreaterThanOrEqual(actor.x+r); expect(y+h).toBeGreaterThanOrEqual(actor.y+b);
   });
   it('absent profiles preserve the exact legacy rendering, including PAR', () => {
-    for (const name of ['parp1-ssb-repair','homologous-recombination','egfr-dimerization']) {
+    // Documents whose modifications have no profile render the same with or without the catalog.
+    for (const name of ['parp1-ssb-repair','homologous-recombination']) {
       const compiled = compileMechanism(parseMechanism(readFileSync(new URL(`../../../examples/${name}.yaml`, import.meta.url), 'utf8')));
       for (let i=0;i<compiled.length;i++) expect(renderSvg(buildSvgScene(compiled.at(i), { modificationProfiles: {} }))).toBe(renderSvg(buildSvgScene(compiled.at(i))));
     }
+    // One that has a profiled tag falls back to the legacy badge when the catalog is emptied.
+    const egfr = compileMechanism(parseMechanism(readFileSync(new URL('../../../examples/egfr-dimerization.yaml', import.meta.url), 'utf8'))).at('autophosphorylation');
+    expect(renderSvg(buildSvgScene(egfr))).toContain('mm-modification--tag');
+    const plain = renderSvg(buildSvgScene(egfr, { modificationProfiles: {} }));
+    expect(plain).not.toContain('mm-modification--tag');
+    expect(plain).toContain('mm-modification--phosphorylation');
     const legacy = buildSvgScene(mechanism('ubiquitination').at(0), { modificationProfiles: {} });
     expect(legacy.actors[0]!.chain!.profile).toBeUndefined();
     expect(renderSvg(legacy)).toContain('class="mm-chain"');

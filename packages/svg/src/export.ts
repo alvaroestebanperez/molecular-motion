@@ -1,4 +1,4 @@
-import { molecularMotionCss, renderSvg, THEME_TOKENS, type RenderOptions } from './render';
+import { membraneSceneCss, molecularMotionCss, renderSvg, THEME_TOKENS, usesMembraneSceneCss, type RenderOptions } from './render';
 import { actorRepeatedMarker, type SvgScene } from './scene';
 
 export interface ExportOptions extends Pick<RenderOptions, 'idPrefix' | 'compact'> {
@@ -62,7 +62,7 @@ export function exportSvg(scene: SvgScene, options: ExportOptions = {}): string 
   const scale = options.scale ?? 1;
   const theme = options.theme ?? 'light';
   // Declared after the stylesheet and more specific than `.mm-svg`, so the chosen theme always wins.
-  const css = `${molecularMotionCss}\nsvg.mm-svg.mm-export{${THEME_TOKENS[theme]};width:auto;height:auto}`
+  const css = `${molecularMotionCss}${usesMembraneSceneCss(scene) ? `\n${membraneSceneCss}` : ''}\nsvg.mm-svg.mm-export{${THEME_TOKENS[theme]};width:auto;height:auto}`
     + `\n.mm-export *{animation:none!important;transition:none!important}`;
   const fill = options.background === false ? undefined : options.background === true || options.background === undefined ? 'var(--mm-canvas)' : options.background;
   const background = fill ? `<rect class="mm-export__background" x="${x}" y="${y}" width="${width}" height="${height}" fill="${escapeAttribute(fill)}"/>` : '';

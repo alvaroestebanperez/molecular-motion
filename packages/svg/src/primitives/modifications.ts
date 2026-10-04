@@ -33,7 +33,8 @@ export function renderModificationPrimitive(modification: { kind: ModificationVi
   const { kind } = modification;
   const unitLabel = MODIFICATION_LABELS[kind];
   const profile = resolveModificationVisualProfile({ id: kind, kind, label: MODIFICATION_LABELS[kind] });
-  if (profile) {
+  // A `tag` profile is this primitive's own labelled tag below; only chain markers take the repeated path.
+  if (profile && profile.marker !== 'tag') {
     const direction = options.direction ?? (Math.hypot(at.x, at.y) > 1e-6 ? at : { x: 0, y: -1 });
     const markers = repeatedMarkerGeometry(profile, modification.length ?? 1, Math.atan2(direction.y, direction.x), options.carrier ?? { particles: [] }, at);
     return renderRepeatedMarker(markers, unitLabel);

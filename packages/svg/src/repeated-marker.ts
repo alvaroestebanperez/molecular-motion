@@ -4,7 +4,8 @@ import { esc, round } from './primitives/shared';
 
 /** Presentation only: no biological names or actor identity enter this geometry. */
 export interface ModificationVisualProfile {
-  readonly marker: 'protein-surface' | 'bead';
+  /** `tag` is one small labelled disc adhered to the carrier's surface; the others repeat along a chain. */
+  readonly marker: 'protein-surface' | 'bead' | 'tag';
   readonly radius: number;
   readonly fill: string;
   readonly seed?: string;

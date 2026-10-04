@@ -65,6 +65,7 @@ function conflicts(scene: SvgScene, actor: SvgScene['actors'][number], side: -1 
   const pills = leads(scene).filter(item => item !== actor).map(item => labelBox(item) as Box);
   const padded: Box = [box[0] - 10, box[1] - 6, box[2] + 10, box[3] + 6];
   const bands = scene.nucleicAcids.map((acid): Box => [0, acid.y - HELIX.amplitude - HELIX.tube, scene.width, acid.y + HELIX.amplitude + HELIX.tube]);
+  const membranes = scene.membranes.map((membrane): Box => [0, membrane.y - 24, scene.width, membrane.y + 24]);
   const cross = (a: readonly { x: number; y: number }[], b: readonly { x: number; y: number }[]) => a.some((p, i) => i > 0 && b.some((q, j) => {
     if (j === 0) return false;
     const turn = (o: { x: number; y: number }, u: { x: number; y: number }, v: { x: number; y: number }) => Math.sign((u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x));
@@ -73,6 +74,8 @@ function conflicts(scene: SvgScene, actor: SvgScene['actors'][number], side: -1 
   return others.filter(other => meets(box, body(other))).length
     + pills.filter(pill => meets(padded, pill)).length
     + (drop ? bands.filter(band => meets(box, band)).length : 0)
+    + membranes.filter(band => meets(box, band)).length
+    + (membranes.some(band => leader.slice(0, -2).some(point => inside(band, point))) ? 1 : 0)
     + (others.some(other => on(other, leader[leader.length - 1]!)) ? 1 : 0)
     + others.filter(other => leader.slice(0, -2).some(point => on(other, point))).length
     + pills.filter(pill => leader.some(point => inside(pill, point))).length

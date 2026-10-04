@@ -7,7 +7,7 @@ import {
   actorInstances, anonymousAttachment, lesionStrands, partnerOf, partnersOf, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
   type Modification, type Point, type SiteStrand, type StrandId, nucleicForm,
 } from '@molecular-motion/core';
-import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
+import { contactOutline, firstContact, transmembraneGeometry, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
 
 /** An actor definition seen as one instance: `id` is the instance id, `visual` the definition id. */
@@ -65,6 +65,24 @@ export interface ScenePairingSegment {
 /** Every stretch between one pair of strands; `key` is the state's key, stable while the pairing grows. */
 export interface ScenePairing { key: string; segments: ScenePairingSegment[] }
 
+/**
+ * A membrane drawn by the scene. It comes from a compartment of kind `membrane`, never from an actor:
+ * the compartment gives the geometry, and actors in it are then placed on that geometry.
+ */
+export interface SceneMembrane {
+  /** Compartment id. */
+  id: string;
+  label: string;
+  /** Midplane of the bilayer; it runs the width of the canvas. The outer leaflet faces up. */
+  y: number;
+  /** The compartments on each side, when the document declares them. */
+  outside?: { id: string; label: string };
+  inside?: { id: string; label: string };
+}
+/** A small modification marker adhered to its carrier's surface, in the carrier's local coordinates. */
+export interface SceneTag { id: string; x: number; y: number; r: number; fill: string; label: string; site?: string }
+export type MembraneSide = 'outside' | 'inside';
+
 export interface SceneActor extends Point {
   /** Instance id (`rad51#3`); the actor id for single-copy actors. Keys the DOM. */
   id: string;
@@ -94,6 +112,10 @@ export interface SceneActor extends Point {
   badges: Modification[];
   /** Host-chosen drawing of this protein or complex (`SceneOptions.proteinVisuals`); absent by default. */
   visual?: ProteinActorVisual;
+  /** The membrane this actor spans (its compartment is of kind `membrane`): it is drawn crossing that bilayer. */
+  membrane?: string;
+  /** Modifications drawn as tags on the surface. A tag at a site sits on that site's anchor. */
+  tags?: SceneTag[];
   /** Occupies its span in reverse orientation (relative to top 5′→3′): the shape is drawn mirrored. */
   mirrored?: true;
   /** Visible copies of one definition share a callout: `lead` carries "label ×size", the others none. */
@@ -164,6 +186,8 @@ export interface SvgScene {
   pairings: ScenePairing[];
   /** Occupancies held away from where their instance is drawn; empty for most documents. */
   footprints: SceneFootprint[];
+  /** Membranes of the scene, one per compartment of kind `membrane`; empty for most documents. */
+  membranes: SceneMembrane[];
   /**
    * Callouts the layout could not place clear of everything, with the cost of the place it settled for
    * (`CALLOUT_COST`). Empty when every callout is clear. A record for review and tests; nothing is drawn from it.
@@ -445,6 +469,8 @@ export function chainCallout(actor: SceneActor, place: ChainCalloutPlace = actor
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
 const PALETTE = ['#8b78d0', '#5aa9a0', '#d5839a', '#dca064', '#7c9cc4', '#8fae86', '#c58fc9', '#6fa3c9'];
 const CHAIN_ANGLE = -0.45;
+/** Half the height a bilayer takes on the canvas, heads included: what a callout must stay off. */
+const MEMBRANE_HALF = 24;
 /** Docking directions for actors bound to another actor, in radians (SVG y grows downwards). */
 const SLOTS = [-0.08, -2.2, -0.95, -3.05, 0.75];
 const MOLECULE_SLOTS = [2.95, -2.6, 0.35];
@@ -478,12 +504,51 @@ export function moleculeTopology(key: string | undefined): SmallMoleculeTopology
   return key && Object.prototype.hasOwnProperty.call(SMALL_MOLECULE_TOPOLOGIES, key) ? SMALL_MOLECULE_TOPOLOGIES[key as keyof typeof SMALL_MOLECULE_TOPOLOGIES] : undefined;
 }
 
+/** Half-thickness reference only: a membrane-spanning actor is built in the local frame of a straight bilayer. */
+const SPANNING_MEMBRANE = { x: 0, y: 0, length: 400 } as const;
+/**
+ * Geometry of an actor that spans a membrane: one pass with a domain on each side, from the shared
+ * transmembrane geometry. Local frame: the origin is on the midplane, the outer side is up (−y).
+ */
+export function spanningGeometry(id: string, radius: number) {
+  return transmembraneGeometry({ visualSeed: id, membrane: SPANNING_MEMBRANE, along: SPANNING_MEMBRANE.length / 2, outside: { radius: Math.round(radius * .52) }, inside: { radius: Math.round(radius * .44) } });
+}
+
 /** Particles of an actor's body in local coordinates; the renderer draws exactly these. */
-export function actorParticles(id: string, type: ActorType, radius: number, molecule?: string, visual?: ProteinActorVisual): ProteinSphere[] {
+export function actorParticles(id: string, type: ActorType, radius: number, molecule?: string, visual?: ProteinActorVisual, membrane?: string): ProteinSphere[] {
+  if (type !== 'molecule' && membrane) return [...spanningGeometry(id, radius).particles];
   if (type !== 'molecule') return visual ? proteinVisualParticles(id, radius, type === 'complex' ? 32 : 28, visual) : proteinGeometry(id, radius, type === 'complex' ? 32 : 28);
   const topology = moleculeTopology(molecule);
   const atoms = topology ? smallMoleculeAtoms(topology, MOLECULE_ACTOR_SCALE) : moleculeAtoms(hashString(id), radius);
   return atoms.map(atom => ({ ...atom, rx: atom.r, ry: atom.r, rotation: 0, depth: 0 }));
+}
+
+/** The body of an actor without its chain or tags, with the outline included: what a site anchor lies on. */
+const actorBody = (actor: Shaped) => actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual, actor.membrane);
+
+/**
+ * The anchor of a named site: one deterministic point on the actor's visible surface and the direction
+ * leaving it, in local coordinates. It depends only on the actor's shape, the site id and the side, so a
+ * modification at the site and a partner bound to the site share it, whether or not the other is there.
+ * On a membrane-spanning actor the site lies on the domain of `side` (seeded when unknown), facing away
+ * from the bilayer; elsewhere it lies anywhere on the surface.
+ */
+export function siteAnchor(actor: Shaped, site: string, side?: MembraneSide): Point & { angle: number; side?: MembraneSide } {
+  const seed = hashString(`${actor.actor}::site::${site}`);
+  const body = actorBody(actor);
+  let centre = { x: 0, y: 0 }; let angle = (seed % 6283) / 1000; let facing = side;
+  if (actor.membrane) {
+    facing = side ?? (seed % 2 ? 'inside' : 'outside');
+    centre = spanningGeometry(actor.actor, actor.radius).attach[facing].point;
+    angle = (facing === 'inside' ? Math.PI / 2 : -Math.PI / 2) + ((Math.floor(seed / 2) % 1000) / 1000 - .5) * 1.5;
+  }
+  const [dx, dy] = [Math.cos(angle), Math.sin(angle)];
+  // The outermost surface point along the ray from the centre.
+  for (let t = actor.radius * 2.5; t >= 0; t -= .5) {
+    const [x, y] = [centre.x + dx * t, centre.y + dy * t];
+    if (body.some(particle => insideParticle(particle, x, y, 0))) return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, angle, ...(facing && { side: facing }) };
+  }
+  return { ...centre, angle, ...(facing && { side: facing }) };
 }
 
 /**
@@ -524,11 +589,11 @@ const BEAD_OUTLINE = .6;
 const SHAPES = new Map<string, ContactShape>();
 const CONTACTS = new Map<string, FirstContact>();
 /** Geometry depends on the definition, never on which copy it is (RFC 0005 §3.3). */
-type Shaped = Pick<SceneActor, 'actor' | 'type' | 'radius' | 'chain' | 'molecule' | 'visual'>;
+type Shaped = Pick<SceneActor, 'actor' | 'type' | 'radius' | 'chain' | 'molecule' | 'visual' | 'membrane' | 'tags'>;
 export function actorRepeatedMarker(actor: Shaped) {
   if (!actor.chain?.profile) return undefined;
   const margin = actorOutline(actor.type, actor.radius);
-  const carrier = { particles: actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual), margin };
+  const carrier = { particles: actorBody(actor), margin };
   return repeatedMarkerGeometry(actor.chain.profile, actor.chain.length, actor.chain.angle, carrier);
 }
 
@@ -543,7 +608,7 @@ export function actorChainReach(actor: Shaped) {
   return Math.max(...repeated.units.map(u => Math.hypot(u.x, u.y) + u.r));
 }
 
-const shapeKey = (actor: Shaped) => `${actor.actor}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.visual ? JSON.stringify(actor.visual) : ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}${actor.chain.profile ? JSON.stringify(actor.chain.profile) : ''}` : ''}`;
+const shapeKey = (actor: Shaped) => `${actor.actor}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.visual ? JSON.stringify(actor.visual) : ''}|${actor.membrane ?? ''}|${actor.tags?.length ? JSON.stringify(actor.tags) : ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}${actor.chain.profile ? JSON.stringify(actor.chain.profile) : ''}` : ''}`;
 
 /** Everything visible of an actor that a partner can touch: its body plus its chain, outlines included. */
 export function actorContactShape(actor: Shaped): ContactShape {
@@ -551,11 +616,13 @@ export function actorContactShape(actor: Shaped): ContactShape {
   let shape = SHAPES.get(key);
   if (!shape) {
     const margin = actorOutline(actor.type, actor.radius);
-    const body = actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
+    const body = actorBody(actor).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
     const repeated = actorRepeatedMarker(actor);
     const beads = actor.chain && !repeated ? chainGeometry(actor.radius, actor.chain.angle, actor.chain.length, chainBase(actor)).beads
       .map(bead => ({ x: bead.x, y: bead.y, r: bead.r + BEAD_OUTLINE, rx: bead.r + BEAD_OUTLINE, ry: bead.r + BEAD_OUTLINE, rotation: 0, depth: 1 })) : [];
-    shape = { particles: [...body, ...(repeated ? repeated.particles : beads)] };
+    // A tag is part of what a partner touches: one bound at the same site rests against it.
+    const tags = (actor.tags ?? []).map(tag => ({ x: tag.x, y: tag.y, r: tag.r + 1, rx: tag.r + 1, ry: tag.r + 1, rotation: 0, depth: 1 }));
+    shape = { particles: [...body, ...(repeated ? repeated.particles : beads), ...tags] };
     if (SHAPES.size > 512) SHAPES.clear();
     SHAPES.set(key, shape);
   }
@@ -569,7 +636,7 @@ export function chainBase(actor: Shaped): number {
   const key = `${shapeKey(actor)}`;
   let base = BASES.get(key);
   if (base === undefined) {
-    const body = actorContactShape({ actor: actor.actor, type: actor.type, radius: actor.radius, molecule: actor.molecule, visual: actor.visual });
+    const body = actorContactShape({ actor: actor.actor, type: actor.type, radius: actor.radius, molecule: actor.molecule, visual: actor.visual, membrane: actor.membrane });
     const d = { x: Math.cos(actor.chain.angle), y: Math.sin(actor.chain.angle) };
     const along = contactOutline(body).filter(point => Math.abs(point.x * d.y - point.y * d.x) < 3).map(point => point.x * d.x + point.y * d.y);
     base = Math.round(Math.max(actor.radius * .3, ...along) * 10) / 10;
@@ -729,6 +796,49 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // first molecule shown, so adjacent copies abut. It is one scale per definition: every copy keeps the
   // same silhouette and size whether it is on the DNA or not (RFC 0005 §3.3).
   const scaleAcid = nucleicAcids[0];
+  // ---- Membranes: compartment → membrane geometry → actor placement ----
+  // A compartment of kind `membrane` is a bilayer across the canvas, whether or not an actor is in it.
+  // The compartments on its two sides, and the actors in it, are then placed on that geometry.
+  const compartmentOf = new Map(snapshot.definition.compartments.map(compartment => [compartment.id, compartment]));
+  const regionLabel = (kind: string) => { const region = snapshot.definition.compartments.find(compartment => compartment.kind === kind); return region && { id: region.id, label: region.label ?? region.id }; };
+  const membranes: SceneMembrane[] = snapshot.definition.compartments.filter(compartment => compartment.kind === 'membrane').slice(0, 1).map(compartment => {
+    const [outside, inside] = [regionLabel('extracellular'), snapshot.definition.compartments.map(other => other.kind).filter(kind => kind !== 'membrane' && kind !== 'extracellular').map(regionLabel)[0]];
+    return { id: compartment.id, label: compartment.label ?? compartment.id, y: Math.round(height * .5), ...(outside && { outside }), ...(inside && { inside }) };
+  });
+  const membrane = membranes[0];
+  /** Which side of the membrane a compartment lies on; undefined for the membrane itself or without one. */
+  const sideOfCompartment = (id: string | undefined): MembraneSide | undefined => {
+    const kind = id ? compartmentOf.get(id)?.kind : undefined;
+    if (!membrane || !kind || kind === 'membrane') return undefined;
+    return kind === 'extracellular' ? 'outside' : 'inside';
+  };
+  /** An actor whose compartment is a membrane spans it. Follows the snapshot, so a translocated actor follows too. */
+  const membraneOf = (definition: InstanceView) => membrane && (definition.type === 'protein' || definition.type === 'complex')
+    && compartmentOf.get(snapshot.actors[definition.id]?.compartment ?? definition.compartment ?? '')?.kind === 'membrane' ? membrane.id : undefined;
+  // The side a site faces comes from who binds it anywhere in the mechanism: a site a cytosolic actor
+  // docks on is cytosolic from the first step, before that partner appears.
+  const siteSides = new Map<string, MembraneSide | undefined>();
+  const siteSide = (actor: string, site: string): MembraneSide | undefined => {
+    const key = `${actor}.${site}`;
+    if (!siteSides.has(key)) {
+      const targets = (reference: string) => { const [instance, name] = reference.split('.'); return name === site && instance!.split('#')[0] === actor; };
+      let found: MembraneSide | undefined;
+      const visit = (node: unknown): void => {
+        if (found || !node || typeof node !== 'object') return;
+        if (Array.isArray(node)) { node.forEach(visit); return; }
+        const action = node as Record<string, unknown>;
+        if (typeof action.target === 'string' && targets(action.target) && typeof action.actor === 'string') {
+          const binder = snapshot.definition.actors.find(item => item.id === (action.actor as string).split('#')[0]);
+          found = sideOfCompartment(binder?.compartment);
+        }
+        Object.values(action).forEach(visit);
+      };
+      if (membrane) visit(snapshot.definition.steps);
+      siteSides.set(key, found);
+    }
+    return siteSides.get(key);
+  };
+
   const radii = new Map<string, number>();
   const visualOf = (definition: InstanceView) => definition.type === 'protein' || definition.type === 'complex' ? options.proteinVisuals?.[definition.visual] : undefined;
   const radiusOf = (definition: InstanceView): number => {
@@ -738,7 +848,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (!definition.footprint || !scaleAcid) return base;
     let radius = radii.get(definition.visual);
     if (radius === undefined) {
-      const [minX, maxX] = extentX({ actor: definition.visual, type: definition.type, radius: base, molecule: definition.molecule, visual: visualOf(definition) });
+      const [minX, maxX] = extentX({ actor: definition.visual, type: definition.type, radius: base, molecule: definition.molecule, visual: visualOf(definition), membrane: membraneOf(definition) });
       const covered = width * definition.footprint.length / (scaleAcid.length ?? 100);
       radius = Math.max(12, Math.min(base, Math.round(base * covered / (maxX - minX) * 10) / 10));
       radii.set(definition.visual, radius);
@@ -755,6 +865,26 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (partner && byId.has(partner)) children.set(partner, [...(children.get(partner) ?? []), definition]);
   }
 
+  // Modifications without a length whose profile is a tag are adhered to the surface: on the anchor of
+  // their site when they name one, otherwise spread along the usual fan. The profile gives the look only.
+  const tagCache = new Map<string, SceneTag[]>();
+  const tagsOf = (definition: InstanceView): SceneTag[] => {
+    let tags = tagCache.get(definition.id);
+    if (!tags) {
+      const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition), membrane: membraneOf(definition) };
+      tags = snapshot.actors[definition.id]!.modifications.filter(modification => !modification.length).flatMap((modification, index): SceneTag[] => {
+        const profile = resolveModificationVisualProfile(modification, options.modificationProfiles);
+        if (profile?.marker !== 'tag') return [];
+        const anchor = siteAnchor(body, modification.site ?? `#${index}`, modification.site ? siteSide(definition.visual, modification.site) : undefined);
+        // Most of the disc lies outside the contour, part of it on the body: adhered, not floating.
+        const out = profile.radius * .45;
+        return [{ id: modification.id, x: Math.round((anchor.x + Math.cos(anchor.angle) * out) * 10) / 10, y: Math.round((anchor.y + Math.sin(anchor.angle) * out) * 10) / 10, r: profile.radius, fill: profile.fill, label: modification.label, ...(modification.site && { site: modification.site }) }];
+      });
+      tagCache.set(definition.id, tags);
+    }
+    return tags;
+  };
+
   const make = (definition: InstanceView, point: Point, labelSide: -1 | 1, ghost = false): SceneActor => {
     const state = snapshot.actors[definition.id]!;
     const chain = state.modifications.find(modification => modification.length);
@@ -769,6 +899,8 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       radius: radiusOf(definition),
       ...(definition.type === 'molecule' && definition.molecule && { molecule: definition.molecule }),
       ...(visualOf(definition) && { visual: visualOf(definition) }),
+      ...(membraneOf(definition) && { membrane: membraneOf(definition) }),
+      ...(!ghost && tagsOf(definition).length > 0 && { tags: tagsOf(definition) }),
       ...(!ghost && spanOf(definition.id)?.orientation === 'reverse' && { mirrored: true }),
       ...(state.compartment && { compartment: state.compartment }),
       ...(state.activity && { activity: state.activity.state }),
@@ -791,7 +923,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const acid = occupancy && acidIndex.get(occupancy.acid);
     if (!occupancy || !acid || definition.position) continue;
     const x = width * ((occupancy.span!.from + occupancy.span!.to) / 2) / (acid.length ?? 100);
-    const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition) };
+    const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition), membrane: membraneOf(definition) };
     // An occupant follows its strand: on a stretch drawn beside another molecule it rests there.
     const moved = travelling(occupancy.acid, occupancy.strand, (occupancy.span!.from + occupancy.span!.to) / 2);
     if (moved) {
@@ -819,7 +951,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     let right = anchor.x;
     group.forEach((definition, index) => {
       // Neighbours on the same site are spaced by their visible outlines, not by bounding circles.
-      const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition) };
+      const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition), membrane: membraneOf(definition) };
       const [minX, maxX] = extentX(body);
       let x = anchor.x;
       if (index === 0) { left = x + minX; right = x + maxX; }
@@ -890,7 +1022,10 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const copy = definition.id === definition.visual ? 0 : Number(definition.id.slice(definition.visual.length + 1)) - 1;
     const slot = block + copy;
     const x = slotCount === 1 ? width * .5 : width * (.22 + .56 * slot / (slotCount - 1));
-    placed.set(definition.id, make(definition, definition.position ?? { x, y: freeRowY }, -1));
+    // With a membrane, a free actor waits in the band of its own compartment; one that spans it sits on it.
+    const side = sideOfCompartment(snapshot.actors[definition.id]?.compartment);
+    const y = !membrane ? freeRowY : membraneOf(definition) ? membrane.y : side === 'outside' ? Math.round(membrane.y * .36) : Math.round(membrane.y + (height - membrane.y) * .62);
+    placed.set(definition.id, make(definition, definition.position ?? { x, y }, -1));
   });
 
   // 3. Actors bound to other actors dock against their partner (body or chain) by first contact along a
@@ -923,9 +1058,37 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     }
     // A span occupant's neighbours lie along the DNA, so whatever docks onto it starts from straight up.
     if (spanOf(partner.id)) angle = -Math.PI / 2;
+    // Docking that the scene can place exactly: at the anchor of the site the actor binds, or, on a
+    // membrane-spanning partner, on the side the actor's own compartment lies on (beside it when both span).
+    const boundSite = attachedTo(definition.id)?.split('.')[1];
+    const declaredSite = boundSite && !isNucleic(partner.type) && partnerDefinition.sites?.some(site => site.id === boundSite) ? boundSite : undefined;
+    let docking: { origin?: Point; angle: number } | undefined;
+    if (declaredSite) {
+      const anchor = siteAnchor(partner, declaredSite, siteSide(partnerDefinition.visual, declaredSite));
+      docking = { origin: anchor, angle: anchor.angle };
+    } else if (partner.membrane && membraneOf(definition)) {
+      docking = { angle: siblings.filter(item => membraneOf(item)).indexOf(definition) % 2 === 0 ? 0 : Math.PI };
+    } else if (partner.membrane) {
+      const side = sideOfCompartment(snapshot.actors[definition.id]?.compartment);
+      if (side) docking = { origin: spanningGeometry(partner.actor, partner.radius).attach[side].point, angle: side === 'outside' ? -Math.PI / 2 : Math.PI / 2 };
+    }
+    if (docking) angle = docking.angle;
     const actor = make(definition, { x: partner.x, y: partner.y }, Math.cos(angle) >= 0 ? 1 : -1);
     if (definition.position) Object.assign(actor, { x: definition.position.x, y: definition.position.y });
-    else {
+    else if (docking) {
+      const at = (direction: number) => firstContact(actorContactShape(partner), actorContactShape(actor), { x: Math.cos(direction), y: Math.sin(direction) }, docking!.origin && { origin: docking!.origin });
+      // It stays on its side of the anchor, but leans away from a body already there (a neighbour's partner).
+      let fit = at(angle);
+      for (let step = 0; step < 8; step++) {
+        const blocking = [...placed.values()].find(other => other !== partner && !other.ghost && bodiesOverlap(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, other));
+        if (!blocking) break;
+        angle += (blocking.x >= partner.x + fit.offset.x ? -1 : 1) * Math.sign(Math.sin(docking.angle) || -1) * -.12;
+        fit = at(angle);
+      }
+      actor.x = Math.round((partner.x + fit.offset.x) * 10) / 10;
+      actor.y = Math.round((partner.y + fit.offset.y) * 10) / 10;
+      contacts.set(actor.id, { x: Math.round((partner.x + fit.point.x) * 10) / 10, y: Math.round((partner.y + fit.point.y) * 10) / 10 });
+    } else {
       // A docked actor must not sink into a nucleic acid nor into an actor already placed (other than its
       // partner), nor leave the canvas sideways: tilt its slot towards "up" until it clears.
       const [reachLeft, reachRight] = extentX(actor);
@@ -1072,7 +1235,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const onBody = (actor: SceneActor, point: Point) => actorContactShape(actor).particles.some(particle => insideParticle(particle, point.x - actor.x, point.y - actor.y, 1));
   /** The point lies on the actor's chain, not on its body: a leader may end on its body but not cross its chain. */
   const onOwnChain = (actor: SceneActor, point: Point) => !!actor.chain && onBody(actor, point)
-    && !actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual).some(particle => insideParticle(particle, point.x - actor.x, point.y - actor.y, 1));
+    && !actorBody(actor).some(particle => insideParticle(particle, point.x - actor.x, point.y - actor.y, 1));
   const crosses = (a: readonly Point[], b: readonly Point[]) => a.some((p, i) => i > 0 && b.some((q, j) => {
     if (j === 0) return false;
     const [p0, q0] = [a[i - 1]!, b[j - 1]!];
@@ -1085,6 +1248,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const onGhost = (point: Point) => ghostShapes.some(ghost => onGhostShape(ghost, point));
   const offCanvas = (box: Box) => box[0] < 4 || box[2] > width - 4 || box[1] < 4 || box[3] > height - 4;
   const acidBands = nucleicAcids.map((acid): Box => [0, acid.y - HELIX.amplitude - HELIX.tube, width, acid.y + HELIX.amplitude + HELIX.tube]);
+  const membraneBands = membranes.map((item): Box => [0, item.y - MEMBRANE_HALF, width, item.y + MEMBRANE_HALF]);
   const boxPoints = (box: Box): Point[] => [0, .5, 1].flatMap(u => [0, .5, 1].map(v => ({ x: box[0] + (box[2] - box[0]) * u, y: box[1] + (box[3] - box[1]) * v })));
 
   const calloutConflicts: SceneCalloutConflict[] = [];
@@ -1126,9 +1290,12 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       + others.filter(other => meets(padded, labelBox(other))).length
       + ([...chainBeads, ...chainTexts.map(text => text.box)].some(other => meets(box, other)) ? 1 : 0)
       // Only a callout hung below its body can come down onto a nucleic acid; above, the usual place stands.
-      + (drop && acidBands.some(band => meets(box, band)) ? 1 : 0);
+      + (drop && acidBands.some(band => meets(box, band)) ? 1 : 0)
+      + (membraneBands.some(band => meets(box, band)) ? 1 : 0);
     // Leaders: through another body or a chain, through a pill or a chain callout, or across another leader.
     const crossing = live.filter(other => other !== actor && free.some(point => onBody(other, point))).length
+      // A leader through the bilayer puts the callout on the wrong side of it.
+      + (membraneBands.some(band => free.some(point => within(band, point))) ? 1 : 0)
       // A leader that ends on someone else points at the wrong thing.
       + (live.some(other => other !== actor && onBody(other, leader[leader.length - 1]!)) ? 1 : 0)
       + (free.some(point => onOwnChain(actor, point)) ? 1 : 0)
@@ -1191,7 +1358,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions, pairings, footprints, calloutConflicts,
+    nucleicAcids, actors, connections, lesions, pairings, footprints, membranes, calloutConflicts,
   };
 }
 

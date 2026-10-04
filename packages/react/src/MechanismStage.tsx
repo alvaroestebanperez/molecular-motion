@@ -1,6 +1,6 @@
 import { useEffect, useId, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { CompiledMechanism } from '@molecular-motion/core';
-import { buildSvgScene, geometryFrame, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame, type ProteinActorVisuals } from '@molecular-motion/svg';
+import { buildSvgScene, geometryFrame, membraneSceneCss, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame, type ProteinActorVisuals } from '@molecular-motion/svg';
 import { animateGeometry, motionTiming, NUCLEIC_LAYERS, type GeometryAnimation } from './animate';
 import { patchSvg } from './patch';
 import { uiCss } from './styles';
@@ -11,7 +11,7 @@ export function useMolecularMotionStyles() {
     if (typeof document === 'undefined' || document.getElementById('molecular-motion-styles')) return;
     const style = document.createElement('style');
     style.id = 'molecular-motion-styles';
-    style.textContent = molecularMotionCss + uiCss;
+    style.textContent = molecularMotionCss + membraneSceneCss + uiCss;
     document.head.appendChild(style);
   }, []);
 }

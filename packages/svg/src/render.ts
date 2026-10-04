@@ -2,10 +2,10 @@ import { renderRepeatedMarker } from './repeated-marker';
 import type { LesionType } from '@molecular-motion/core';
 import {
   actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
-  type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
+  type SceneActor, type SceneConnection, type SceneMembrane, type SceneNucleicAcid, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
-import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, renderProteinInhibition, type ModificationVisualKind } from './primitives';
+import { mix, primitiveCss, renderMembranePrimitive, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, renderProteinInhibition, type ModificationVisualKind } from './primitives';
 
 import { renderProteinVisualSurface } from './protein-assembly';
 export { mix };
@@ -70,6 +70,8 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<g data-layer="defs">${defs}</g>`
     // Under the molecules: a mark on the strands an instance also holds, without hiding them.
     + (footprints ? `<g class="mm-layer" data-layer="footprints">${footprints}</g>` : '')
+    // Only documents with a membrane compartment get this layer, so every other document renders exactly as before.
+    + (scene.membranes.length ? `<g class="mm-layer" data-layer="membranes" aria-hidden="true">${scene.membranes.map(membrane => membraneLayer(membrane, scene)).join('')}</g>` : '')
     + `<g class="mm-layer" data-layer="acids">${acids}</g>`
     // Only documents with pairings get this layer, so every other document renders exactly as before.
     + (pairings ? `<g class="mm-layer" data-layer="pairings">${pairings}</g>` : '')
@@ -382,12 +384,15 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
   } else {
     shape = actor.visual
       ? renderProteinVisualSurface(actor.actor, actor.radius, actor.type === 'complex' ? 32 : 28, actor.color, actor.visual)
-      : renderProteinSurface(actorParticles(actor.actor, actor.type, actor.radius, actor.molecule), actor.color, actor.radius);
+      : renderProteinSurface(actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, undefined, actor.membrane), actor.color, actor.radius);
   }
   const glow = actor.activity === 'active' && !actor.ghost ? `<circle class="mm-halo" r="${actor.radius + 18}" fill="url(#${halo})"/>` : '';
-  const inhibition = actor.activity === 'inhibited' ? renderProteinInhibition(actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual), actor.radius) : '';
+  const inhibition = actor.activity === 'inhibited' ? renderProteinInhibition(actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual, actor.membrane), actor.radius) : '';
   const chain = actor.chain ? renderChain(actor) : '';
-  const badges = actor.badges.map((badge, index) => {
+  // Tags are placed by the layout on the surface; the remaining badges keep their usual fan.
+  const tagged = new Set((actor.tags ?? []).map(tag => tag.id));
+  const tags = (actor.tags ?? []).map(tag => `<g class="mm-modification mm-modification--tag" data-site="${escape(tag.site ?? '')}" transform="translate(${round(tag.x)} ${round(tag.y)})"><circle r="${round(tag.r)}" fill="${escape(tag.fill)}"/><text y="3">${escape(tag.label)}</text></g>`).join('');
+  const badges = tags + actor.badges.filter(badge => !tagged.has(badge.id)).map((badge, index) => {
     const angle = -2.4 + index * .5;
     const x = round(Math.cos(angle) * actor.radius * .95);
     const y = round(Math.sin(angle) * actor.radius * .95);
@@ -413,6 +418,15 @@ function renderChain(actor: SceneActor): string {
   const { beads, links } = chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor));
   const path = links.map(([from, to]) => `M${round(from.x)} ${round(from.y)}L${round(to.x)} ${round(to.y)}`).join('');
   return `<g class="mm-chain"><path d="${path}"/>${beads.map(bead => `<circle cx="${round(bead.x)}" cy="${round(bead.y)}" r="${bead.r}" style="--i:${bead.index}"/>`).join('')}</g>`;
+}
+
+// ---- Membranes ----
+
+/** The shared bilayer across the canvas, with the compartment on each side named at the left edge. */
+function membraneLayer(membrane: SceneMembrane, scene: SvgScene): string {
+  const region = (label: string | undefined, y: number) => label ? `<text class="mm-region" x="14" y="${round(y)}">${escape(label)}</text>` : '';
+  return `<g class="mm-membrane" data-key="membrane:${escape(membrane.id)}">${renderMembranePrimitive({ x: 0, y: membrane.y, length: scene.width })}`
+    + `${region(membrane.outside?.label, 24)}${region(membrane.inside?.label, scene.height - 14)}</g>`;
 }
 
 // ---- Labels ----
@@ -532,3 +546,12 @@ export const molecularMotionCss = `
 @keyframes mm-pulse{50%{transform:scale(1.18);opacity:.75}}@keyframes mm-breathe{50%{transform:scale(1.06);opacity:.8}}@keyframes mm-bead{from{transform:scale(0);opacity:0}}
 @media(prefers-reduced-motion:reduce){.mm-svg *{animation:none!important;transition:none!important}}
 ${primitiveCss}`;
+
+/**
+ * Rules for what only some scenes have: a membrane with its region labels, and surface tags. Kept apart
+ * from `molecularMotionCss` so a file exported from any other scene carries exactly the stylesheet it did.
+ */
+export const membraneSceneCss = `.mm-region{fill:var(--mm-muted);font-size:calc(11px*var(--mm-text-scale,1));font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.mm-modification--tag circle{stroke:#334155;stroke-width:1.1}.mm-modification--tag text{text-anchor:middle;fill:#17213b;font:700 8.5px Inter,system-ui}`;
+/** Whether a scene draws anything `membraneSceneCss` styles. */
+export const usesMembraneSceneCss = (scene: SvgScene) => scene.membranes.length > 0 || scene.actors.some(actor => actor.tags?.length);
