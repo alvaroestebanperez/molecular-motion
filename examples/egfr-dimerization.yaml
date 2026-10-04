@@ -85,8 +85,8 @@ steps:
           - { type: activate, actor: "egfr#1", by: "egfr#2" }
           - { type: activate, actor: "egfr#2", by: "egfr#1" }
       - parallel:
-          - { type: phosphorylate, actor: "egfr#1", site: Y1068, by: "egfr#2" }
-          - { type: phosphorylate, actor: "egfr#2", site: Y1068, by: "egfr#1" }
+          - { type: phosphorylate, actor: "egfr#1", site: y1068, by: "egfr#2" }
+          - { type: phosphorylate, actor: "egfr#2", site: y1068, by: "egfr#1" }
 
   - id: adaptor
     title: GRB2 recruitment

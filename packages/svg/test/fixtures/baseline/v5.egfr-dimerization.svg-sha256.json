@@ -1,32 +1,32 @@
 [
   {
     "step": "monomers",
-    "full": "5eede1269d9163b39fcf719be0386a7287d40a9dae76574268435c994f426c60",
-    "compact": "5651c455080ae1a53ff3869652ebef7f67eae50ff6dc08bc313c0c0b453e5a06",
-    "ghosts": "4bf75df44cca59db162c61a16cbc30a639b0c6bdc0a189232fae8a07a6d83377"
+    "full": "6e0bf3b0550ced7957b831342f48ad66bfc39df4574fdbaeaf1482be3b7a8e30",
+    "compact": "453581041054cca421b1159950a1772a845fe52326a4136f864b323224f9fd8e",
+    "ghosts": "c2cc50d7014ba0e761427b79bf2a6315e5eefb6744a1c20aad84f058322e44f8"
   },
   {
     "step": "ligand",
-    "full": "e37f84aa2f6af80c5ffc99f212d1901fd39c6b19497b0c463ad31984abde13ee",
-    "compact": "6665f6eb7b3ccef76e97a82ff51ab09fa22122878cf2166d0663938be7f36f6b",
-    "ghosts": "5b6efe4f220d665de95b05eea8ddf318c1bd1d94faa8c49acd15e9045cca03ca"
+    "full": "0937ada48588072586e9fd37b1243cb320a2e98e135076937c8c8d3f9ee6326d",
+    "compact": "7a16e66d9b5394e36b7e170a385ac3f0eeab944b386f1090d186f8ec82a93abb",
+    "ghosts": "6545a9fb32ad5858ba4aaa809f573732e9e74348d7730c6501660237fa086dd4"
   },
   {
     "step": "dimer",
-    "full": "bcc07ab40f29fbd47db9c63dba7b08f27cae0f4b452a9b319321e9cdf255d825",
-    "compact": "b6a6697f66164060e3ef69d8117a3d4d0437eba72b01dcd2e6a95a08bde57daa",
-    "ghosts": "add4702e2effd57f04594c8b44e684185749e76c2ba23fd5b9232514a915a8b4"
+    "full": "bfeecdb36cf1ae8b0a9efe9c32d5aa42046021c17a71e55b83ffa5d68925cbc1",
+    "compact": "5ec554fce89a1a072f40ba56aaeee243611cbdcda8fc014bdf230498f23aab72",
+    "ghosts": "155661e581b61abbb4669317b6cd4bf3b7f23dc0e2e1298e0e0c481f1647c0e4"
   },
   {
     "step": "autophosphorylation",
-    "full": "8eb11a94c913eeb81e9763115c81a70ee6667f41f2ed5dca91e64dcd528e0d3a",
-    "compact": "35fa903a8918a9261f7095601dbf302f62e8e5246421f5bba0d519501835eea1",
-    "ghosts": "5d96eb0f4720e1b3bb201af461ad8f9b29f5cf325cf4099d02241590fbc3d91c"
+    "full": "30ed226374b57b50f3a9b4e16aa34342daf0911c359361912b8ee1e13896ba8e",
+    "compact": "eef6dab7a929e29bbf1866729a2a981b2dd3d31ba09f28ecea72ff6be9ceb219",
+    "ghosts": "52ea67aa9d833b8203e6c64fec5e2d1b8019ea344c9525b73afe3b72b05a0ab1"
   },
   {
     "step": "adaptor",
-    "full": "733a81986cc29b068eac6435e5b9dbb605010b95c6678af6a93b7258562875fd",
-    "compact": "e2eceb3781c0523d6decaf4a438d0d9018a5686a882d059d2b8374be9674de55",
-    "ghosts": "733a81986cc29b068eac6435e5b9dbb605010b95c6678af6a93b7258562875fd"
+    "full": "631d86bd01dba8213d4ab599463605768ebc81975aef3799c76b98267d9530a7",
+    "compact": "20cc793124be4d09b5c4169ecc042bc5086b8ff57f8bc5ca99499f7f8a3b0f57",
+    "ghosts": "631d86bd01dba8213d4ab599463605768ebc81975aef3799c76b98267d9530a7"
   }
 ]

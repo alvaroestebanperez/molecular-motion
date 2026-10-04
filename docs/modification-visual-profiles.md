@@ -48,3 +48,11 @@ modification per carrier remains.
 The p53–MDM2 example is a narrated eight-step cycle. Stabilization, expression and tag
 recycling are explicitly schematic; no kinetics are implied. DNA engagement uses span
 occupancy and leaves with `vacate`. The proteasome remains a generic complex.
+
+## Tags
+
+A third marker, `tag`, is one small labelled disc adhered to the carrier's surface, for a
+modification without a length. The default catalog maps phosphorylation to it. Like every
+profile it is appearance only: where on the carrier it sits is decided by the scene from the
+modification's site (see `docs/membrane-scenes.md`), never by the profile. The standalone
+`renderModificationPrimitive` keeps its own labelled tag for these kinds.
