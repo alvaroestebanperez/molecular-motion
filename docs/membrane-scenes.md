@@ -39,6 +39,8 @@ An empty `modificationProfiles` catalog still selects the legacy badge for every
 - A spanning actor is single-pass with one domain per side. Other topologies would be a host choice, like `proteinVisuals`.
 - v5 does not declare topology. The side of a site is inferred from who binds it; a site nobody binds has no declared side.
 
-## Next
+## Upcoming actors
 
-Upcoming (ghost) actors are still placed at fixed places on the canvas. They must wait in the band of their own compartment: a cytoplasmic actor cannot appear on the extracellular side while it is still a ghost.
+An upcoming (ghost) actor waits in the band of its own compartment, like a present one: an actor that will be cytosolic never waits on the extracellular side, and one that will span the membrane waits on it. Within its band it takes the first place, from the right edge inwards, that is clear of the present actors and of earlier ghosts, so it may wait in a different place from one step to the next.
+
+Without a membrane, upcoming actors wait exactly where they did.

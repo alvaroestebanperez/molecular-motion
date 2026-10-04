@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { compileMechanism, parseMechanism } from '@molecular-motion/core';
 import { buildSvgScene, exportSvg, membraneSceneCss, MODIFICATION_VISUAL_PROFILES, renderSvg, type SvgScene } from '../src';
 import { actorContactShape, actorParticles, siteAnchor, spanningGeometry } from '../src/scene';
+import { firstAppearances, upcomingActors } from '../../react/src/player';
 
 const load = (name: string) => compileMechanism(parseMechanism(readFileSync(new URL(`../../../examples/${name}.yaml`, import.meta.url), 'utf8')));
 const egfr = load('egfr-dimerization');
@@ -105,5 +106,47 @@ describe('EGFR: signalling across the membrane', () => {
 
   it('callouts stay off the bilayer and their leaders do not cross it', () => {
     for (let index = 0; index < egfr.length; index++) expect(buildSvgScene(egfr.at(index)).calloutConflicts.filter(conflict => conflict.hard > 0), egfr.at(index).step.id).toEqual([]);
+  });
+});
+
+describe('upcoming actors wait in the band of their own compartment', () => {
+  const appearances = firstAppearances(egfr);
+  const ghosted = (index: number, size = {}) => buildSvgScene(egfr.at(index), { ...size, ghosts: upcomingActors(appearances, index) });
+
+  it.each([{}, { width: 640, height: 620 }, { width: 520, height: 600 }])('on a %o canvas: EGF above the membrane, GRB2 below it, in every step', size => {
+    let seen = 0;
+    for (let index = 0; index < egfr.length; index++) {
+      const target = ghosted(index, size);
+      const y = target.membranes[0]!.y;
+      for (const ghost of target.actors.filter(item => item.ghost)) {
+        seen += 1;
+        // The whole faint body, at the scale it is drawn, stays on its side of the bilayer.
+        const reach = ghost.radius * .62;
+        if (ghost.compartment === 'extracellular') expect(ghost.y + reach, `${target.title}: ${ghost.id}`).toBeLessThan(y - 24);
+        else expect(ghost.y - reach, `${target.title}: ${ghost.id}`).toBeGreaterThan(y + 24);
+        expect(ghost.x - reach).toBeGreaterThan(0);
+        expect(ghost.x + reach).toBeLessThan(target.width);
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('a ghost keeps clear of the actors that are present and of other ghosts', () => {
+    for (let index = 0; index < egfr.length; index++) {
+      const target = ghosted(index);
+      const ghosts = target.actors.filter(item => item.ghost);
+      for (const ghost of ghosts) {
+        for (const other of target.actors.filter(item => !item.ghost)) expect(Math.hypot(other.x - ghost.x, other.y - ghost.y), `${target.title}: ${ghost.id} on ${other.id}`).toBeGreaterThan(other.radius + ghost.radius * .62);
+        for (const other of ghosts.filter(item => item !== ghost)) expect(Math.hypot(other.x - ghost.x, other.y - ghost.y)).toBeGreaterThan(ghost.radius * .62);
+      }
+    }
+  });
+
+  it('without a membrane, upcoming actors wait exactly where they did', () => {
+    const p53 = load('p53-mdm2-feedback');
+    const first = buildSvgScene(p53.at(0), { ghosts: upcomingActors(firstAppearances(p53), 0) });
+    const waiting = first.actors.filter(item => item.ghost);
+    expect(waiting.length).toBeGreaterThan(0);
+    waiting.forEach((ghost, index) => expect([ghost.x, ghost.y]).toEqual([first.width * (.79 + .075 * (index % 3)), first.height * (.12 + .175 * (index % 3))]));
   });
 });

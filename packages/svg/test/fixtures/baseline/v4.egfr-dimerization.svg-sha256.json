@@ -3,25 +3,25 @@
     "step": "monomers",
     "full": "6e0bf3b0550ced7957b831342f48ad66bfc39df4574fdbaeaf1482be3b7a8e30",
     "compact": "453581041054cca421b1159950a1772a845fe52326a4136f864b323224f9fd8e",
-    "ghosts": "c2cc50d7014ba0e761427b79bf2a6315e5eefb6744a1c20aad84f058322e44f8"
+    "ghosts": "64d3ad4908d15c3e003691eba649dee820a6a3761220f0d1aaa1708feeb835c5"
   },
   {
     "step": "ligand",
     "full": "0937ada48588072586e9fd37b1243cb320a2e98e135076937c8c8d3f9ee6326d",
     "compact": "7a16e66d9b5394e36b7e170a385ac3f0eeab944b386f1090d186f8ec82a93abb",
-    "ghosts": "6545a9fb32ad5858ba4aaa809f573732e9e74348d7730c6501660237fa086dd4"
+    "ghosts": "4247341625a3fcfb7aa0655f01193984d3a65b907ad36071683381cec15712ea"
   },
   {
     "step": "dimer",
     "full": "bfeecdb36cf1ae8b0a9efe9c32d5aa42046021c17a71e55b83ffa5d68925cbc1",
     "compact": "5ec554fce89a1a072f40ba56aaeee243611cbdcda8fc014bdf230498f23aab72",
-    "ghosts": "155661e581b61abbb4669317b6cd4bf3b7f23dc0e2e1298e0e0c481f1647c0e4"
+    "ghosts": "6105c25abc01b6b902858a724a94e91b5084cce1e69d0cf3be491ad07dcba167"
   },
   {
     "step": "autophosphorylation",
     "full": "30ed226374b57b50f3a9b4e16aa34342daf0911c359361912b8ee1e13896ba8e",
     "compact": "eef6dab7a929e29bbf1866729a2a981b2dd3d31ba09f28ecea72ff6be9ceb219",
-    "ghosts": "52ea67aa9d833b8203e6c64fec5e2d1b8019ea344c9525b73afe3b72b05a0ab1"
+    "ghosts": "c2e492ee3753cc3c1fa4d2513bfe97c6b897cd38a43632d65f30dfa4781eedfc"
   },
   {
     "step": "adaptor",
