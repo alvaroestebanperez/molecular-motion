@@ -1,6 +1,6 @@
 import { useEffect, useId, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { CompiledMechanism } from '@molecular-motion/core';
-import { buildSvgScene, geometryFrame, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame } from '@molecular-motion/svg';
+import { buildSvgScene, geometryFrame, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame, type ProteinActorVisuals } from '@molecular-motion/svg';
 import { animateGeometry, motionTiming, NUCLEIC_LAYERS, type GeometryAnimation } from './animate';
 import { patchSvg } from './patch';
 import { uiCss } from './styles';
@@ -41,13 +41,15 @@ export interface MechanismStageProps {
   ghosts?: readonly string[];
   selectedActor?: string | null;
   onSelectActor?: (actorId: string | null) => void;
+  /** Presentation choice for protein and complex actors, by actor id. Keep the reference stable between renders. */
+  proteinVisuals?: ProteinActorVisuals;
   /** Called for ←/→ while the stage has focus. */
   onNavigate?: (direction: -1 | 1) => void;
   className?: string;
 }
 
 /** Animated, interactive SVG view of one step. Consecutive steps morph instead of re-rendering. */
-export function MechanismStage({ mechanism, stepIndex, ghosts, selectedActor = null, onSelectActor, onNavigate, className = '' }: MechanismStageProps) {
+export function MechanismStage({ mechanism, stepIndex, ghosts, proteinVisuals, selectedActor = null, onSelectActor, onNavigate, className = '' }: MechanismStageProps) {
   useMolecularMotionStyles();
   const ref = useRef<HTMLDivElement>(null);
   const idPrefix = `mm${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -62,7 +64,7 @@ export function MechanismStage({ mechanism, stepIndex, ghosts, selectedActor = n
   }, []);
 
   const canvas = canvasFor(room);
-  const scene = useMemo(() => buildSvgScene(mechanism.at(stepIndex), { width: canvas.width, height: canvas.height, ghosts }), [mechanism, stepIndex, ghosts, canvas.width, canvas.height]);
+  const scene = useMemo(() => buildSvgScene(mechanism.at(stepIndex), { width: canvas.width, height: canvas.height, ghosts, proteinVisuals }), [mechanism, stepIndex, ghosts, proteinVisuals, canvas.width, canvas.height]);
   const markup = useMemo(() => renderSvg(scene, { idPrefix, selectedActor, groupIdenticalCopies: true }), [scene, idPrefix, selectedActor]);
 
   // The geometry on screen, and the transition drawing it if one is running (ADR 0001). Everything but
@@ -127,15 +129,16 @@ export function MechanismStage({ mechanism, stepIndex, ghosts, selectedActor = n
 export interface MechanismThumbnailProps {
   mechanism: CompiledMechanism;
   stepIndex: number;
+  proteinVisuals?: ProteinActorVisuals;
 }
 
 /** Static, non-interactive miniature of a step. */
-export function MechanismThumbnail({ mechanism, stepIndex }: MechanismThumbnailProps) {
+export function MechanismThumbnail({ mechanism, stepIndex, proteinVisuals }: MechanismThumbnailProps) {
   useMolecularMotionStyles();
   const idPrefix = `mmt${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const markup = useMemo(
-    () => renderSvg(buildSvgScene(mechanism.at(stepIndex)), { idPrefix, compact: true }),
-    [mechanism, stepIndex, idPrefix],
+    () => renderSvg(buildSvgScene(mechanism.at(stepIndex), { proteinVisuals }), { idPrefix, compact: true }),
+    [mechanism, stepIndex, proteinVisuals, idPrefix],
   );
   return <div className="mm-thumbnail__art" aria-hidden="true" dangerouslySetInnerHTML={{ __html: markup }} />;
 }

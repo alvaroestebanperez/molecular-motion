@@ -136,7 +136,7 @@ describe('catalogue arrows', () => {
     const arrow = arrowPoints(renderVocabularyGlyph(id));
     for (const [seed, radius, x, y] of actors) for (const p of arrow) expect(inside(seed, radius, x, y, p), `${seed} at ${p.x},${p.y}`).toBe(false);
   });
-  it('event-inhibit: the bar stays outside the inhibition ring', () => {
+  it('event-inhibit: the bar stays outside the inhibition halo', () => {
     for (const p of arrowPoints(renderVocabularyGlyph('event-inhibit'))) expect(Math.hypot(p.x - 238, p.y - 108)).toBeGreaterThan(29 + 8 + 1);
   });
 });

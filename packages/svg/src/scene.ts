@@ -1,7 +1,11 @@
+import { repeatedMarkerGeometry, type ModificationVisualProfile, type ModificationVisualProfiles } from './repeated-marker';
+import { resolveModificationVisualProfile } from './modification-profiles';
+import { proteinVisualParticles, type ProteinActorVisual, type ProteinActorVisuals } from './protein-assembly';
 import { hashString } from './primitives/shared';
+import { insideParticle } from './primitives/protein-geometry';
 import {
   actorInstances, anonymousAttachment, lesionStrands, partnerOf, partnersOf, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
-  type Modification, type Point, type SiteStrand, type StrandId,
+  type Modification, type Point, type SiteStrand, type StrandId, nucleicForm,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
@@ -82,10 +86,14 @@ export interface SceneActor extends Point {
   labelSide: -1 | 1;
   /** Extra height of the callout above its usual place, when both sides were taken. */
   labelLift?: number;
-  /** Modification with a length (PAR chain, filament), drawn as beads along `angle` (radians). */
-  chain?: { label: string; length: number; angle: number };
+  /** The callout hangs below the body instead, when nothing above it was free. */
+  labelDrop?: true;
+  /** Modification with a length; optional resolved presentation, otherwise exact legacy beads. */
+  chain?: { label: string; length: number; angle: number; profile?: ModificationVisualProfile; /** Where the chain's own callout went, when its usual place was taken. */ callout?: ChainCalloutPlace };
   /** Modifications without a length, drawn as small badges. */
   badges: Modification[];
+  /** Host-chosen drawing of this protein or complex (`SceneOptions.proteinVisuals`); absent by default. */
+  visual?: ProteinActorVisual;
   /** Occupies its span in reverse orientation (relative to top 5′→3′): the shape is drawn mirrored. */
   mirrored?: true;
   /** Visible copies of one definition share a callout: `lead` carries "label ×size", the others none. */
@@ -126,6 +134,23 @@ export interface SceneFootprint {
   x: number; y: number; width: number; height: number;
 }
 
+/**
+ * What a callout placement costs. The place with the least perceptual cost wins; zero is not required.
+ * Each tier outweighs any plausible number of conflicts in the tier below it.
+ */
+export const CALLOUT_COST = {
+  /** Leaving the canvas. */
+  offCanvas: 60,
+  /** The pill lying on a present actor, a chain, another callout or (hung below) a nucleic acid. */
+  lying: 20,
+  /** A leader crossing one of those, crossing another leader, or ending on someone else. */
+  crossing: 10,
+  /** Either of the above over an upcoming (ghost) actor or its callout: allowed when every alternative is worse. */
+  ghost: 1,
+} as const;
+/** `hard` counts conflicts with what is present (lying and crossing); `ghost` those with upcoming actors only. */
+export interface SceneCalloutConflict { actor: string; kind: 'label' | 'chain'; cost: number; hard: number; ghost: number }
+
 export interface SvgScene {
   width: number;
   height: number;
@@ -139,9 +164,22 @@ export interface SvgScene {
   pairings: ScenePairing[];
   /** Occupancies held away from where their instance is drawn; empty for most documents. */
   footprints: SceneFootprint[];
+  /**
+   * Callouts the layout could not place clear of everything, with the cost of the place it settled for
+   * (`CALLOUT_COST`). Empty when every callout is clear. A record for review and tests; nothing is drawn from it.
+   */
+  calloutConflicts: SceneCalloutConflict[];
 }
 
 export interface SceneOptions {
+  /** Replace the narrow modification catalog; an empty map selects the exact legacy path. */
+  modificationProfiles?: ModificationVisualProfiles;
+  /**
+   * How to draw chosen protein or complex actors, keyed by actor id: a visual profile or a composition
+   * of profiles. Presentation only; the mechanism, its instances and its interactions are unchanged.
+   * Actors without an entry keep their seed-derived silhouette.
+   */
+  proteinVisuals?: ProteinActorVisuals;
   width?: number;
   height?: number;
   /** Actors to show out of focus because they appear later (computed by the caller from the timeline). */
@@ -347,15 +385,61 @@ export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneSt
 export const calloutText = (actor: Pick<SceneActor, 'label' | 'group'>) => actor.group && actor.group.size > 1 ? `${actor.label} ×${actor.group.size}` : actor.label;
 
 /** Where an actor's callout pill is drawn, as `[x0, y0, x1, y1]`, for a side and lift (its own by default). */
-export function labelBox(actor: SceneActor, side: -1 | 1 = actor.labelSide, lift = actor.labelLift ?? 0): [number, number, number, number] {
+/**
+ * A callout relative to its actor: the pill's anchor corner and the three control points of its leader.
+ * The layout checks this geometry for collisions and the renderer draws it, so they cannot disagree.
+ */
+export function labelGeometry(actor: SceneActor, side: -1 | 1 = actor.labelSide, lift = actor.labelLift ?? 0, drop: boolean = actor.labelDrop ?? false) {
   const small = actor.type === 'molecule';
+  const r = actor.radius;
   const width = Math.max(48, calloutText(actor).length * 8.4 + 24);
-  const anchor = actor.x + side * (actor.radius + (small ? 14 : 22));
+  const x = side * (r + (small ? 14 : 22));
   // The callout is already lifted clear of a chain leaving on the same side.
   const chainLift = actor.chain && Math.sign(Math.cos(actor.chain.angle)) === side ? 44 : 0;
-  const y = actor.y + (small ? -actor.radius - 20 : -actor.radius - 18) - chainLift - lift;
-  const left = side === 1 ? anchor : anchor - width;
-  return [left, y - 14, left + width, y + 14];
+  const y = drop ? r + (small ? 20 : 18) : (small ? -r - 20 : -r - 18) - chainLift - lift;
+  const left = side === 1 ? x : x - width;
+  const startX = side === 1 ? left + 10 : left + width - 10;
+  const startY = drop ? y - 12 : y + 12;
+  const tx = side * r * (small ? .5 : .55);
+  const ty = (drop ? 1 : -1) * r * (small ? .6 : .72);
+  const mid = { x: (startX + tx) / 2 + side * 6, y: drop ? Math.min(startY, ty) + 4 : Math.max(startY, ty) - 4 };
+  return { x, y, width, left, start: { x: startX, y: startY }, mid, end: { x: tx, y: ty } };
+}
+
+export function labelBox(actor: SceneActor, side: -1 | 1 = actor.labelSide, lift = actor.labelLift ?? 0, drop: boolean = actor.labelDrop ?? false): [number, number, number, number] {
+  const { y, width, left } = labelGeometry(actor, side, lift, drop);
+  return [actor.x + left, actor.y + y - 14, actor.x + left + width, actor.y + y + 14];
+}
+
+/** A leader sampled as a canvas polyline: leaders are collision geometry, like the pills and bodies they connect. */
+export function labelLeader(actor: SceneActor, side: -1 | 1 = actor.labelSide, lift = actor.labelLift ?? 0, drop: boolean = actor.labelDrop ?? false): Point[] {
+  const { start: a, mid: b, end: c } = labelGeometry(actor, side, lift, drop);
+  return Array.from({ length: 9 }, (_, index) => {
+    const t = index / 8;
+    return { x: actor.x + (1 - t) ** 2 * a.x + 2 * t * (1 - t) * b.x + t * t * c.x, y: actor.y + (1 - t) ** 2 * a.y + 2 * t * (1 - t) * b.y + t * t * c.y };
+  });
+}
+
+/** Where a chain's callout sits relative to the chain's tip: text origin, anchor, and where its leader ends. */
+export interface ChainCalloutPlace { dx: number; dy: number; anchor: 'start' | 'end'; tx: number; ty: number }
+/** The usual place first, then places around the tip, nearest first: beside it, above and below, then further out. */
+export const CHAIN_CALLOUT_PLACES: readonly ChainCalloutPlace[] = [
+  { dx: -64, dy: -26, anchor: 'start', tx: -6, ty: -6 },
+  ...[22, 48, 76].flatMap(reach => [0, Math.PI, -Math.PI / 4, -3 * Math.PI / 4, Math.PI / 4, 3 * Math.PI / 4, -Math.PI / 2, Math.PI / 2].map((angle): ChainCalloutPlace => {
+    const [ux, uy] = [Math.cos(angle), Math.sin(angle)];
+    const side = Math.abs(ux) < .01 ? 1 : Math.sign(ux);
+    // The text starts (or ends) at the place; its baseline sits a little below the leader's start.
+    return { dx: Math.round(ux * reach + side * 6), dy: Math.round(uy * reach + 4), anchor: side === 1 ? 'start' : 'end', tx: Math.round(ux * 6), ty: Math.round(uy * 6) };
+  })),
+];
+/** A chain callout's text box and leader in canvas coordinates. The renderer draws exactly this. */
+export function chainCallout(actor: SceneActor, place: ChainCalloutPlace = actor.chain?.callout ?? CHAIN_CALLOUT_PLACES[0]!): { box: [number, number, number, number]; leader: [Point, Point] } {
+  const reach = actorChainReach(actor) * .72;
+  const tip = { x: actor.x + Math.cos(actor.chain!.angle) * reach, y: actor.y + Math.sin(actor.chain!.angle) * reach };
+  const width = (actor.chain!.label.length + 6) * 6.8;
+  const x = tip.x + place.dx; const y = tip.y + place.dy;
+  const left = place.anchor === 'start' ? x : x - width;
+  return { box: [left, y - 14, left + width, y + 4], leader: [{ x: place.anchor === 'start' ? x - 4 : x + 4, y: y + 6 }, { x: tip.x + place.tx, y: tip.y + place.ty }] };
 }
 
 const RADIUS: Record<ActorType, number> = { dna: 0, rna: 0, protein: 62, complex: 70, molecule: 24 };
@@ -395,8 +479,8 @@ export function moleculeTopology(key: string | undefined): SmallMoleculeTopology
 }
 
 /** Particles of an actor's body in local coordinates; the renderer draws exactly these. */
-export function actorParticles(id: string, type: ActorType, radius: number, molecule?: string): ProteinSphere[] {
-  if (type !== 'molecule') return proteinGeometry(id, radius, type === 'complex' ? 32 : 28);
+export function actorParticles(id: string, type: ActorType, radius: number, molecule?: string, visual?: ProteinActorVisual): ProteinSphere[] {
+  if (type !== 'molecule') return visual ? proteinVisualParticles(id, radius, type === 'complex' ? 32 : 28, visual) : proteinGeometry(id, radius, type === 'complex' ? 32 : 28);
   const topology = moleculeTopology(molecule);
   const atoms = topology ? smallMoleculeAtoms(topology, MOLECULE_ACTOR_SCALE) : moleculeAtoms(hashString(id), radius);
   return atoms.map(atom => ({ ...atom, rx: atom.r, ry: atom.r, rotation: 0, depth: 0 }));
@@ -440,8 +524,26 @@ const BEAD_OUTLINE = .6;
 const SHAPES = new Map<string, ContactShape>();
 const CONTACTS = new Map<string, FirstContact>();
 /** Geometry depends on the definition, never on which copy it is (RFC 0005 §3.3). */
-type Shaped = Pick<SceneActor, 'actor' | 'type' | 'radius' | 'chain' | 'molecule'>;
-const shapeKey = (actor: Shaped) => `${actor.actor}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}` : ''}`;
+type Shaped = Pick<SceneActor, 'actor' | 'type' | 'radius' | 'chain' | 'molecule' | 'visual'>;
+export function actorRepeatedMarker(actor: Shaped) {
+  if (!actor.chain?.profile) return undefined;
+  const margin = actorOutline(actor.type, actor.radius);
+  const carrier = { particles: actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual), margin };
+  return repeatedMarkerGeometry(actor.chain.profile, actor.chain.length, actor.chain.angle, carrier);
+}
+
+export function actorChainGeometry(actor: Shaped) {
+  const repeated = actorRepeatedMarker(actor);
+  return repeated ? { beads: repeated.units, links: repeated.links } : chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor));
+}
+
+export function actorChainReach(actor: Shaped) {
+  const repeated = actorRepeatedMarker(actor);
+  if (!repeated) return chainBase(actor) + chainReach(actor.chain!.length);
+  return Math.max(...repeated.units.map(u => Math.hypot(u.x, u.y) + u.r));
+}
+
+const shapeKey = (actor: Shaped) => `${actor.actor}|${actor.type}|${actor.radius}|${actor.molecule ?? ''}|${actor.visual ? JSON.stringify(actor.visual) : ''}|${actor.chain ? `${actor.chain.length}@${actor.chain.angle}${actor.chain.profile ? JSON.stringify(actor.chain.profile) : ''}` : ''}`;
 
 /** Everything visible of an actor that a partner can touch: its body plus its chain, outlines included. */
 export function actorContactShape(actor: Shaped): ContactShape {
@@ -449,10 +551,11 @@ export function actorContactShape(actor: Shaped): ContactShape {
   let shape = SHAPES.get(key);
   if (!shape) {
     const margin = actorOutline(actor.type, actor.radius);
-    const body = actorParticles(actor.actor, actor.type, actor.radius, actor.molecule).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
-    const beads = actor.chain ? chainGeometry(actor.radius, actor.chain.angle, actor.chain.length, chainBase(actor)).beads
+    const body = actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual).map(particle => ({ ...particle, rx: particle.rx + margin, ry: particle.ry + margin }));
+    const repeated = actorRepeatedMarker(actor);
+    const beads = actor.chain && !repeated ? chainGeometry(actor.radius, actor.chain.angle, actor.chain.length, chainBase(actor)).beads
       .map(bead => ({ x: bead.x, y: bead.y, r: bead.r + BEAD_OUTLINE, rx: bead.r + BEAD_OUTLINE, ry: bead.r + BEAD_OUTLINE, rotation: 0, depth: 1 })) : [];
-    shape = { particles: [...body, ...beads] };
+    shape = { particles: [...body, ...(repeated ? repeated.particles : beads)] };
     if (SHAPES.size > 512) SHAPES.clear();
     SHAPES.set(key, shape);
   }
@@ -466,7 +569,7 @@ export function chainBase(actor: Shaped): number {
   const key = `${shapeKey(actor)}`;
   let base = BASES.get(key);
   if (base === undefined) {
-    const body = actorContactShape({ actor: actor.actor, type: actor.type, radius: actor.radius, molecule: actor.molecule });
+    const body = actorContactShape({ actor: actor.actor, type: actor.type, radius: actor.radius, molecule: actor.molecule, visual: actor.visual });
     const d = { x: Math.cos(actor.chain.angle), y: Math.sin(actor.chain.angle) };
     const along = contactOutline(body).filter(point => Math.abs(point.x * d.y - point.y * d.x) < 3).map(point => point.x * d.x + point.y * d.y);
     base = Math.round(Math.max(actor.radius * .3, ...along) * 10) / 10;
@@ -559,6 +662,9 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const x = (coordinate: number) => width * coordinate / length;
     const range = ({ from, to }: { from: number; to: number }): SceneRange => ({ from, to, x0: x(from), x1: x(to) });
     const strandState = snapshot.actors[definition.id]!.nucleic;
+    // A single-stranded molecule (the default for RNA) has no bottom strand at all: it is drawn as one
+    // relaxed strand through the same strand-state path as resected DNA, never as a duplex.
+    const single = nucleicForm(definition) === 'single';
     return {
       id: definition.id,
       type: definition.type as 'dna' | 'rna',
@@ -576,7 +682,11 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       }),
       length,
       ...(definition.nucleic && { polarity: true }),
-      ...(strandState?.missing.length && { missing: strandState.missing.map(item => ({ strand: item.strand, ...range(item) })) }),
+      ...((single || strandState?.missing.length) && { missing: [
+        ...(strandState?.missing ?? []).map(item => ({ strand: item.strand, ...range(item) })),
+        // The absent strand's drawn extent runs past both ends, so the molecule is relaxed along its whole length.
+        ...(single ? [{ strand: 'bottom' as const, from: 0, to: length, x0: -width, x1: 2 * width }] : []),
+      ] }),
       ...(strandState?.nascent.length && { nascent: strandState.nascent.map(item => ({ strand: item.strand, ...range(item) })) }),
       ...(strandState?.open.length && { open: strandState.open.map(range) }),
     };
@@ -620,12 +730,15 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // same silhouette and size whether it is on the DNA or not (RFC 0005 §3.3).
   const scaleAcid = nucleicAcids[0];
   const radii = new Map<string, number>();
+  const visualOf = (definition: InstanceView) => definition.type === 'protein' || definition.type === 'complex' ? options.proteinVisuals?.[definition.visual] : undefined;
   const radiusOf = (definition: InstanceView): number => {
-    const base = RADIUS[definition.type];
+    // A chosen visual may be naturally larger or smaller than a generic actor. Every later step reads
+    // this radius, so drawing, bounds, framing, contacts and collisions share one geometry.
+    const base = Math.round(RADIUS[definition.type] * (visualOf(definition)?.extent ?? 1) * 10) / 10;
     if (!definition.footprint || !scaleAcid) return base;
     let radius = radii.get(definition.visual);
     if (radius === undefined) {
-      const [minX, maxX] = extentX({ actor: definition.visual, type: definition.type, radius: base, molecule: definition.molecule });
+      const [minX, maxX] = extentX({ actor: definition.visual, type: definition.type, radius: base, molecule: definition.molecule, visual: visualOf(definition) });
       const covered = width * definition.footprint.length / (scaleAcid.length ?? 100);
       radius = Math.max(12, Math.min(base, Math.round(base * covered / (maxX - minX) * 10) / 10));
       radii.set(definition.visual, radius);
@@ -645,6 +758,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const make = (definition: InstanceView, point: Point, labelSide: -1 | 1, ghost = false): SceneActor => {
     const state = snapshot.actors[definition.id]!;
     const chain = state.modifications.find(modification => modification.length);
+    const profile = chain ? resolveModificationVisualProfile(chain, options.modificationProfiles) : undefined;
     return {
       id: definition.id,
       actor: definition.visual,
@@ -654,13 +768,14 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       color: definition.color ?? defaultColor(definition.visual),
       radius: radiusOf(definition),
       ...(definition.type === 'molecule' && definition.molecule && { molecule: definition.molecule }),
+      ...(visualOf(definition) && { visual: visualOf(definition) }),
       ...(!ghost && spanOf(definition.id)?.orientation === 'reverse' && { mirrored: true }),
       ...(state.compartment && { compartment: state.compartment }),
       ...(state.activity && { activity: state.activity.state }),
       ...(attachedTo(definition.id) && !ghost && { boundTo: attachedTo(definition.id) }),
       ghost,
       labelSide,
-      ...(chain && !ghost && { chain: { label: chain.label, length: chain.length!, angle: CHAIN_ANGLE } }),
+      ...(chain && !ghost && { chain: { label: chain.label, length: chain.length!, angle: CHAIN_ANGLE, ...(profile && { profile }) } }),
       badges: ghost ? [] : state.modifications.filter(modification => !modification.length),
       x: point.x,
       y: point.y,
@@ -676,7 +791,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const acid = occupancy && acidIndex.get(occupancy.acid);
     if (!occupancy || !acid || definition.position) continue;
     const x = width * ((occupancy.span!.from + occupancy.span!.to) / 2) / (acid.length ?? 100);
-    const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule };
+    const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition) };
     // An occupant follows its strand: on a stretch drawn beside another molecule it rests there.
     const moved = travelling(occupancy.acid, occupancy.strand, (occupancy.span!.from + occupancy.span!.to) / 2);
     if (moved) {
@@ -704,7 +819,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     let right = anchor.x;
     group.forEach((definition, index) => {
       // Neighbours on the same site are spaced by their visible outlines, not by bounding circles.
-      const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule };
+      const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition) };
       const [minX, maxX] = extentX(body);
       let x = anchor.x;
       if (index === 0) { left = x + minX; right = x + maxX; }
@@ -742,7 +857,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const distal = Math.abs(stretch.x0 - site.x) > Math.abs(stretch.x1 - site.x) ? stretch.x0 : stretch.x1;
     // Aim where the chain's own reach meets the backbone surface on the way to the distal end, so the
     // filament comes to rest on the strand instead of running on through it.
-    const reach = chainBase(actor) + chainReach(actor.chain.length);
+    const reach = actorChainReach(actor);
     const rest = (x: number) => ({ x, y: helixTop(acid, x, width) - 14 });
     const direction = Math.sign(distal - actor.x) || 1;
     let target = rest(distal);
@@ -752,7 +867,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     }
     let angle = Math.atan2(target.y - actor.y, target.x - actor.x);
     // Like docked actors, tilt towards "up" until no bead dips into the backbone.
-    const sinks = (candidate: number) => chainGeometry(actor.radius, candidate, actor.chain!.length, chainBase({ ...actor, chain: { ...actor.chain!, angle: candidate } })).beads
+    const sinks = (candidate: number) => actorChainGeometry({ ...actor, chain: { ...actor.chain!, angle: candidate } }).beads
       .some(bead => actor.y + bead.y + bead.r + BEAD_OUTLINE > helixTop(acid, actor.x + bead.x, width) + 1);
     for (let step = 0; step < 30 && sinks(angle); step++) {
       angle += Math.sign(Math.atan2(Math.sin(-Math.PI / 2 - angle), Math.cos(-Math.PI / 2 - angle))) * .05;
@@ -899,7 +1014,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       const width = Math.max(48, actor.label.length * 8.4 + 24);
       const pillX = side * (actor.radius + 22); const pillY = -actor.radius - 62;
       const pill = [side === 1 ? pillX : pillX - width, pillY - 14, side === 1 ? pillX + width : pillX, pillY + 14];
-      const reach = (chainBase(actor) + chainReach(actor.chain.length)) * .72;
+      const reach = (actorChainReach(actor)) * .72;
       const tip = { x: Math.cos(actor.chain.angle) * reach, y: Math.sin(actor.chain.angle) * reach };
       const text = [tip.x - 64, tip.y - 40, tip.x - 64 + (actor.chain.label.length + 6) * 6.8, tip.y - 22];
       return pill[0]! < text[2]! && pill[2]! > text[0]! && pill[1]! < text[3]! && pill[3]! > text[1]!;
@@ -929,40 +1044,119 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   for (const actor of actors.filter(item => !item.ghost && item.id !== item.actor)) alike.set(signature(actor), [...alike.get(signature(actor)) ?? [], actor]);
   for (const copies of alike.values()) if (copies.length > 1) copies.forEach((actor, index) => { actor.identical = { size: copies.length, first: index === 0 }; });
 
-  // A callout that still lies on another body or callout, or off the canvas, looks for a free place: the
-  // other side, then higher on either side. One that is already clear is left exactly where it was.
-  const bodies = actors.filter(actor => !actor.ghost).map(actor => {
+  // ---- Callout placement ----
+  // Collision geometry is everything a reader sees: bodies and their chains, pills, the text of chain
+  // callouts, nucleic acids, and the leader of every callout. A leader that crosses a body, a pill or
+  // another leader is a conflict exactly like a pill lying on one.
+  type Box = readonly [number, number, number, number];
+  const live = actors.filter(actor => !actor.ghost);
+  // Upcoming actors are drawn small and faint. They are soft obstacles: worth avoiding, never worth a hard conflict.
+  const GHOST_SCALE = .62;
+  const ghostShapes = actors.filter(actor => actor.ghost).map(actor => {
+    const pill = labelBox(actor);
+    const shrink = (value: number, origin: number) => origin + (value - origin) * GHOST_SCALE;
+    return {
+      actor,
+      pill: [shrink(pill[0], actor.x), shrink(pill[1], actor.y), shrink(pill[2], actor.x), shrink(pill[3], actor.y)] as const,
+      particles: actorContactShape(actor).particles,
+    };
+  });
+  const bodies = live.map(actor => {
     const outline = contactOutline(actorContactShape(actor));
     const [xs, ys] = [outline.map(point => actor.x + point.x), outline.map(point => actor.y + point.y)];
-    return { actor, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as [number, number, number, number] };
+    return { actor, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as Box };
   });
-  // Chains and their own callouts are in the way too.
-  const chains = actors.filter(actor => !actor.ghost && actor.chain).flatMap(actor => {
-    const { beads } = chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor));
-    const reach = (chainBase(actor) + chainReach(actor.chain!.length)) * .72;
-    const tip = { x: actor.x + Math.cos(actor.chain!.angle) * reach, y: actor.y + Math.sin(actor.chain!.angle) * reach };
-    return [
-      ...beads.map(bead => [actor.x + bead.x - bead.r, actor.y + bead.y - bead.r, actor.x + bead.x + bead.r, actor.y + bead.y + bead.r]),
-      [tip.x - 64, tip.y - 40, tip.x - 64 + (actor.chain!.label.length + 6) * 6.8, tip.y - 22],
-    ];
-  });
-  const meets = (a: readonly number[], b: readonly number[]) => Math.min(a[2]!, b[2]!) - Math.max(a[0]!, b[0]!) > 4 && Math.min(a[3]!, b[3]!) - Math.max(a[1]!, b[1]!) > 4;
-  const settledLabels: [number, number, number, number][] = [];
-  for (const actor of actors.filter(item => !item.ghost && item.group?.lead !== false)) {
-    const cost = (side: -1 | 1, lift: number) => {
-      const box = labelBox(actor, side, lift);
-      return bodies.filter(body => body.actor !== actor && meets(box, body.box)).length + settledLabels.filter(other => meets([box[0] - 10, box[1] - 6, box[2] + 10, box[3] + 6], other)).length
-        + (chains.some(other => meets(box, other)) ? 1 : 0)
-        + (box[0] < 4 || box[2] > width - 4 || box[1] < 4 ? 3 : 0);
+  const meets = (a: Box, b: Box) => Math.min(a[2], b[2]) - Math.max(a[0], b[0]) > 4 && Math.min(a[3], b[3]) - Math.max(a[1], b[1]) > 4;
+  const within = (box: Box, point: Point, pad = 0) => point.x > box[0] - pad && point.x < box[2] + pad && point.y > box[1] - pad && point.y < box[3] + pad;
+  /** The visible surface (body and chain) of `actor` contains the canvas point. */
+  const onBody = (actor: SceneActor, point: Point) => actorContactShape(actor).particles.some(particle => insideParticle(particle, point.x - actor.x, point.y - actor.y, 1));
+  /** The point lies on the actor's chain, not on its body: a leader may end on its body but not cross its chain. */
+  const onOwnChain = (actor: SceneActor, point: Point) => !!actor.chain && onBody(actor, point)
+    && !actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual).some(particle => insideParticle(particle, point.x - actor.x, point.y - actor.y, 1));
+  const crosses = (a: readonly Point[], b: readonly Point[]) => a.some((p, i) => i > 0 && b.some((q, j) => {
+    if (j === 0) return false;
+    const [p0, q0] = [a[i - 1]!, b[j - 1]!];
+    const side = (o: Point, u: Point, v: Point) => Math.sign((u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x));
+    return side(p0, p, q0) !== side(p0, p, q) && side(q0, q, p0) !== side(q0, q, p) && side(p0, p, q0) !== 0 && side(q0, q, p0) !== 0;
+  }));
+  /** A canvas point lies on an upcoming actor's faint body or callout. */
+  const onGhostShape = (ghost: typeof ghostShapes[number], point: Point) => within(ghost.pill, point)
+    || ghost.particles.some(particle => insideParticle(particle, (point.x - ghost.actor.x) / GHOST_SCALE, (point.y - ghost.actor.y) / GHOST_SCALE, 1));
+  const onGhost = (point: Point) => ghostShapes.some(ghost => onGhostShape(ghost, point));
+  const offCanvas = (box: Box) => box[0] < 4 || box[2] > width - 4 || box[1] < 4 || box[3] > height - 4;
+  const acidBands = nucleicAcids.map((acid): Box => [0, acid.y - HELIX.amplitude - HELIX.tube, width, acid.y + HELIX.amplitude + HELIX.tube]);
+  const boxPoints = (box: Box): Point[] => [0, .5, 1].flatMap(u => [0, .5, 1].map(v => ({ x: box[0] + (box[2] - box[0]) * u, y: box[1] + (box[3] - box[1]) * v })));
+
+  const calloutConflicts: SceneCalloutConflict[] = [];
+  // A chain's callout keeps its usual place unless its text or leader lies on a body or a chain.
+  const chained = live.filter(actor => actor.chain);
+  for (const actor of chained) {
+    const cost = (place: ChainCalloutPlace) => {
+      const { box, leader } = chainCallout(actor, place);
+      const text = [0, .25, .5, .75, 1].flatMap(u => [0, .5, 1].map(v => ({ x: box[0] + (box[2] - box[0]) * u, y: box[1] + (box[3] - box[1]) * v })));
+      // The leader ends on its own chain; only the stretch before that can be in the way.
+      const line = [0, .2, .4, .6, .8].map(t => ({ x: leader[0].x + (leader[1].x - leader[0].x) * t, y: leader[0].y + (leader[1].y - leader[0].y) * t }));
+      // How much of the text and leader is covered, not just by how many bodies: the least covered place wins.
+      const covered = [...text, ...line].filter(point => live.some(other => onBody(other, point))).length
+        + chained.filter(other => other !== actor && other.chain!.callout !== undefined && meets(box, chainCallout(other).box)).length * 4;
+      const faint = [...text, ...line].filter(point => onGhost(point)).length;
+      return { hard: covered, ghost: faint, total: covered * CALLOUT_COST.lying + faint * CALLOUT_COST.ghost + (offCanvas(box) ? CALLOUT_COST.offCanvas * (text.length + line.length) : 0) };
     };
-    if (cost(actor.labelSide, 0) > 0) {
-      const other = -actor.labelSide as -1 | 1;
-      const options = [0, 40, 80, 120].flatMap(lift => [[actor.labelSide, lift], [other, lift]] as [-1 | 1, number][]);
-      const best = options.reduce((chosen, option) => (cost(...option) < cost(...chosen) ? option : chosen));
-      actor.labelSide = best[0];
-      if (best[1]) actor.labelLift = best[1];
-    }
-    settledLabels.push(labelBox(actor));
+    const best = CHAIN_CALLOUT_PLACES.reduce((chosen, place) => (cost(place).total < cost(chosen).total ? place : chosen));
+    if (best !== CHAIN_CALLOUT_PLACES[0]) actor.chain!.callout = best;
+    const settled = cost(best);
+    if (settled.total) calloutConflicts.push({ actor: actor.id, kind: 'chain', cost: settled.total, hard: settled.hard, ghost: settled.ghost });
+  }
+  const chainTexts = chained.map(actor => chainCallout(actor));
+  const chainBeads = chained.flatMap(actor => actorChainGeometry(actor).beads
+    .map((bead): Box => [actor.x + bead.x - bead.r, actor.y + bead.y - bead.r, actor.x + bead.x + bead.r, actor.y + bead.y + bead.r]));
+
+  // A callout that lies on something, or whose leader crosses something, looks for a free place: the
+  // other side, then higher on either side, then below the body. One that is already clear is left
+  // exactly where it was.
+  type Place = readonly [side: -1 | 1, lift: number, drop: boolean];
+  const labelled = live.filter(actor => actor.group?.lead !== false);
+  const weigh = (actor: SceneActor, [side, lift, drop]: Place, others: readonly SceneActor[]) => {
+    const box = labelBox(actor, side, lift, drop);
+    const leader = labelLeader(actor, side, lift, drop);
+    // The last stretch of a leader lies on the body it points at.
+    const free = leader.slice(0, -2);
+    const padded: Box = [box[0] - 10, box[1] - 6, box[2] + 10, box[3] + 6];
+    const lying = bodies.filter(body => body.actor !== actor && meets(box, body.box)).length
+      + others.filter(other => meets(padded, labelBox(other))).length
+      + ([...chainBeads, ...chainTexts.map(text => text.box)].some(other => meets(box, other)) ? 1 : 0)
+      // Only a callout hung below its body can come down onto a nucleic acid; above, the usual place stands.
+      + (drop && acidBands.some(band => meets(box, band)) ? 1 : 0);
+    // Leaders: through another body or a chain, through a pill or a chain callout, or across another leader.
+    const crossing = live.filter(other => other !== actor && free.some(point => onBody(other, point))).length
+      // A leader that ends on someone else points at the wrong thing.
+      + (live.some(other => other !== actor && onBody(other, leader[leader.length - 1]!)) ? 1 : 0)
+      + (free.some(point => onOwnChain(actor, point)) ? 1 : 0)
+      + others.filter(other => leader.some(point => within(labelBox(other), point, 2)) || labelLeader(other).slice(0, -1).some(point => within(box, point, 2)) || crosses(leader, labelLeader(other))).length
+      + chainTexts.filter(text => leader.some(point => within(text.box, point, 1)) || crosses(leader, text.leader) || text.leader.some(point => within(box, point, 1))).length;
+    // An upcoming actor under the pill, and one under the leader: one soft conflict each.
+    const ghost = ghostShapes.filter(shape => meets(box, shape.pill) || boxPoints(box).some(point => onGhostShape(shape, point))).length
+      + (free.some(point => onGhost(point)) ? 1 : 0);
+    return { hard: lying + crossing, ghost, total: lying * CALLOUT_COST.lying + crossing * CALLOUT_COST.crossing + ghost * CALLOUT_COST.ghost + (offCanvas(box) ? CALLOUT_COST.offCanvas : 0) };
+  };
+  const cost = (actor: SceneActor, place: Place, others: readonly SceneActor[]) => weigh(actor, place, others).total;
+  const settle = (actor: SceneActor, others: readonly SceneActor[]) => {
+    const current: Place = [actor.labelSide, actor.labelLift ?? 0, actor.labelDrop ?? false];
+    if (cost(actor, current, others) === 0) return;
+    const other = -actor.labelSide as -1 | 1;
+    const options: Place[] = [current, ...[0, 40, 80, 120].flatMap((lift): Place[] => [[actor.labelSide, lift, false], [other, lift, false]]), [actor.labelSide, 0, true], [other, 0, true]];
+    const best = options.reduce((chosen, option) => (cost(actor, option, others) < cost(actor, chosen, others) ? option : chosen));
+    actor.labelSide = best[0];
+    if (best[1]) actor.labelLift = best[1]; else delete actor.labelLift;
+    if (best[2]) actor.labelDrop = true; else delete actor.labelDrop;
+  };
+  // First in order, each against the callouts settled before it; then any callout still in conflict
+  // is placed again against all the others, since the one in its way may have been settled later.
+  labelled.forEach((actor, index) => settle(actor, labelled.slice(0, index)));
+  for (let round = 0; round < 2; round++) for (const actor of labelled) settle(actor, labelled.filter(other => other !== actor));
+  for (const actor of labelled) {
+    const settled = weigh(actor, [actor.labelSide, actor.labelLift ?? 0, actor.labelDrop ?? false], labelled.filter(other => other !== actor));
+    if (settled.total) calloutConflicts.push({ actor: actor.id, kind: 'label', cost: settled.total, hard: settled.hard, ghost: settled.ghost });
   }
   const actorIndex = new Map(actors.map(actor => [actor.id, actor]));
   const connections = actors.filter(actor => !actor.ghost && actor.boundTo).flatMap((actor): SceneConnection[] => {
@@ -997,7 +1191,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions, pairings, footprints,
+    nucleicAcids, actors, connections, lesions, pairings, footprints, calloutConflicts,
   };
 }
 

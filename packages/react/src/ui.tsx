@@ -1,3 +1,4 @@
+import type { ProteinActorVisuals } from '@molecular-motion/svg';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { actorInstances, partnersOf, type MechanismSnapshot, type ReferenceDefinition } from '@molecular-motion/core';
 import { LESION_LABELS } from '@molecular-motion/svg';
@@ -77,7 +78,7 @@ export function StepTimeline({ player }: { player: MechanismPlayer }) {
 
 // ---- Thumbnails ----
 
-export function StepThumbnails({ player }: { player: MechanismPlayer }) {
+export function StepThumbnails({ player, proteinVisuals }: { player: MechanismPlayer; proteinVisuals?: ProteinActorVisuals }) {
   const strip = useRef<HTMLOListElement>(null);
   // Keep the current step in view. Only the strip scrolls, sideways: the page never moves.
   useEffect(() => {
@@ -101,7 +102,7 @@ export function StepThumbnails({ player }: { player: MechanismPlayer }) {
         onClick={() => { player.setPlaying(false); player.goTo(index); }}
       >
         <span className="mm-thumbnail__title"><span className="mm-thumbnail__number">{index + 1}</span>{step.title}</span>
-        <MechanismThumbnail mechanism={player.mechanism} stepIndex={index} />
+        <MechanismThumbnail mechanism={player.mechanism} stepIndex={index} proteinVisuals={proteinVisuals} />
       </button>
     </li>)}
   </ol>;

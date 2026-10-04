@@ -1,0 +1,226 @@
+schemaVersion: 5
+mechanism:
+  id: p53-mdm2-feedback
+  name: p53–MDM2 negative feedback
+  description: Basal p53 turnover followed by a schematic stress response and
+    induction of its own inhibitor, MDM2.
+compartments:
+  - nucleus
+actors:
+  - id: p53-basal
+    type: protein
+    label: p53
+    compartment: nucleus
+    color: "#8b78d0"
+    interfaces:
+      - id: mdm2
+      - id: ub
+    initial:
+      visible: true
+      activity: inactive
+  - id: p53-response
+    type: protein
+    label: p53
+    compartment: nucleus
+    color: "#8b78d0"
+    interfaces:
+      - id: mdm2
+      - id: ub
+    footprint:
+      length: 20
+      form: duplex
+    initial:
+      present: false
+  - id: mdm2-basal
+    type: protein
+    label: MDM2
+    compartment: nucleus
+    interfaces:
+      - id: p53
+    initial:
+      visible: true
+      activity: active
+  - id: mdm2-induced
+    type: protein
+    label: MDM2 induced
+    compartment: nucleus
+    color: "#dca064"
+    interfaces:
+      - id: p53
+    initial:
+      present: false
+  - id: proteasome
+    type: complex
+    label: 26S proteasome
+    initial:
+      visible: false
+    color: "#7c9cc4"
+    compartment: nucleus
+    interfaces:
+      - id: substrate
+  - id: mdm2-gene
+    type: dna
+    label: MDM2 gene
+    compartment: nucleus
+    nucleic:
+      length: 100
+    sites:
+      - id: response-element
+        span:
+          - 30
+          - 50
+        strand: both
+    initial:
+      visible: false
+  - id: mdm2-rna
+    type: rna
+    label: MDM2 mRNA
+    compartment: nucleus
+    nucleic:
+      length: 60
+    initial:
+      present: false
+steps:
+  - id: basal
+    title: Basal p53
+    actions: []
+    summary: Low basal transcriptional activity
+    description: The basal p53 molecule is present. Its inactive presentation
+      represents low transcriptional activity in this schematic scene.
+  - id: inhibition
+    title: MDM2 binding and inhibition
+    actions:
+      - type: bind
+        actor: mdm2-basal
+        target: p53-basal
+        interface: p53
+        targetInterface: mdm2
+      - type: set-state
+        target: p53-basal
+        activity: inhibited
+        by: mdm2-basal
+    summary: MDM2 binds and inhibits p53
+    description: Binding and inhibition are authored as separate state changes.
+    references:
+      - mdm2-binding
+  - id: polyubiquitination
+    title: p53 polyubiquitination
+    actions:
+      - type: modify
+        actor: p53-basal
+        kind: ubiquitination
+        label: Ub
+        length: 4
+        by: mdm2-basal
+    summary: Four small units decorate one covalent modification
+    description: Poly-Ub is one modification with length four, not four independent actors.
+    references:
+      - mdm2-ubiquitination
+  - id: association
+    title: Proteasome association
+    actions:
+      - type: unbind
+        actor: mdm2-basal
+        target: p53-basal
+        interface: p53
+      - type: bind
+        actor: proteasome
+        target: p53-basal
+        interface: substrate
+        targetInterface: ub
+    summary: Generic proteasome associates with the tagged carrier
+    description: The proteasome is an unchanged generic complex. Association is to
+      the modified carrier; the core does not model recognition of the
+      modification.
+  - id: degradation
+    title: p53 degradation
+    actions:
+      - type: unbind
+        actor: proteasome
+        target: p53-basal
+        interface: substrate
+      - type: modify
+        actor: p53-basal
+        kind: ubiquitination
+        remove: true
+      - type: degrade
+        actor: p53-basal
+        by: proteasome
+    summary: p53 is degraded; its ubiquitin tag is released
+    description: Removing the tag abstracts ubiquitin release and recycling as p53
+      is degraded.
+  - id: activation
+    title: p53 stabilization and activation
+    actions:
+      - type: set-state
+        target: proteasome
+        visible: false
+      - type: set-state
+        target: mdm2-basal
+        activity: inactive
+      - type: synthesize
+        product: p53-response
+        compartment: nucleus
+      - type: set-state
+        target: p53-response
+        activity: active
+    summary: A new p53 molecule appears and becomes active
+    description: An abstract stress phase reduces basal MDM2 activity. A distinct
+      newly synthesized p53 molecule persists and is activated; no half-life or
+      kinetic stabilization is calculated.
+  - id: expression
+    title: MDM2 expression
+    actions:
+      - type: set-state
+        target: mdm2-gene
+        visible: true
+      - type: occupy
+        actor: p53-response
+        target: mdm2-gene.response-element
+        strand: both
+      - type: synthesize
+        product: mdm2-rna
+        compartment: nucleus
+        by: p53-response
+      - type: synthesize
+        product: mdm2-induced
+        compartment: nucleus
+        by: mdm2-rna
+      - type: set-state
+        target: mdm2-induced
+        activity: active
+    summary: DNA occupancy and abstracted RNA/protein synthesis
+    description: The response element and footprint use a schematic 20-nt span.
+      Synthesis abstracts transcription and translation; the RNA is a causal
+      annotation rather than translation machinery.
+    references:
+      - mdm2-transcription
+  - id: feedback
+    title: Negative feedback
+    actions:
+      - type: vacate
+        actor: p53-response
+        target: mdm2-gene
+      - type: bind
+        actor: mdm2-induced
+        target: p53-response
+        interface: p53
+        targetInterface: mdm2
+      - type: set-state
+        target: p53-response
+        activity: inhibited
+        by: mdm2-induced
+    summary: Induced MDM2 inhibits p53
+    description: p53 leaves the response element and the newly produced MDM2 binds
+      and inhibits it. This closes a narrated feedback cycle without simulating
+      oscillations.
+references:
+  - id: mdm2-binding
+    reactome: R-HSA-5633460
+    citation: "Reactome: MDM2 binds TP53"
+  - id: mdm2-ubiquitination
+    reactome: R-HSA-6804879
+    citation: "Reactome: MDM2 ubiquitinates TP53"
+  - id: mdm2-transcription
+    reactome: R-HSA-3700992
+    citation: "Reactome: TP53 stimulates MDM2 transcription"

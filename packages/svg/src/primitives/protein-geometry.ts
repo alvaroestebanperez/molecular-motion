@@ -1,7 +1,8 @@
+import type { ProteinArchitecture, ProteinDisorder, ProteinFold, ProteinVisualProfile } from '../protein-visual-profiles';
 import { seededRandom, round, mix, esc, hashString } from './shared';
 
 /** One overlapping ellipsoidal volume of a protein surface. `r` is the geometric mean radius; `domain` is its lobe. */
-export interface ProteinSphere { x: number; y: number; r: number; rx: number; ry: number; rotation: number; depth: number; domain?: number }
+export interface ProteinSphere { x: number; y: number; r: number; rx: number; ry: number; rotation: number; depth: number; domain?: number; /** Position along a disordered region; absent on folded volumes. */ chain?: number }
 
 /** Deterministic silhouette families. They are visual archetypes, never PDB structures. */
 export type ProteinMorphology = 'compact' | 'elongated' | 'bilobed' | 'multidomain' | 'ring' | 'crescent';
@@ -15,10 +16,103 @@ export function proteinMorphology(visualSeed: string): ProteinMorphology {
 
 interface Domain { x: number; y: number; rx: number; ry: number; rotation: number }
 
+/** Barrel layout in unit space: rim ellipse semi-axes, height of the top ring and its far-side unit count. */
+const BARREL = { a: .52, b: .22, top: -.45, far: 5 } as const;
+/** Architectures whose geometry keeps a fixed, upright orientation. */
+const UPRIGHT: readonly GeometryFamily[] = ['barrel', 'multisubunit', 'y-shaped', 'dimer'];
+/** Fold architectures whose domains are secondary-structure elements: even rods, not lumpy lobes. */
+const ELEMENTS: readonly GeometryFamily[] = ['helical-bundle', 'beta-sandwich', 'beta-propeller', 'alpha-beta'];
+/** Strands of the far sheet of a `beta-sandwich`, and of the sheet of an `alpha-beta` fold. */
+const SHEET = 5;
+/** Thickness of a disordered backbone in unit space. */
+const IDR_WIDTH = .13;
+
 /** Main lobes (2–4, or a ring of subunits) in unit space; concavities come from their arrangement. */
-function proteinDomains(family: ProteinMorphology, random: () => number): Domain[] {
+type GeometryFamily = ProteinMorphology | Exclude<ProteinArchitecture, 'surface'> | Exclude<ProteinFold, 'none'>;
+
+function proteinDomains(family: GeometryFamily, random: () => number): Domain[] {
   const jitter = (amount: number) => (random() - .5) * 2 * amount;
   switch (family) {
+    case 'barrel': {
+      // Stacked rings seen slightly from above. The first five units are the far side of the top
+      // ring; the rest are four courses of near-side units that narrow towards the curved edges.
+      const column = (angle: number, y: number, ry: number) => {
+        const facing = Math.abs(Math.cos(angle));
+        return { x: Math.sin(angle) * BARREL.a + jitter(.012), y: y + Math.cos(angle) * BARREL.b + jitter(.012), rx: .1 + .11 * facing + random() * .012, ry: ry + random() * .012, rotation: jitter(.18) };
+      };
+      const far = Array.from({ length: BARREL.far }, (_, i) => column(Math.PI + (i - 2) * Math.PI / 5, BARREL.top, .11));
+      const near = Array.from({ length: 20 }, (_, i) => column((i % 5 - 2) * Math.PI / 5, BARREL.top + Math.floor(i / 5) * .3, .165));
+      return [...far, ...near];
+    }
+    case 'helical-bundle': {
+      // Four or five thick rods packed side by side, slightly splayed and staggered.
+      const count = 4 + Math.floor(random() * 2);
+      return Array.from({ length: count }, (_, index) => {
+        const lane = index - (count - 1) / 2;
+        return { x: lane * .27, y: jitter(.09), rx: .48 + jitter(.06), ry: .15, rotation: Math.PI / 2 + lane * .07 + jitter(.06) };
+      });
+    }
+    case 'beta-sandwich': {
+      // Two sheets of thin parallel strands; the far sheet is shifted so it shows behind the near one.
+      const tilt = Math.PI / 2 + .14 + jitter(.08);
+      const sheet = (dx: number, dy: number) => Array.from({ length: SHEET }, (_, index) => (
+        { x: (index - (SHEET - 1) / 2) * .17 + dx, y: dy + jitter(.025), rx: .44 + jitter(.03), ry: .095, rotation: tilt }
+      ));
+      return [...sheet(.1, -.17), ...sheet(-.05, .06)];
+    }
+    case 'beta-propeller': {
+      // Seven twisted blades around a narrow pore: a pinwheel, where `ring` is a chain of tangential subunits.
+      const twist = .5 + jitter(.1);
+      return Array.from({ length: 7 }, (_, index) => {
+        const angle = index / 7 * Math.PI * 2;
+        return { x: Math.cos(angle) * .5, y: Math.sin(angle) * .5, rx: .31, ry: .2, rotation: angle + twist };
+      });
+    }
+    case 'alpha-beta': {
+      // A central sheet of short strands capped by one helix across each end: three layers.
+      const strands = Array.from({ length: SHEET }, (_, index) => (
+        { x: (index - (SHEET - 1) / 2) * .17, y: jitter(.02), rx: .33, ry: .095, rotation: Math.PI / 2 }
+      ));
+      const helix = (side: number) => ({ x: jitter(.04), y: side * .43, rx: .5 + jitter(.04), ry: .16, rotation: jitter(.1) });
+      return [...strands, helix(-1), helix(1)];
+    }
+    case 'y-shaped': {
+      // Two arms and a stem meeting at a hinge; each limb is two stacked domains.
+      const limb = (angle: number) => [.3, .68].map(distance => (
+        { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance, rx: .25 + random() * .03, ry: .17 + random() * .03, rotation: angle + jitter(.12) }
+      ));
+      const open = .78 + random() * .2;
+      return [{ x: 0, y: 0, rx: .15, ry: .15, rotation: 0 }, ...limb(-Math.PI / 2 - open), ...limb(-Math.PI / 2 + open), ...limb(Math.PI / 2)];
+    }
+    case 'dimer': {
+      // Two mirrored protomers sharing one interface on the vertical axis; domains 0–1 and 2–3 are the protomers.
+      const rx = .3 + random() * .05; const ry = .44 + random() * .08;
+      const lean = .18 + random() * .2;
+      const cap = { x: .44 + random() * .1, y: -.4 - random() * .12, r: .2 + random() * .05 };
+      return [-1, 1].flatMap(side => [
+        { x: side * rx * .86, y: 0, rx, ry, rotation: side * lean },
+        { x: side * cap.x, y: cap.y, rx: cap.r * 1.15, ry: cap.r, rotation: side * .6 },
+      ]);
+    }
+    case 'fibrous': {
+      // A long, thin rod of even segments with a gentle supercoil wave: a fibre, not a chain of domains.
+      const wave = .02 + random() * .02;
+      return Array.from({ length: 8 }, (_, index) => (
+        { x: (index / 7 * 2 - 1) * .88, y: index % 2 ? wave : -wave, rx: .23, ry: .15 + random() * .015, rotation: (index % 2 ? -1 : 1) * .2 }
+      ));
+    }
+    case 'multisubunit': {
+      // A central unit and staggered neighbours form a compact asymmetric complex,
+      // unlike a cyclic oligomer: separate unit contours remain visible at small scales.
+      const jitter = () => (random() - .5) * .045;
+      const centres = [[-.03, .035], [-.46, -.24], [.34, -.36], [-.31, .42], [.42, .28]];
+      return centres.map(([x, y], index) => ({
+        x: x! + jitter(), y: y! + jitter(),
+        rx: (index === 0 ? .3 : .275) + random() * .025,
+        ry: (index === 0 ? .275 : .255) + random() * .025,
+        rotation: (random() - .5) * 1.2,
+      }));
+    }
     case 'compact': {
       // A squat core with 1–3 bulges gathered on one arc: the free side stays flat or notched,
       // so compact proteins differ in where their mass sits, not only in their outline noise.
@@ -116,14 +210,49 @@ function proteinDomains(family: ProteinMorphology, random: () => number): Domain
  * biological role or global randomness. The result is centred and fits within `radius`.
  */
 export function proteinGeometry(visualSeed: string, radius = 52, count = 28, morphology?: ProteinMorphology): ProteinSphere[] {
-  const family = morphology ?? proteinMorphology(visualSeed);
-  const random = seededRandom(`${visualSeed}::${family}`);
-  const turn = family === 'ring' ? random() * Math.PI : random() * Math.PI * 2;
-  const domains = proteinDomains(family, random);
+  return generateProteinGeometry(visualSeed, radius, count, morphology ?? proteinMorphology(visualSeed));
+}
+
+/** Architecture never reads secondary structure or activity: both reuse the exact same surface. */
+export function proteinProfileGeometry(visualSeed: string, radius = 52, count = 28, profile: ProteinVisualProfile): ProteinSphere[] {
+  if (profile.disorder === 'extended') return generateProteinGeometry(visualSeed, radius, count, undefined, 'extended');
+  const family = profile.fold !== 'none' ? profile.fold : profile.architecture === 'surface' ? proteinMorphology(visualSeed) : profile.architecture;
+  return generateProteinGeometry(visualSeed, radius, count, family, profile.disorder);
+}
+
+/**
+ * A disordered region as one continuous, irregular backbone: a persistent random walk sampled
+ * densely enough that its volumes merge into a cord. `from` is where it leaves a folded body.
+ */
+function disorderedChain(visualSeed: string, length: number, from?: { x: number; y: number; heading: number }): { x: number; y: number }[] {
+  const random = seededRandom(`${visualSeed}::disorder`);
+  const step = .05;
+  let { x, y, heading } = from ?? { x: 0, y: 0, heading: random() * Math.PI * 2 };
+  let curl = (random() - .5) * .4;
+  const points = [{ x, y }];
+  for (let travelled = 0; travelled < length; travelled += step) {
+    // Curvature drifts and reverts to zero: the path wanders in loose bends, never zigzags or closes a ring.
+    curl = Math.max(-.26, Math.min(.26, curl * .72 + (random() - .5) * .3));
+    // A tail keeps to the direction it left the body in; a free coil stays loosely gathered.
+    const target = from ? from.heading : Math.atan2(-y, -x);
+    const pull = from ? .09 : .2 * Math.max(0, Math.hypot(x, y) - .7);
+    heading += curl + pull * Math.sin(target - heading);
+    x += Math.cos(heading) * step; y += Math.sin(heading) * step;
+    points.push({ x, y });
+  }
+  return points;
+}
+
+
+function generateProteinGeometry(visualSeed: string, radius: number, count: number, family: GeometryFamily | undefined, disorder: ProteinDisorder = 'none'): ProteinSphere[] {
+  const random = seededRandom(`${visualSeed}::${family ?? 'extended'}`);
+  const turn = !family || UPRIGHT.includes(family) ? 0 : family === 'ring' ? random() * Math.PI : random() * Math.PI * 2;
+  const domains = family ? proteinDomains(family, random) : [];
   const area = domains.reduce((sum, domain) => sum + domain.rx * domain.ry, 0);
   const particles: Omit<ProteinSphere, 'r'>[] = [];
   domains.forEach((domain, domainIndex) => {
-    const share = Math.max(3, Math.round(count * domain.rx * domain.ry / area));
+    const element = !!family && ELEMENTS.includes(family);
+    const share = element ? 3 : Math.max(3, Math.round(count * domain.rx * domain.ry / area));
     const cos = Math.cos(domain.rotation); const sin = Math.sin(domain.rotation);
     const minor = Math.min(domain.rx, domain.ry);
     for (let index = 0; index < share; index++) {
@@ -134,6 +263,12 @@ export function proteinGeometry(visualSeed: string, radius = 52, count = 28, mor
       const ly = Math.sin(theta) * domain.ry * reach;
       const size = core ? 1 : .42 + random() * .4;
       const ellipticity = .7 + random() * .3;
+      if (element && !core) {
+        // Two volumes along the axis even out the thickness: a rod with rounded ends, not an ellipse.
+        const along = (index === 1 ? -1 : 1) * domain.rx * (.4 + random() * .08);
+        particles.push({ x: domain.x + along * cos, y: domain.y + along * sin, rx: domain.rx * .5, ry: domain.ry * (.84 + random() * .1), rotation: domain.rotation, depth: random(), domain: domainIndex });
+        continue;
+      }
       particles.push({
         x: domain.x + lx * cos - ly * sin,
         y: domain.y + lx * sin + ly * cos,
@@ -145,6 +280,13 @@ export function proteinGeometry(visualSeed: string, radius = 52, count = 28, mor
       });
     }
   });
+  if (disorder !== 'none') {
+    // The region leaves the folded body from its outermost volume along a seeded direction.
+    const exit = seededRandom(`${visualSeed}::disorder-exit`)() * Math.PI * 2;
+    const anchor = particles.length ? particles.reduce((best, p) => p.x * Math.cos(exit) + p.y * Math.sin(exit) > best.x * Math.cos(exit) + best.y * Math.sin(exit) ? p : best) : undefined;
+    const chain = disorderedChain(visualSeed, anchor ? 1.15 : 5.2, anchor && { x: anchor.x, y: anchor.y, heading: exit });
+    chain.forEach((point, index) => particles.push({ ...point, rx: IDR_WIDTH / 2, ry: IDR_WIDTH / 2, rotation: 0, depth: 0, domain: domains.length, chain: index }));
+  }
   // Rotate the whole silhouette, centre it on its area-weighted centroid and fit it to `radius`.
   const rotated = particles.map(particle => ({
     ...particle,
@@ -159,7 +301,7 @@ export function proteinGeometry(visualSeed: string, radius = 52, count = 28, mor
   const scale = radius * .98 / extent;
   return rotated.map(particle => {
     const rx = particle.rx * scale; const ry = particle.ry * scale;
-    return { x: (particle.x - cx) * scale, y: (particle.y - cy) * scale, rx, ry, r: Math.sqrt(rx * ry), rotation: particle.rotation * 180 / Math.PI, depth: particle.depth, domain: particle.domain };
+    return { x: (particle.x - cx) * scale, y: (particle.y - cy) * scale, rx, ry, r: Math.sqrt(rx * ry), rotation: particle.rotation * 180 / Math.PI, depth: particle.depth, domain: particle.domain, ...(particle.chain !== undefined && { chain: particle.chain }) };
   }).sort((a, b) => a.depth - b.depth);
 }
 
@@ -263,4 +405,87 @@ export function proteinAnchors(particles: readonly ProteinSphere[], radius?: num
     bounds: { x: round(x0), y: round(y0), width: round(x1 - x0), height: round(y1 - y0) },
     left: along(-1, 0), right: along(1, 0), top: along(0, -1), bottom: along(0, 1),
   };
+}
+
+/** Contour-following state halo: three stacked layers, strongest at the outline, readable at small radii. */
+export function renderProteinInhibition(particles: readonly ProteinSphere[], radius: number): string {
+  const ellipses = (grow: number) => particles.map(p => `<ellipse cx="${round(p.x)}" cy="${round(p.y)}" rx="${round(p.rx + grow)}" ry="${round(p.ry + grow)}" transform="rotate(${round(p.rotation)} ${round(p.x)} ${round(p.y)})"/>`).join('');
+  // A minimum width in pixels keeps the halo visible on small glyphs, where a proportional one vanishes.
+  const step = Math.max(1.6, radius * .05);
+  return `<g class="mm-primitive__inhibition" aria-hidden="true" fill="var(--mm-alert,#e5484d)">${[.3, .16, .08].map((opacity, i) => `<g opacity="${opacity}">${ellipses(proteinOutlineWidth(radius) + step * (i + 1))}</g>`).reverse().join('')}</g>`;
+}
+
+const byDomain = (particles: readonly ProteinSphere[], key = (domain: number) => domain) => {
+  const units = new Map<number, ProteinSphere[]>();
+  for (const p of particles) units.set(key(p.domain ?? 0), [...(units.get(key(p.domain ?? 0)) ?? []), p]);
+  return units;
+};
+
+/** The folded body of a profile: its fold when it has one, otherwise its architecture. */
+function renderFoldedSurface(particles: readonly ProteinSphere[], fill: string, radius: number, profile: ProteinVisualProfile): string {
+  const architecture = profile.fold !== 'none' ? profile.fold : profile.architecture;
+  // Every unit keeps its own contour, including shared seams at small display sizes.
+  const unit = (members: readonly ProteinSphere[], colour: string, scale: number) => renderProteinSurface(members, colour, radius * scale).replaceAll('mm-surface', 'mm-subunit-surface');
+  if (architecture === 'multisubunit' || architecture === 'ring') {
+    return `<g class="mm-surface mm-surface--${architecture}">${[...byDomain(particles).values()].map(members => unit(members, fill, .58)).join('')}</g>`;
+  }
+  if (profile.fold !== 'none') {
+    // Each helix or strand is its own volume. Far elements are drawn first and darker.
+    const far = (domain: number) => (architecture === 'beta-sandwich' || architecture === 'alpha-beta') && domain < SHEET;
+    return `<g class="mm-surface mm-surface--${architecture}">${[...byDomain(particles).entries()].sort(([a], [b]) => a - b).map(([domain, members]) => unit(members, far(domain) ? mix(fill, '#1b2340', .2) : fill, .58)).join('')}</g>`;
+  }
+  if (architecture === 'dimer') {
+    return `<g class="mm-surface mm-surface--dimer">${[...byDomain(particles, domain => Math.floor(domain / 2)).values()].map(members => unit(members, fill, .8)).join('')}</g>`;
+  }
+  if (architecture !== 'barrel') return renderProteinSurface(particles, fill, radius);
+  // Same organic volumes as every other protein: far rim, lumen, then the near wall, darkened towards its curved edges.
+  const units = [...byDomain(particles).entries()].sort(([a], [b]) => a - b);
+  const centre = (members: readonly ProteinSphere[]) => members.reduce((best, p) => p.rx * p.ry > best.rx * best.ry ? p : best);
+  const rim = units.slice(0, BARREL.far * 2).map(([, members]) => centre(members));
+  const xs = rim.map(p => p.x); const ys = rim.map(p => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2; const half = (Math.max(...xs) - Math.min(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const ry = half * BARREL.b / BARREL.a;
+  const wall = (domain: number, members: readonly ProteinSphere[]) => {
+    const edge = Math.min(1, Math.abs(centre(members).x - cx) / half);
+    return unit(members, mix(fill, '#1b2340', (domain < BARREL.far ? .2 : 0) + edge * edge * .22), .5);
+  };
+  const lumen = `<ellipse cx="${round(cx)}" cy="${round(cy)}" rx="${round(half * .86)}" ry="${round(ry * .95)}" fill="${mix(fill, '#1b2340', .42)}"/>`
+    + `<ellipse cx="${round(cx)}" cy="${round(cy + ry * .1)}" rx="${round(half * .46)}" ry="${round(ry * .5)}" fill="${mix(fill, '#0b1020', .78)}"/>`;
+  return `<g class="mm-surface mm-surface--barrel">`
+    + units.filter(([domain]) => domain < BARREL.far).map(([domain, members]) => wall(domain, members)).join('')
+    + lumen
+    + units.filter(([domain]) => domain >= BARREL.far).map(([domain, members]) => wall(domain, members)).join('')
+    + `</g>`;
+}
+
+/**
+ * A disordered region drawn as one continuous cord in the protein's own colour: a smooth path
+ * through its volumes, with the same outline and light as a folded surface. No beads, links or labels.
+ */
+function renderDisorderedRegion(chain: readonly ProteinSphere[], fill: string, radius: number): string {
+  if (chain.length < 2) return '';
+  const points = [...chain].sort((a, b) => a.chain! - b.chain!);
+  const width = points[0]!.rx * 2;
+  // Catmull-Rom through every volume centre, so the drawn cord follows the contact geometry exactly.
+  const d = points.map((p, i) => {
+    if (i === 0) return `M${round(p.x)} ${round(p.y)}`;
+    const p0 = points[Math.max(0, i - 2)]!; const p1 = points[i - 1]!; const p3 = points[Math.min(points.length - 1, i + 1)]!;
+    return `C${round(p1.x + (p.x - p0.x) / 6)} ${round(p1.y + (p.y - p0.y) / 6)} ${round(p.x - (p3.x - p1.x) / 6)} ${round(p.y - (p3.y - p1.y) / 6)} ${round(p.x)} ${round(p.y)}`;
+  }).join('');
+  const stroke = (colour: string, size: number, extra = '') => `<path d="${d}" fill="none" stroke="${colour}" stroke-width="${round(size)}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
+  return `<g class="mm-surface__disorder">`
+    + stroke(mix(fill, '#17213b', .45), width + proteinOutlineWidth(radius) * 2)
+    + stroke(esc(fill), width)
+    + stroke(mix(fill, '#ffffff', .45), width * .32, ` opacity=".5" transform="translate(${round(-width * .14)} ${round(-width * .18)})"`)
+    + `</g>`;
+}
+
+/** Profile detail uses only a resolved visual profile, never biological identity. */
+export function renderProteinArchitectureSurface(particles: readonly ProteinSphere[], fill: string, radius: number, profile: ProteinVisualProfile): string {
+  const chain = particles.filter(p => p.chain !== undefined);
+  if (!chain.length) return renderFoldedSurface(particles, fill, radius, profile);
+  const body = particles.filter(p => p.chain === undefined);
+  // The cord is drawn first, so it emerges from under the folded body without a visible joint.
+  return `<g class="mm-surface mm-surface--${profile.disorder}">${renderDisorderedRegion(chain, fill, radius)}${body.length ? renderFoldedSurface(body, fill, radius, profile).replaceAll('mm-surface', 'mm-subunit-surface') : ''}</g>`;
 }

@@ -1,21 +1,29 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { compileMechanism, MechanismValidationError, parseMechanism, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
-import { buildSvgScene, exportPng, exportSvg } from '@molecular-motion/svg';
+import { buildSvgScene, COMPOSED_COMPLEX_VISUAL, exportPng, exportSvg, type ProteinActorVisuals } from '@molecular-motion/svg';
 import {
   MechanismStage, MolecularMechanism, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, VisualVocabulary, useMechanismPlayer, useMolecularMotionStyles,
 } from '@molecular-motion/react';
 import parpSource from '../../../examples/parp1-ssb-repair.yaml?raw';
 import hrSource from '../../../examples/homologous-recombination.yaml?raw';
 import egfrSource from '../../../examples/egfr-dimerization.yaml?raw';
+import p53Source from '../../../examples/p53-mdm2-feedback.yaml?raw';
 import './styles.css';
 
 const REPOSITORY = 'https://github.com/alvaroestebanperez/molecular-motion';
 
-interface Example { id: string; source: string; definition: MechanismDefinition }
-const EXAMPLES: Example[] = [parpSource, hrSource, egfrSource].map(source => {
+interface Example { id: string; source: string; definition: MechanismDefinition; proteinVisuals?: ProteinActorVisuals }
+/**
+ * Presentation choices of this demo, by mechanism and actor id. They are not part of the mechanism
+ * files: the proteasome stays one generic complex actor, drawn here as a composed barrel with two caps.
+ */
+const PROTEIN_VISUALS: Record<string, ProteinActorVisuals> = {
+  'p53-mdm2-feedback': { proteasome: COMPOSED_COMPLEX_VISUAL },
+};
+const EXAMPLES: Example[] = [parpSource, hrSource, egfrSource, p53Source].map(source => {
   const definition = parseMechanism(source);
-  return { id: definition.mechanism.id, source, definition };
+  return { id: definition.mechanism.id, source, definition, proteinVisuals: PROTEIN_VISUALS[definition.mechanism.id] };
 });
 
 // ---- Hash routing ----
@@ -178,11 +186,11 @@ function download(blob: Blob, name: string) {
 }
 
 /** Static figure of the current step, in the theme the reader is looking at (no out-of-focus actors). */
-function ExportButtons({ snapshot }: { snapshot: MechanismSnapshot }) {
+function ExportButtons({ snapshot, proteinVisuals }: { snapshot: MechanismSnapshot; proteinVisuals?: ProteinActorVisuals }) {
   const [busy, setBusy] = useState(false);
   const file = () => {
     const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-    return { svg: exportSvg(buildSvgScene(snapshot), { theme }), name: `${snapshot.definition.mechanism.id}-${snapshot.step.id}` };
+    return { svg: exportSvg(buildSvgScene(snapshot, { proteinVisuals }), { theme }), name: `${snapshot.definition.mechanism.id}-${snapshot.step.id}` };
   };
   const png = async () => {
     setBusy(true);
@@ -222,13 +230,14 @@ function MechanismPage({ example }: { example: Example }) {
         <p>Step {player.stepIndex + 1}/{player.length}</p>
         <h2>{snapshot.step.title}</h2>
         {snapshot.step.summary && <span>{snapshot.step.summary}</span>}
-        <ExportButtons snapshot={snapshot} />
+        <ExportButtons snapshot={snapshot} proteinVisuals={example.proteinVisuals} />
       </header>
       <MechanismStage
         className="viewer__canvas"
         mechanism={player.mechanism}
         stepIndex={player.stepIndex}
         ghosts={player.upcoming}
+        proteinVisuals={example.proteinVisuals}
         selectedActor={selectedActor}
         onSelectActor={setSelectedActor}
         onNavigate={direction => { player.setPlaying(false); direction === 1 ? player.next() : player.previous(); }}
@@ -238,7 +247,7 @@ function MechanismPage({ example }: { example: Example }) {
 
     <aside className="panel viewer__details"><StepDetails player={player} selectedActor={selectedActor} /></aside>
 
-    <section className="viewer__thumbnails" aria-label="All steps"><StepThumbnails player={player} /></section>
+    <section className="viewer__thumbnails" aria-label="All steps"><StepThumbnails player={player} proteinVisuals={example.proteinVisuals} /></section>
   </main>;
 }
 

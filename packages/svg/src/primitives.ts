@@ -15,7 +15,7 @@ export {
 export { mix } from './primitives/shared';
 export { type ProteinSphere, type ProteinMorphology, PROTEIN_MORPHOLOGIES } from './primitives/protein-geometry';
 export {
-  proteinMorphology, proteinGeometry, renderProteinSurface, proteinOutlineWidth, type ProteinPoint, type ProteinAnchors, proteinAnchors,
+  proteinMorphology, proteinGeometry, proteinProfileGeometry, renderProteinArchitectureSurface, renderProteinSurface, renderProteinInhibition, proteinOutlineWidth, type ProteinPoint, type ProteinAnchors, proteinAnchors,
 } from './primitives/protein-geometry';
 export {
   proteinSurfacePoint, type ContactSide, contactOffset, type ContactShape, type FirstContact, contactOutline, shapesOverlap, firstContact,

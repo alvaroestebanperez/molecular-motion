@@ -85,7 +85,8 @@ describe('exportSvg keeps callouts the viewer lets overflow', () => {
     schemaVersion: 4, mechanism: { id: 'x', name: 'X' },
     actors: [{ id: 'kinase', type: 'protein', label: 'A protein with a long name', position: { x: 930, y: 60 } }],
     steps: [{ id: 's', title: 'S', actions: [{ type: 'show', actor: 'kinase' }] }],
-  }).at(0));
+    // A canvas too short for the callout to hang below the body either: it has nowhere to go but out.
+  }).at(0), { height: 150 });
   const box = (file: string) => file.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
 
   it('grows the viewBox (never shrinks it) to contain every callout, and sizes the file to match', () => {
@@ -98,7 +99,7 @@ describe('exportSvg keeps callouts the viewer lets overflow', () => {
     expect(x).toBeLessThanOrEqual(Math.min(0, tx + rx));
     expect(y).toBeLessThanOrEqual(Math.min(0, ty + ry));
     expect(x + width).toBeGreaterThanOrEqual(Math.max(960, tx + rx + rw));
-    expect(y + height).toBeGreaterThanOrEqual(540);
+    expect(y + height).toBeGreaterThanOrEqual(150);
     expect(exportSvg(edge)).toContain(`width="${Math.round(width)}" height="${Math.round(height)}"`);
     expect(exportSvg(edge)).toContain(`<rect class="mm-export__background" x="${x}" y="${y}" width="${width}" height="${height}"`);
   });

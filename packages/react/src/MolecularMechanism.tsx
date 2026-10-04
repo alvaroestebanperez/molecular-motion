@@ -1,3 +1,4 @@
+import type { ProteinActorVisuals } from '@molecular-motion/svg';
 import { useState, type CSSProperties } from 'react';
 import { instanceDefinition, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
 import { MechanismStage } from './MechanismStage';
@@ -11,6 +12,8 @@ export interface MolecularMechanismProps {
   loop?: boolean;
   stepDuration?: number;
   controls?: boolean;
+  /** Presentation choice for protein and complex actors, by actor id. Keep the reference stable between renders. */
+  proteinVisuals?: ProteinActorVisuals;
   className?: string;
   style?: CSSProperties;
   onStepChange?: (snapshot: MechanismSnapshot) => void;
@@ -25,6 +28,7 @@ export function MolecularMechanism({
   loop,
   stepDuration,
   controls = true,
+  proteinVisuals,
   className = '',
   style,
   onStepChange,
@@ -49,6 +53,7 @@ export function MolecularMechanism({
       mechanism={player.mechanism}
       stepIndex={player.stepIndex}
       ghosts={player.upcoming}
+      proteinVisuals={proteinVisuals}
       selectedActor={selectedActor}
       onSelectActor={selectActor}
       onNavigate={direction => { player.setPlaying(false); direction === 1 ? player.next() : player.previous(); }}
