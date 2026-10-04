@@ -1150,7 +1150,25 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
 
   // 4. Upcoming actors wait out of focus in the upper background, away from the action.
   const upcoming = views.filter(definition => ghosts.has(definition.id) && !placed.has(definition.id) && !isNucleic(definition.type));
+  // With a membrane they wait in the band of their own compartment, as present actors do: an actor that
+  // will be cytosolic never waits on the extracellular side. One that spans the membrane waits on it.
+  const waiting = new Map<string, number>();
   upcoming.forEach((definition, index) => {
+    if (membrane) {
+      const band = membraneOf(definition) ? 'membrane' : sideOfCompartment(snapshot.actors[definition.id]?.compartment ?? definition.compartment) ?? 'inside';
+      const turn = waiting.get(band) ?? 0;
+      waiting.set(band, turn + 1);
+      const [top, bottom] = band === 'outside' ? [0, membrane.y - MEMBRANE_HALF] : [membrane.y + MEMBRANE_HALF, height];
+      // Staggered down the band; a fourth starts over instead of landing on the first.
+      const y = band === 'membrane' ? membrane.y : Math.round(top + (bottom - top) * (.28 + .24 * (turn % 3)));
+      const ghost = make(definition, { x: 0, y }, -1, true);
+      // From the right edge inwards, the first place clear of what is there: present actors and earlier ghosts.
+      const clear = (x: number) => [...placed.values()].every(other => Math.hypot(other.x - x, other.y - y) > (other.ghost ? other.radius * .62 : other.radius + 24) + ghost.radius * .62);
+      const columns = [.82, .9, .74, .64, .54, .44, .34, .24, .14].map(share => Math.round(width * share));
+      ghost.x = columns.find(clear) ?? columns[turn % columns.length]!;
+      placed.set(definition.id, ghost);
+      return;
+    }
     // Staggered diagonal so their callouts (always on the left) never overlap.
     const x = width * (.79 + .075 * (index % 3));
     const y = height * (.12 + .175 * (index % 3));
