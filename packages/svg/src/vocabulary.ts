@@ -1,9 +1,13 @@
+import { PROTEIN_ARCHITECTURES, PROTEIN_FOLDS, resolveProteinVisualProfile, type ProteinVisualProfile } from './protein-visual-profiles';
+import { renderProteinAssembly, type ProteinActorVisual, type ProteinAssemblyOptions } from './protein-assembly';
+import { resolveModificationVisualProfile } from './modification-profiles';
+import { repeatedMarkerGeometry } from './repeated-marker';
 import {
   contactOffset, firstContact, nascentStrandGeometry, primitiveCss, proteinAnchors, proteinGeometry, proteinOutlineWidth, renderActionVisual,
   renderCompartmentPrimitive, renderInteractionPrimitive, renderMembranePrimitive, renderModificationPrimitive, renderNucleicAcidPrimitive,
   renderProteinPrimitive, renderSmallMoleculePrimitive, renderTransmembranePrimitive, renderUnitChainPrimitive, transmembraneGeometry, PROTEIN_MORPHOLOGIES,
   type ActionVisualKind, type CompartmentVisualKind, type ContactShape, type ContactSide, type ModificationVisualKind, type ProteinAnchors, type ProteinVisualState, type TransmembraneOptions, type VisualLesion,
-  type MoleculeRingSystem, type NucleicAcidOptions, type SmallMoleculeTopology,
+  type MoleculeRingSystem, type NucleicAcidOptions, type SmallMoleculeTopology, proteinSurfacePoint,
 } from './primitives';
 
 export type VocabularyCategory =
@@ -16,6 +20,9 @@ export type VocabularyVisual = 'protein' | 'nucleic-acid' | 'enzyme' | 'modifica
 export interface VocabularyItem {
   id: string; label: string; description: string; category: VocabularyCategory;
   visual: VocabularyVisual; color?: string; labels?: readonly string[];
+  /** Catalog-owned resolved presentation, never a biological actor field. */
+  proteinVisual?: { visualSeed: string; profile: ProteinVisualProfile };
+  proteinAssembly?: ProteinAssemblyOptions;
 }
 export interface VocabularyRenderOptions { idPrefix?: string; width?: number; height?: number; decorative?: boolean }
 
@@ -44,6 +51,39 @@ const IDENTITY_PROTEINS = [['parp1', 'PARP1'], ['xrcc1', 'XRCC1'], ['polb', 'POL
 const IDENTITY_STATES = ['normal', 'active', 'inhibited', 'future'] as const;
 const IDENTITY_COLOR = '#7774d8';
 const STATE_PROTEIN_SEED = 'reference-protein';
+
+/**
+ * Concrete profiles declared by the catalog, grouped by the dimension each one illustrates.
+ * The three dimensions are independent; the catalog does not enumerate their product.
+ */
+const PROFILE_GROUPS: readonly (readonly [group: string, profiles: readonly Partial<ProteinVisualProfile>[]])[] = [
+  ['architecture', PROTEIN_ARCHITECTURES.map(architecture => ({ architecture }))],
+  ['fold', PROTEIN_FOLDS.filter(fold => fold !== 'none').map(fold => ({ architecture: 'compact', fold }))],
+  ['disorder', [
+    { architecture: 'compact', disorder: 'tail' }, { architecture: 'bilobed', disorder: 'tail' },
+    { architecture: 'compact', fold: 'helical-bundle', disorder: 'tail' }, { disorder: 'extended' },
+  ]],
+];
+const profileLabel = (profile: ProteinVisualProfile) => [profile.disorder === 'extended' ? undefined : profile.architecture, profile.fold !== 'none' ? profile.fold : undefined, profile.disorder === 'tail' ? 'disordered tail' : profile.disorder === 'extended' ? 'extended (disordered)' : undefined].filter(Boolean).join(' · ');
+export const PROTEIN_PROFILE_CATALOG: readonly VocabularyItem[] = PROFILE_GROUPS.flatMap(([group, profiles]) => profiles.map(partial => {
+  const profile = resolveProteinVisualProfile(partial);
+  return {
+    ...protein(`profile-${group}-${[profile.architecture, profile.fold, profile.disorder].join('-')}`, profileLabel(profile), `Illustrates the ${group} dimension. A visual archetype, not a structure.`, '#7774d8'),
+    proteinVisual: { visualSeed: 'architecture-reference', profile },
+  };
+}));
+
+/** Catalog stress-test data; renderer composes the same generic members for any assembly. */
+export const COMPOSED_COMPLEX_TEST: ProteinAssemblyOptions = {
+  members: [
+    { visualSeed: 'assembly-core', at: { x: 0, y: 0 }, radius: 37, fill: '#7795c2', visualProfile: resolveProteinVisualProfile({ architecture: 'barrel' }) },
+    { visualSeed: 'assembly-cap', at: { x: 0, y: -46 }, radius: 25, fill: '#8d80ba', visualProfile: resolveProteinVisualProfile({ architecture: 'multisubunit' }) },
+    { visualSeed: 'assembly-cap', at: { x: 0, y: 46 }, rotation: 180, radius: 25, fill: '#8d80ba', visualProfile: resolveProteinVisualProfile({ architecture: 'multisubunit' }) },
+  ],
+};
+
+/** The composed complex as an actor visual, at its natural size: its barrel alone is about as large as a generic protein. */
+export const COMPOSED_COMPLEX_VISUAL: ProteinActorVisual = { assembly: COMPOSED_COMPLEX_TEST, extent: 1.6 };
 
 /** Conceptual base ring systems (topology only, not literal chemistry). Purine: 6-ring fused to a 5-ring. */
 const PURINE: MoleculeRingSystem = { rings: [6, 5], hetero: [{ at: 3, atom: 'n' }, { at: 5, atom: 'n' }, { at: 6, atom: 'n' }, { at: 8, atom: 'n' }], attach: 8 };
@@ -81,11 +121,12 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   protein('protein-normal','Normal','A stable, conceptual protein surface.','#7774d8'),
   protein('protein-active','Active','A subtle halo communicates activity.','#7774d8'),
   protein('protein-inactive','Inactive','Lower contrast communicates inactivity.','#7774d8'),
-  protein('protein-inhibited','Inhibited','A consistent inhibition ring and slash.','#7774d8'),
+  protein('protein-inhibited','Inhibited','A soft red contour halo marks inhibition; the protein is gently desaturated.','#7774d8'),
   protein('protein-degraded','Degraded','Fragments disperse while identity remains legible.','#7774d8'),
   protein('protein-selected','Selected','Selection is distinct from biological activity.','#7774d8'),
   protein('protein-future','Future / preview','Blurred, muted and non-interactive.','#7774d8'),
   protein('protein-morphologies','Morphology families','Six deterministic silhouette families, distinguishable in a single colour.','#7774d8'),
+  ...PROTEIN_PROFILE_CATALOG,
   ...IDENTITY_PROTEINS.map(([seed, name]) => identity(`identity-${seed}`, name, 'Same colour and size as every identity card: only the silhouette differs.', IDENTITY_COLOR)),
   ...IDENTITY_STATES.map(state => identity(`identity-parp1-${state}`, `PARP1 · ${state}`, 'Same silhouette as PARP1: only the state presentation changes.', IDENTITY_COLOR)),
   acid('double-stranded-dna','Double-stranded DNA','Front and rear strands create restrained depth.'),
@@ -144,6 +185,7 @@ export const MOLECULAR_VOCABULARY: readonly VocabularyItem[] = [
   receptor('ion-channel','Ion channel','A membrane pore with transported ions.'), receptor('proteasome','Proteasomal degradation','Ubiquitinated protein enters a proteolytic complex.'),
   ...(['bind','unbind','recruit','dimerize','activate','inhibit','phosphorylate','dephosphorylate','acetylate','ubiquitinate','parylate','cleave','ligate','polymerize','synthesize','degrade','translocate','unwind','elongate','conformational-change'] as const)
     .map(id => event(`event-${id}`, id.split('-').map(word => word[0]!.toUpperCase()+word.slice(1)).join(' '), EVENT_DESCRIPTIONS[id] ?? `Generic ${id.replace('-', ' ')} event.`)),
+  { ...testScene('test-26s-composition','26S composed stress test','19S cap / 20S core / 19S cap. A presentation composition of generic barrel and multisubunit profiles.'), proteinAssembly: COMPOSED_COMPLEX_TEST },
   testScene('test-kinase','Kinase test','ATP + kinase + substrate → phosphorylated substrate + ADP.'),
   testScene('test-protease','Protease test','Protein substrate → peptide fragments.'),
   testScene('test-translocation','Translocation test','IRF3-P crosses the nuclear envelope.'),
@@ -319,6 +361,27 @@ function proteinSpecies(name:string,seed:string,color:string,radius:number,state
   for(const mod of mods) { const reach=mod.kind==='ubiquitination'?10+(mod.length??1)*15:11; top+=reach*.55; left+=reach*.35; }
   return species(name,(x,y)=>proteinAt(seed,x,y,color,state,radius,mods),top,bottom,left,right);
 }
+/** Fit repeated decorations inside the glyph viewport, leaving the card header untouched. */
+function modifiedProteinCard(modifications: ProteinMods): string {
+  const seed = 'modified-protein'; const radius = 44;
+  const particles = proteinGeometry(seed, radius);
+  const body = proteinAnchors(particles, radius).bounds;
+  let x0 = body.x; let y0 = body.y; let x1 = body.x + body.width; let y1 = body.y + body.height;
+  let fitted = false;
+  modifications.forEach((modification, index) => {
+    const profile = resolveModificationVisualProfile({ id: modification.kind, kind: modification.kind, label: modification.kind });
+    if (!profile) return;
+    const angle = -2.3 + index * .55;
+    const marker = repeatedMarkerGeometry(profile, modification.length ?? 1, angle, { particles, margin: proteinOutlineWidth(radius) }, proteinSurfacePoint(particles, angle, radius));
+    x0 = Math.min(x0, marker.bounds[0]); y0 = Math.min(y0, marker.bounds[1]);
+    x1 = Math.max(x1, marker.bounds[2]); y1 = Math.max(y1, marker.bounds[3]); fitted = true;
+  });
+  if (!fitted) return proteinAt(seed,130,104,'#7774d8','normal',radius,modifications);
+  const scale = Math.min(1, 264 / (x1 - x0), 140 / (y1 - y0));
+  const x = 150 - (x0 + x1) * scale / 2; const y = 94 - (y0 + y1) * scale / 2;
+  return `<g class="mm-catalog-fitted-decoration" data-bounds="${[x0,y0,x1,y1].map(r1).join(' ')}" transform="translate(${r1(x)} ${r1(y)}) scale(${r1(scale)})">${renderProteinPrimitive({visualSeed:seed,fill:'#7774d8',radius,modifications})}</g>`;
+}
+
 /** A catalogue small molecule, drawn with its catalogue topology and label at the reaction scale. */
 function moleculeSpecies(id:string):Species {
   const topology=SMALL_MOLECULE_TOPOLOGIES[id]!; const name=MOLECULAR_VOCABULARY.find(item=>item.id===id)?.label??id;
@@ -529,6 +592,8 @@ function eventScene(rawId:string):string {
 }
 
 function art(entry:VocabularyItem):string {
+  if(entry.proteinAssembly) return at(150,90,renderProteinAssembly(entry.proteinAssembly));
+  if(entry.proteinVisual) return at(150,98,renderProteinPrimitive({visualSeed:entry.proteinVisual.visualSeed,visualProfile:entry.proteinVisual.profile,fill:entry.color,radius:58}));
   if(entry.id==='protein-morphologies') return PROTEIN_MORPHOLOGIES.map((family,i)=>{const x=55+(i%3)*95; const y=50+Math.floor(i/3)*78; return `${at(x,y,renderProteinPrimitive({visualSeed:`morphology-${family}`,morphology:family,fill:entry.color,radius:25}))}${label(family,x,y+39)}`;}).join('');
   if(entry.category==='protein-identity') { const [, seed, state='normal']=entry.id.split('-') as [string,string,ProteinVisualState?]; return proteinAt(seed,150,98,entry.color??IDENTITY_COLOR,state,52); }
   // Every state card shows the same protein, so the page proves that state never alters identity.
@@ -539,7 +604,7 @@ function art(entry:VocabularyItem):string {
     return at(30,100,renderNucleicAcidPrimitive({kind,state,width:240}));
   }
   if(entry.category==='enzymatic-actions') return enzymeScene(entry.id);
-  if(entry.category==='modifications') { const kind=entry.id.startsWith('parylation')?'parylation':entry.id as ModificationVisualKind; return proteinAt('modified-protein',130,104,'#7774d8','normal',44,[{kind,length:entry.id.includes('parylation')?8:entry.id==='ubiquitination'?4:undefined,branched:entry.id.endsWith('branched')}]); }
+  if(entry.category==='modifications') { const kind=entry.id.startsWith('parylation')?'parylation':entry.id as ModificationVisualKind; return modifiedProteinCard([{kind,length:entry.id.includes('parylation')?8:entry.id==='ubiquitination'?4:undefined,branched:entry.id.endsWith('branched')}]); }
   if(entry.category==='dna-damage') return at(30,100,renderNucleicAcidPrimitive({width:240,lesion:entry.id as VisualLesion}));
   if(entry.category==='small-molecules') { const topology=SMALL_MOLECULE_TOPOLOGIES[entry.id]; return renderSmallMoleculePrimitive({visualSeed:entry.id,label:topology?.kind==='ion'?undefined:entry.label,x:150,y:100,scale:topology?.kind==='ion'?2:topology?.kind==='ring'?2.2:1.6,ion:entry.id==='calcium'||entry.id==='zinc',topology,fill:entry.color}); }
   if(entry.category==='gene-expression') return expressionScene(entry.id);

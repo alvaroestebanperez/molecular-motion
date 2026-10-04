@@ -20,6 +20,8 @@ export {
   PROTEIN_MORPHOLOGIES,
   proteinAnchors,
   proteinGeometry,
+  proteinProfileGeometry,
+  renderProteinArchitectureSurface,
   proteinMorphology,
   proteinOutlineWidth,
   proteinSurfacePoint,
@@ -91,3 +93,13 @@ export {
   nucleicAcid, proteinSurface, renderVocabularyGlyph, smallMolecule,
 } from './vocabulary';
 export type { VocabularyCategory, VocabularyItem, VocabularyRenderOptions, VocabularyVisual } from './vocabulary';
+
+export { MODIFICATION_VISUAL_PROFILES, resolveModificationVisualProfile } from './modification-profiles';
+export { repeatedMarkerGeometry, renderRepeatedMarker } from './repeated-marker';
+export type { ModificationVisualProfile, ModificationVisualProfiles, RepeatedMarker } from './repeated-marker';
+
+export { PROTEIN_ARCHITECTURES, PROTEIN_FOLDS, PROTEIN_DISORDERS, DEFAULT_PROTEIN_VISUAL_PROFILE, proteinProfileIssue, resolveProteinVisualProfile } from './protein-visual-profiles';
+export type { ProteinArchitecture, ProteinFold, ProteinDisorder, ProteinVisualProfile } from './protein-visual-profiles';
+export { renderProteinAssembly, proteinVisualParticles, renderProteinVisualSurface } from './protein-assembly';
+export type { ProteinAssemblyOptions, ProteinAssemblyMember, ProteinActorVisual, ProteinActorVisuals } from './protein-assembly';
+export { PROTEIN_PROFILE_CATALOG, COMPOSED_COMPLEX_TEST, COMPOSED_COMPLEX_VISUAL } from './vocabulary';

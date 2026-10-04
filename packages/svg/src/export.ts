@@ -1,5 +1,5 @@
 import { molecularMotionCss, renderSvg, THEME_TOKENS, type RenderOptions } from './render';
-import type { SvgScene } from './scene';
+import { actorRepeatedMarker, type SvgScene } from './scene';
 
 export interface ExportOptions extends Pick<RenderOptions, 'idPrefix' | 'compact'> {
   /** Colours to resolve; the file never depends on the viewer's theme or OS preference. Default `light`. */
@@ -21,10 +21,14 @@ const TEXT_ADVANCE = 7.4;
  * The viewBox grown to contain every callout. The viewer lets labels overflow the canvas (`overflow:
  * visible`); a file is clipped to its viewBox, so the box only ever grows, keeping the figure's scale.
  */
-function calloutBox(markup: string): [number, number, number, number] {
+function calloutBox(markup: string, scene: SvgScene): [number, number, number, number] {
   const [x, y, width, height] = markup.match(/viewBox="([^"]+)"/)![1]!.split(' ').map(Number) as [number, number, number, number];
   let [x0, y0, x1, y1] = [x, y, x + width, y + height];
   const grow = (left: number, top: number, right: number, bottom: number) => { x0 = Math.min(x0, left); y0 = Math.min(y0, top); x1 = Math.max(x1, right); y1 = Math.max(y1, bottom); };
+  for (const actor of scene.actors) {
+    const markers = actorRepeatedMarker(actor);
+    if (markers) { const [l, t, r, b] = markers.bounds; grow(actor.x + l, actor.y + t, actor.x + r, actor.y + b); }
+  }
   for (const label of markup.matchAll(/<g class="mm-label[^"]*"[^>]*style="transform:translate\(([-\d.]+)px,([-\d.]+)px\)[^"]*"[^>]*>(.*?)<\/g>/g)) {
     const [dx, dy] = [Number(label[1]), Number(label[2])];
     for (const rect of label[3]!.matchAll(/<rect class="mm-pill" x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"/g)) {
@@ -53,7 +57,7 @@ function calloutBox(markup: string): [number, number, number, number] {
  */
 export function exportSvg(scene: SvgScene, options: ExportOptions = {}): string {
   const rendered = renderSvg(scene, { idPrefix: options.idPrefix, compact: options.compact, interactive: false });
-  const [x, y, width, height] = calloutBox(rendered);
+  const [x, y, width, height] = calloutBox(rendered, scene);
   const markup = rendered.replace(/viewBox="[^"]+"/, `viewBox="${x} ${y} ${width} ${height}"`);
   const scale = options.scale ?? 1;
   const theme = options.theme ?? 'light';

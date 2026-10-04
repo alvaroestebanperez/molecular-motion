@@ -184,7 +184,7 @@ import { MolecularGlyph, VisualVocabulary } from '@molecular-motion/react';
 <VisualVocabulary categories={['dna-damage', 'modifications']} />
 ```
 
-The built-in catalog covers common catalytic activities, non-catalytic proteins, cofactors, nucleic-acid structures, DNA lesions, PTMs, and compartments. Applications can also pass custom catalog entries. See [RFC 0003](docs/rfcs/0003-visual-vocabulary.md).
+The built-in catalog covers common catalytic activities, non-catalytic proteins, cofactors, nucleic-acid structures, DNA lesions, PTMs, and compartments. Presentation profiles describe a protein glyph on three independent dimensions, `architecture` (global shape), `fold` and `disorder`, in the visual catalog ([appearance guide](docs/protein-appearances.md)). Inhibited proteins use a soft red contour halo; T-bars mark inhibition actions. Applications can also pass custom catalog entries. See [RFC 0003](docs/rfcs/0003-visual-vocabulary.md).
 
 ### Step metadata and references
 

@@ -1,11 +1,13 @@
+import { renderRepeatedMarker } from './repeated-marker';
 import type { LesionType } from '@molecular-motion/core';
 import {
-  actorParticles, chainBase, chainGeometry, chainReach, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, freeStrandEnds, labelBox, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
   type SceneActor, type SceneConnection, type SceneNucleicAcid, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
-import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, type ModificationVisualKind } from './primitives';
+import { mix, primitiveCss, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, renderProteinInhibition, type ModificationVisualKind } from './primitives';
 
+import { renderProteinVisualSurface } from './protein-assembly';
 export { mix };
 
 export interface RenderOptions {
@@ -102,7 +104,9 @@ function bindingConnection(connection: SceneConnection): string {
 function focusViewBox(scene: SvgScene, actors: SceneActor[]): string {
   const acid = scene.nucleicAcids[0];
   const boxes = actors.map(actor => {
-    const reach = actor.chain ? Math.max(actor.radius, chainBase(actor) + chainReach(actor.chain.length)) : actor.radius;
+    const repeated = actorRepeatedMarker(actor);
+    if (repeated) { const [l,t,r,b] = repeated.bounds; return [actor.x + Math.min(-actor.radius,l), actor.y + Math.min(-actor.radius,t), actor.x + Math.max(actor.radius,r), actor.y + Math.max(actor.radius,b)]; }
+    const reach = actor.chain ? Math.max(actor.radius, actorChainReach(actor)) : actor.radius;
     const tip = actor.chain ? { x: actor.x + Math.cos(actor.chain.angle) * reach, y: actor.y + Math.sin(actor.chain.angle) * reach } : actor;
     return [Math.min(actor.x - actor.radius, tip.x - 8), Math.min(actor.y - actor.radius, tip.y - 8), Math.max(actor.x + actor.radius, tip.x + 8), Math.max(actor.y + actor.radius, tip.y + 8)];
   });
@@ -376,11 +380,13 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
     const circles = (grow: number) => atoms.map(s => `<circle cx="${round(s.x)}" cy="${round(s.y)}" r="${round(s.r + grow)}"/>`).join('');
     shape = `<path class="mm-bonds" d="M${atoms.map(s => `${round(s.x)} ${round(s.y)}`).join('L')}"/><g class="mm-shape__outline">${circles(1.6)}</g><g class="mm-shape__body" fill="url(#${gradient})">${circles(0)}</g>`;
   } else {
-    shape = renderProteinSurface(actorParticles(actor.actor, actor.type, actor.radius), actor.color, actor.radius);
+    shape = actor.visual
+      ? renderProteinVisualSurface(actor.actor, actor.radius, actor.type === 'complex' ? 32 : 28, actor.color, actor.visual)
+      : renderProteinSurface(actorParticles(actor.actor, actor.type, actor.radius, actor.molecule), actor.color, actor.radius);
   }
   const glow = actor.activity === 'active' && !actor.ghost ? `<circle class="mm-halo" r="${actor.radius + 18}" fill="url(#${halo})"/>` : '';
-  const inhibition = actor.activity === 'inhibited' ? `<g class="mm-inhibition" aria-hidden="true"><circle r="${actor.radius + 7}"/><path d="M${round(-actor.radius * .72)} ${round(actor.radius * .72)}L${round(actor.radius * .72)} ${round(-actor.radius * .72)}"/></g>` : '';
-  const chain = actor.chain ? parChain(actor) : '';
+  const inhibition = actor.activity === 'inhibited' ? renderProteinInhibition(actorParticles(actor.actor, actor.type, actor.radius, actor.molecule, actor.visual), actor.radius) : '';
+  const chain = actor.chain ? renderChain(actor) : '';
   const badges = actor.badges.map((badge, index) => {
     const angle = -2.4 + index * .5;
     const x = round(Math.cos(angle) * actor.radius * .95);
@@ -397,11 +403,13 @@ function actorGroup(actor: SceneActor, gradient: string, halo: string, prefix: s
     ? 'aria-hidden="true"'
     : `role="button" tabindex="${groupIdentical && actor.identical && !actor.identical.first ? -1 : 0}" aria-pressed="${selected}" aria-label="${escape([actor.label, actor.activity, groupIdentical && actor.identical?.first && `${actor.identical.size} identical copies`].filter(Boolean).join(', '))}"`;
   return `<g class="${classes}" data-key="actor:${escape(actor.id)}" data-actor="${escape(actor.id)}"${actor.activity ? ` data-activity="${actor.activity}"` : ''} ${interactive} style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}">`
-    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${actor.mirrored ? `<g transform="scale(-1 1)">${shape}</g>` : shape}${inhibition}${badges}</g></g>`;
+    + `<g class="mm-actor__inner"${actor.ghost ? ` filter="url(#${prefix}-blur)"` : ''}>${glow}${chain}${actor.mirrored ? `<g transform="scale(-1 1)">${inhibition}${shape}</g>` : inhibition + shape}${badges}</g></g>`;
 }
 
-/** Branched bead chain leaving the actor's surface along `chain.angle`. */
-function parChain(actor: SceneActor): string {
+/** Resolved repeated markers, or the byte-identical legacy bead path. */
+function renderChain(actor: SceneActor): string {
+  const repeated = actorRepeatedMarker(actor);
+  if (repeated) return renderRepeatedMarker(repeated);
   const { beads, links } = chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor));
   const path = links.map(([from, to]) => `M${round(from.x)} ${round(from.y)}L${round(to.x)} ${round(to.y)}`).join('');
   return `<g class="mm-chain"><path d="${path}"/>${beads.map(bead => `<circle cx="${round(bead.x)}" cy="${round(bead.y)}" r="${bead.r}" style="--i:${bead.index}"/>`).join('')}</g>`;
@@ -409,15 +417,10 @@ function parChain(actor: SceneActor): string {
 
 // ---- Labels ----
 
-/** Pill label with a thin leader ending in a small arrowhead at (tx, ty). Coordinates are relative. */
-function pill(x: number, y: number, tx: number, ty: number, text: string, side: -1 | 1): string {
-  const width = Math.max(48, text.length * 8.4 + 24);
-  const left = side === 1 ? x : x - width;
-  const startX = side === 1 ? left + 10 : left + width - 10;
-  const startY = y + 12;
-  const midX = (startX + tx) / 2 + side * 6;
-  const midY = Math.max(startY, ty) - 4;
-  return `<path class="mm-leader" d="M${round(startX)} ${round(startY)}Q${round(midX)} ${round(midY)} ${round(tx)} ${round(ty)}"/>${arrowhead(midX, midY, tx, ty)}`
+/** Pill label with a thin leader ending in a small arrowhead: the geometry the layout placed, relative to the actor. */
+function pill(label: ReturnType<typeof labelGeometry>, text: string): string {
+  const { y, width, left, start, mid, end } = label;
+  return `<path class="mm-leader" d="M${round(start.x)} ${round(start.y)}Q${round(mid.x)} ${round(mid.y)} ${round(end.x)} ${round(end.y)}"/>${arrowhead(mid.x, mid.y, end.x, end.y)}`
     + `<rect class="mm-pill" x="${round(left)}" y="${round(y - 14)}" width="${round(width)}" height="28" rx="14"/>`
     + `<text class="mm-pill__text" x="${round(left + width / 2)}" y="${round(y + 5)}" text-anchor="middle">${escape(text)}</text>`;
 }
@@ -439,7 +442,7 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
   const text = LESION_LABELS[lesion.type];
   const width = text.length * 7.4;
   // Chains count as obstacles too: a callout must not sit on top of the beads.
-  const beads = actors.filter(actor => !actor.ghost && actor.chain).flatMap(actor => chainGeometry(actor.radius, actor.chain!.angle, actor.chain!.length, chainBase(actor)).beads
+  const beads = actors.filter(actor => !actor.ghost && actor.chain).flatMap(actor => actorChainGeometry(actor).beads
     .map(bead => ({ x: actor.x + bead.x, y: actor.y + bead.y, radius: bead.r + 2, ghost: false })));
   // So do the callouts of actors: two labels must not lie on each other.
   const pills = actors.filter(actor => !actor.ghost && actor.group?.lead !== false).map(actor => labelBox(actor));
@@ -456,26 +459,18 @@ function lesionLabel(lesion: SvgScene['lesions'][number], actors: SceneActor[]):
 
 
 function actorLabel(actor: SceneActor): string {
-  const side = actor.labelSide;
-  const r = actor.radius;
-  const small = actor.type === 'molecule';
-  const x = side * (r + (small ? 14 : 22));
-  // Lift the callout clear of a chain leaving on the same side.
-  const chainSide = actor.chain ? Math.sign(Math.cos(actor.chain.angle)) : 0;
-  const y = (small ? -r - 20 : -r - 18) - (chainSide === side ? 44 : 0) - (actor.labelLift ?? 0);
-  const tx = side * r * (small ? .5 : .55);
-  const ty = -r * (small ? .6 : .72);
   const classes = ['mm-label', actor.ghost && 'mm-label--ghost'].filter(Boolean).join(' ');
   const scale = actor.ghost ? ' scale(.62)' : '';
-  return `<g class="${classes}" data-key="label:${escape(actor.id)}" style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}" aria-hidden="true">${pill(x, y, tx, ty, calloutText(actor), side)}</g>`;
+  return `<g class="${classes}" data-key="label:${escape(actor.id)}" style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)${scale};--mm-actor:${escape(actor.color)}" aria-hidden="true">${pill(labelGeometry(actor), calloutText(actor))}</g>`;
 }
 
 function chainLabel(actor: SceneActor): string {
-  const { angle, length, label } = actor.chain!;
-  const reach = chainBase(actor) + chainReach(length);
+  const { angle, label } = actor.chain!;
+  const reach = actorChainReach(actor);
   const tip = { x: Math.cos(angle) * reach * .72, y: Math.sin(angle) * reach * .72 };
+  const place = actor.chain!.callout ?? CHAIN_CALLOUT_PLACES[0]!;
   return `<g class="mm-label mm-label--chain" data-key="chain:${escape(actor.id)}" style="transform:translate(${round(actor.x)}px,${round(actor.y)}px)" aria-hidden="true">`
-    + callout(round(tip.x - 64), round(tip.y - 26), round(tip.x - 6), round(tip.y - 6), `${label} chain`) + '</g>';
+    + callout(round(tip.x + place.dx), round(tip.y + place.dy), round(tip.x + place.tx), round(tip.y + place.ty), `${label} chain`, place.anchor) + '</g>';
 }
 
 // ---- Colours ----
@@ -517,9 +512,9 @@ export const molecularMotionCss = `
 .mm-actor--ghost{filter:blur(2.2px)}.mm-actor--ghost .mm-actor__inner{filter:none}
 .mm-shape__outline,.mm-actor .mm-surface__outline{fill:color-mix(in srgb,var(--mm-actor) 62%,var(--mm-ink))}
 .mm-shape__outline--molecule{fill:transparent}
-.mm-actor--inactive .mm-actor__inner{opacity:.82}.mm-actor--inhibited .mm-shape__body,.mm-actor--inhibited .mm-surface{filter:grayscale(.75)}.mm-actor--inhibited .mm-shape__outline,.mm-actor--inhibited .mm-surface__outline{fill:var(--mm-muted)}
+.mm-actor--inactive .mm-actor__inner{opacity:.82}.mm-actor--inhibited .mm-shape__body,.mm-actor--inhibited .mm-actor__inner > .mm-surface,.mm-actor--inhibited .mm-actor__inner > g[transform="scale(-1 1)"] > .mm-surface{filter:saturate(.6);opacity:.88}.mm-actor--inhibited .mm-protein__structure{opacity:.65}
 .mm-halo{animation:mm-breathe 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
-.mm-inhibition circle{fill:none;stroke:var(--mm-alert);stroke-width:3}.mm-inhibition path{stroke:var(--mm-alert);stroke-width:4;stroke-linecap:round}
+
 .mm-actor:focus-visible .mm-shape__outline,.mm-actor[aria-pressed=true] .mm-shape__outline,.mm-actor:focus-visible .mm-surface__outline,.mm-actor[aria-pressed=true] .mm-surface__outline{fill:var(--mm-accent)}
 .mm-bonds{fill:none;stroke:color-mix(in srgb,var(--mm-actor) 70%,var(--mm-ink));stroke-width:3.5;stroke-linecap:round}
 .mm-chain path{fill:none;stroke:var(--mm-chain);stroke-width:2.2;opacity:.7}.mm-chain circle{fill:var(--mm-chain);stroke:var(--mm-surface);stroke-width:1.2;animation:mm-bead .4s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 45ms);transform-box:fill-box;transform-origin:center}
