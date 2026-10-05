@@ -1,0 +1,127 @@
+schemaVersion: 6
+mechanism:
+  id: gene-expression
+  name: "Gene expression: transcription and splicing"
+  description: >
+    RNA polymerase II opens the gene and a transcript begins as its first nucleotides, paired with
+    the template strand. The transcript grows from its 3′ end along the template, leaves it, and
+    loses its intron: the two exons become neighbours on the same molecule, which keeps its
+    pre-mRNA coordinates. In the cytoplasm a ribosome rests across the exon–exon junction.
+    Schematic: lengths are illustrative, the bubble does not travel, and capping, polyadenylation
+    and the peptide are not modelled. The viewer does not yet draw the excised intron as removed,
+    nor the mRNA leaving the nucleus: both are in the state of each step, not in its picture.
+
+compartments: [nucleus, cytoplasm]
+
+actors:
+  - id: gene
+    type: dna
+    label: Gene
+    compartment: nucleus
+    nucleic: { length: 60 }
+    sites:
+      - { id: promoter, span: [2, 10], label: Promoter }
+      - { id: transcribed, span: [10, 46], label: Transcribed region }
+  - id: pre-mrna
+    type: rna
+    label: pre-mRNA
+    compartment: nucleus
+    nucleic: { length: 36 }
+    sites:
+      - { id: three-prime, at: 4 }
+      - { id: donor, at: 12, label: 5′ splice site }
+      - { id: acceptor, at: 24, label: 3′ splice site }
+      - { id: intron, span: [12, 24], label: Intron }
+      - { id: upstream, at: 8 }
+    # The transcript begins as its first four nucleotides (RFC 0007): state, not an event.
+    initial:
+      visible: false
+      nucleic:
+        missing: [{ strand: top, from: 4, to: 36 }]
+        nascent: [{ strand: top, from: 0, to: 4 }]
+  - id: pol2
+    type: protein
+    label: RNA polymerase II
+    color: "#5aa9a0"
+    compartment: nucleus
+    footprint: { length: 8, form: duplex }
+  - id: spliceosome
+    type: complex
+    label: Spliceosome
+    color: "#8b78d0"
+    compartment: nucleus
+  - id: ribosome
+    type: complex
+    label: Ribosome
+    color: "#d08a4e"
+    compartment: cytoplasm
+    footprint: { length: 8, form: single }
+
+alignments:
+  # Position for position: the transcript pairs with the gene's template (bottom) strand.
+  - id: transcript
+    a: { acid: pre-mrna, span: [0, 36] }
+    b: { acid: gene, span: [10, 46] }
+
+steps:
+  - id: gene
+    title: A gene at rest
+    summary: Pol II sits on the promoter of a closed gene
+    actions:
+      - { type: occupy, actor: pol2, target: gene.promoter }
+
+  - id: initiation
+    title: Initiation
+    summary: The gene opens and the transcript begins as four nucleotides
+    keyEvents:
+      - The two strands of the gene separate
+      - The first nucleotides of the transcript pair with the template strand
+    actions:
+      - { type: unwind, target: gene.transcribed, by: pol2 }
+      - { type: show, actor: pre-mrna }
+      - { type: pair, target: pre-mrna, span: [0, 4], with: gene }
+
+  - id: elongation
+    title: Elongation
+    summary: Pol II extends the 3′ end along the template
+    keyEvents:
+      - Nucleotides are added 5′→3′, each paired with the template
+    actions:
+      - { type: extend, target: pre-mrna.three-prime, length: 32, by: pol2 }
+
+  - id: release
+    title: Release
+    summary: The finished pre-mRNA leaves the template and the gene closes
+    actions:
+      - { type: unpair, target: pre-mrna }
+      - { type: anneal, target: gene.transcribed }
+      - { type: vacate, actor: pol2 }
+      - { type: hide, actor: pol2 }
+
+  - id: splice-sites
+    title: Splice sites
+    summary: The spliceosome assembles on the pre-mRNA and cuts the 5′ splice site
+    actions:
+      - { type: bind, actor: spliceosome, target: pre-mrna }
+      - { type: cleave, target: pre-mrna.donor, by: spliceosome }
+
+  - id: splicing
+    title: Splicing
+    summary: The intron is excised and the two exons are joined
+    keyEvents:
+      - The intron leaves the molecule
+      - Nucleotide 11 becomes the covalent neighbour of nucleotide 24
+    actions:
+      - { type: excise-interval, target: pre-mrna.intron, by: spliceosome }
+      - { type: unbind, actor: spliceosome }
+      - { type: hide, actor: spliceosome }
+
+  - id: ribosome
+    title: Export and a ribosome on the junction
+    summary: In the cytoplasm, a ribosome covers the end of exon 1 and the start of exon 2
+    keyEvents:
+      - The mRNA moves to the cytoplasm
+      - A ribosome footprint of 8 nucleotides spans the exon–exon junction
+    actions:
+      - { type: translocate, actor: pre-mrna, to: cytoplasm }
+      - { type: occupy, actor: ribosome, target: pre-mrna.upstream }
