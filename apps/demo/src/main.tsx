@@ -9,6 +9,7 @@ import parpSource from '../../../examples/parp1-ssb-repair.yaml?raw';
 import hrSource from '../../../examples/homologous-recombination.yaml?raw';
 import egfrSource from '../../../examples/egfr-dimerization.yaml?raw';
 import p53Source from '../../../examples/p53-mdm2-feedback.yaml?raw';
+import cgasSource from '../../../examples/cgas-sting.yaml?raw';
 import './styles.css';
 
 const REPOSITORY = 'https://github.com/alvaroestebanperez/molecular-motion';
@@ -21,7 +22,7 @@ interface Example { id: string; source: string; definition: MechanismDefinition;
 const PROTEIN_VISUALS: Record<string, ProteinActorVisuals> = {
   'p53-mdm2-feedback': { proteasome: COMPOSED_COMPLEX_VISUAL },
 };
-const EXAMPLES: Example[] = [parpSource, hrSource, egfrSource, p53Source].map(source => {
+const EXAMPLES: Example[] = [parpSource, hrSource, egfrSource, p53Source, cgasSource].map(source => {
   const definition = parseMechanism(source);
   return { id: definition.mechanism.id, source, definition, proteinVisuals: PROTEIN_VISUALS[definition.mechanism.id] };
 });

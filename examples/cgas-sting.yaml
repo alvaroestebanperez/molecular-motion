@@ -1,0 +1,143 @@
+schemaVersion: 5
+mechanism:
+  id: cgas-sting
+  name: cGAS–STING sensing of cytosolic DNA
+  description: >
+    cGAS assembles on double-stranded DNA in the cytosol and produces the second messenger
+    2′3′-cGAMP. cGAMP binds STING dimers in the ER membrane; STING oligomerizes, moves to the Golgi
+    and recruits TBK1, which phosphorylates IRF3. Phosphorylated IRF3 dimerizes and enters the
+    nucleus. Schematic: no stoichiometry, kinetics or vesicular transport is modelled.
+  references: [reactome-sting]
+
+references:
+  - id: reactome-sting
+    citation: STING mediated induction of host immune responses
+    reactome: R-HSA-1834941
+
+compartments:
+  - cytoplasm
+  - { id: er-membrane, kind: membrane, label: ER membrane }
+  - { id: golgi-membrane, kind: membrane, label: Golgi membrane }
+  - nucleus
+actors:
+  - id: dna
+    type: dna
+    label: Cytosolic dsDNA
+    compartment: cytoplasm
+    nucleic: { length: 60 }
+    initial: { visible: false }
+  - id: cgas
+    type: protein
+    label: cGAS
+    compartment: cytoplasm
+    copies: 2
+    footprint: { length: 18, form: duplex }
+    interfaces: [{ id: dimer }]
+    initial: { visible: false, activity: inactive }
+  - id: cgamp
+    type: molecule
+    molecule: cgamp
+    label: 2′3′-cGAMP
+    copies: 2
+    interfaces: [{ id: bridge, valence: 2 }]
+    initial: { present: false }
+  - id: sting
+    type: protein
+    label: STING
+    compartment: er-membrane
+    copies: 4
+    interfaces: [{ id: dimer }, { id: pocket }, { id: oligo }]
+    sites: [{ id: ctt, label: C-terminal tail }]
+    initial: { visible: false }
+  - id: tbk1
+    type: protein
+    label: TBK1
+    compartment: cytoplasm
+    interfaces: [{ id: sting }]
+    initial: { visible: false }
+  - id: irf3
+    type: protein
+    label: IRF3
+    compartment: cytoplasm
+    copies: 2
+    interfaces: [{ id: dimer }, { id: dock }]
+    sites: [{ id: s396, label: Ser396 }]
+    initial: { visible: false }
+steps:
+  - id: dsdna
+    title: Cytosolic dsDNA
+    actions:
+      - { type: show, actor: dna }
+      - { type: show, actor: "sting#1" }
+      - { type: show, actor: "sting#2" }
+      - { type: show, actor: "sting#3" }
+      - { type: show, actor: "sting#4" }
+      - { type: bind, actor: "sting#2", interface: dimer, target: "sting#1", targetInterface: dimer }
+      - { type: bind, actor: "sting#4", interface: dimer, target: "sting#3", targetInterface: dimer }
+  - id: cgas-binding
+    title: cGAS binding
+    actions:
+      - { type: occupy, actor: "cgas#1", target: dna, span: [12, 30] }
+  - id: cgas-assembly
+    title: cGAS assembly on DNA
+    actions:
+      - { type: occupy, actor: "cgas#2", target: dna, span: [30, 48] }
+      - { type: bind, actor: "cgas#2", interface: dimer, target: "cgas#1", targetInterface: dimer }
+      - { type: activate, actor: "cgas#1" }
+      - { type: activate, actor: "cgas#2" }
+  - id: cgamp
+    title: 2′3′-cGAMP production
+    actions:
+      - { type: synthesize, product: "cgamp#1", compartment: cytoplasm, by: "cgas#1" }
+      - { type: synthesize, product: "cgamp#2", compartment: cytoplasm, by: "cgas#2" }
+  - id: sting-binding
+    title: cGAMP binding to STING
+    summary: Each cGAMP bridges the two protomers of a STING dimer
+    description: The DNA and cGAS leave the figure here to make room for the rest of the
+      pathway. They are hidden, not degraded.
+    actions:
+      - { type: hide, actor: dna }
+      - { type: hide, actor: "cgas#1" }
+      - { type: hide, actor: "cgas#2" }
+      - { type: bind, actor: "cgamp#1", interface: bridge, target: "sting#1", targetInterface: pocket }
+      - { type: bind, actor: "cgamp#1", interface: bridge, target: "sting#2", targetInterface: pocket }
+      - { type: bind, actor: "cgamp#2", interface: bridge, target: "sting#3", targetInterface: pocket }
+      - { type: bind, actor: "cgamp#2", interface: bridge, target: "sting#4", targetInterface: pocket }
+  - id: oligomerization
+    title: STING activation and oligomerization
+    actions:
+      - { type: activate, actor: "sting#1" }
+      - { type: activate, actor: "sting#2" }
+      - { type: activate, actor: "sting#3" }
+      - { type: activate, actor: "sting#4" }
+      - { type: bind, actor: "sting#3", interface: oligo, target: "sting#2", targetInterface: oligo }
+  - id: trafficking
+    title: STING trafficking ER → Golgi
+    actions:
+      - { type: translocate, actor: "sting#1", to: golgi-membrane }
+      - { type: translocate, actor: "sting#2", to: golgi-membrane }
+      - { type: translocate, actor: "sting#3", to: golgi-membrane }
+      - { type: translocate, actor: "sting#4", to: golgi-membrane }
+  - id: tbk1
+    title: TBK1 recruitment
+    actions:
+      - { type: recruit, actor: tbk1, interface: sting, target: "sting#1.ctt" }
+      - { type: activate, actor: tbk1 }
+  - id: irf3-phosphorylation
+    title: IRF3 phosphorylation
+    actions:
+      - { type: bind, actor: "irf3#1", interface: dock, target: "sting#4.ctt" }
+      - { type: phosphorylate, actor: "irf3#1", site: s396, by: tbk1 }
+      - { type: show, actor: "irf3#2" }
+      - { type: phosphorylate, actor: "irf3#2", site: s396, by: tbk1 }
+  - id: irf3-dimer
+    title: IRF3 dimerization
+    actions:
+      - { type: unbind, actor: "irf3#1", interface: dock }
+      - { type: bind, actor: "irf3#2", interface: dimer, target: "irf3#1", targetInterface: dimer }
+      - { type: activate, actor: "irf3#1" }
+      - { type: activate, actor: "irf3#2" }
+  - id: nucleus
+    title: Nuclear translocation of IRF3
+    actions:
+      - { type: translocate, actor: "irf3#1", to: nucleus, includeBound: true }
