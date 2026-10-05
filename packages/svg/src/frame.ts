@@ -1,5 +1,6 @@
 import type { StrandId } from '@molecular-motion/core';
-import { markAway, type SceneNucleicAcid, type SceneRange, type SceneStrandRange, type SceneStrandSpan, type SvgScene } from './scene';
+import { coordinateMap, type ExcisedStretch } from './coordinate-map';
+import { helixPhase, markAway, type SceneNucleicAcid, type SceneRange, type SceneStrandRange, type SceneStrandSpan, type SvgScene } from './scene';
 
 /**
  * Animation of nucleic geometry between steps (ADR 0001). Everything here reads two geometries and a
@@ -98,18 +99,58 @@ const stateAt = (acid: SceneNucleicAcid, strand: StrandId) => (at: number): Stra
 function breaks(acids: readonly SceneNucleicAcid[], strand: StrandId, width: number): number[] {
   return acids.flatMap(acid => acid.sites
     .filter(site => (site.lesion === 'double-strand-break' || site.lesion === 'single-strand-break' || site.lesion === 'nick') && (site.lesionStrands ?? ['top']).includes(strand))
-    .map(site => site.x * (acid.length ?? 100) / width));
+    // On a molecule with an excision a position does not give a coordinate back: the site carries its own.
+    .map(site => acid.excised && site.at ? (site.at.from + site.at.to) / 2 : site.x * (acid.length ?? 100) / width));
+}
+
+/** The share of its width an excised stretch takes; a settled one takes none. */
+const shareIn = (list: readonly ExcisedStretch[] | undefined, at: number) => {
+  const stretch = (list ?? []).find(item => item.from <= at && at < item.to);
+  return stretch ? stretch.share ?? 0 : 1;
+};
+
+/**
+ * The excised stretches of a frame between two (ADR 0002 §5): each keeps a share of its width that
+ * moves from what it has in `before` to what it has in `after`. An interval excised in one and present
+ * in the other therefore closes, or opens, continuously. Presentation geometry only: no state of the
+ * core has a partly excised interval.
+ */
+function tweenExcised(before: SceneNucleicAcid, after: SceneNucleicAcid, t: number): ExcisedStretch[] {
+  const edges = [...new Set([...before.excised ?? [], ...after.excised ?? []].flatMap(item => [item.from, item.to]))].sort((a, b) => a - b);
+  const out: ExcisedStretch[] = [];
+  for (let index = 0; index + 1 < edges.length; index += 1) {
+    const [from, to] = [edges[index]!, edges[index + 1]!];
+    const middle = (from + to) / 2;
+    const [was, will] = [shareIn(before.excised, middle), shareIn(after.excised, middle)];
+    if (was === 1 && will === 1) continue;
+    const share = lerp(was, will, t);
+    const last = out.at(-1);
+    if (last && last.to === from && last.share === share) last.to = to;
+    else out.push({ from, to, share });
+  }
+  return out;
 }
 
 function tweenAcid(before: SceneNucleicAcid, after: SceneNucleicAcid, width: number, t: number): SceneNucleicAcid {
   const length = after.length ?? 100;
   const scale = width / length;
-  const span = ({ from, to }: Interval): SceneRange => ({ from, to, x0: from * scale, x1: to * scale });
+  // With an excision in either frame, positions come from the map of this instant (ADR 0002 §5).
+  const excised = before.excised || after.excised ? tweenExcised(before, after, t) : [];
+  const map = excised.length ? coordinateMap(width, length, excised) : undefined;
+  const span = ({ from, to }: Interval): SceneRange => map ? { from, to, x0: map.place(from), x1: map.place(to) } : { from, to, x0: from * scale, x1: to * scale };
+  // A strand absent along the whole molecule is drawn absent past both ends, as the scene does, so a
+  // molecule that ends inside the canvas stays relaxed up to its ends.
+  const whole = (range: Interval): SceneRange => map && range.from <= NEAR && range.to >= length - NEAR ? { ...span(range), x0: -width, x1: 2 * width } : span(range);
+  // A stretch that is closing or opening is still drawn, narrower, as it is in the frame that has it:
+  // the other frame says nothing about nucleotides it does not have.
+  const held = <State,>(was: (at: number) => State, will: (at: number) => State): [(at: number) => State, (at: number) => State] => map
+    ? [at => shareIn(before.excised, at) === 0 ? will(at) : was(at), at => shareIn(after.excised, at) === 0 ? was(at) : will(at)]
+    : [was, will];
   const missing: SceneStrandRange[] = [];
   const nascent: SceneStrandRange[] = [];
   for (const strand of STRANDS) {
     const lists = [before.missing, before.nascent, after.missing, after.nascent].flatMap(list => strandRanges(list, strand));
-    const [was, will] = [stateAt(before, strand), stateAt(after, strand)];
+    const [was, will] = held(stateAt(before, strand), stateAt(after, strand));
     const ends = breaks([before, after], strand, width);
     const anchor = (a: number, b: number, from: StrandState, to: StrandState): Anchor => {
       // A chain grows 5′→3′ by extension of its 3′ end (ADR 0001 §4.2): a new tract appears from its 5′
@@ -126,21 +167,26 @@ function tweenAcid(before: SceneNucleicAcid, after: SceneNucleicAcid, width: num
       const [low, high] = [already(a, a - NEAR * 2), already(b, b + NEAR * 2)];
       return low && high ? 'ends' : low ? 'from' : high ? 'to' : 'middle';
     };
-    const states = tween([0, length, ...lists.flatMap(range => [range.from, range.to])], was, will, anchor, t);
-    for (const range of states.get('missing') ?? []) missing.push({ strand, ...span(range) });
+    const states = tween([0, length, ...excised.flatMap(range => [range.from, range.to]), ...lists.flatMap(range => [range.from, range.to])], was, will, anchor, t);
+    for (const range of states.get('missing') ?? []) missing.push({ strand, ...whole(range) });
     for (const range of states.get('nascent') ?? []) nascent.push({ strand, ...span(range) });
   }
-  const [wasOpen, willOpen] = [(at: number) => (inside(before.open ?? [], at) ? 'open' : 'closed'), (at: number) => (inside(after.open ?? [], at) ? 'open' : 'closed')];
+  const [wasOpen, willOpen] = held<string>((at: number) => (inside(before.open ?? [], at) ? 'open' : 'closed'), (at: number) => (inside(after.open ?? [], at) ? 'open' : 'closed'));
   const openAnchor = (a: number, b: number, _from: string, to: string): Anchor => {
     const already = (outside: number) => outside >= 0 && outside < length && wasOpen(outside) === to;
     const [low, high] = [already(a - NEAR * 2), already(b + NEAR * 2)];
     return low && high ? 'ends' : low ? 'from' : high ? 'to' : 'middle';
   };
-  const open = tween([0, length, ...[...before.open ?? [], ...after.open ?? []].flatMap(range => [range.from, range.to])], wasOpen, willOpen, openAnchor, t).get('open') ?? [];
-  const { missing: _missing, nascent: _nascent, open: _open, away: _away, ...rest } = after;
+  const open = tween([0, length, ...excised.flatMap(range => [range.from, range.to]), ...[...before.open ?? [], ...after.open ?? []].flatMap(range => [range.from, range.to])], wasOpen, willOpen, openAnchor, t).get('open') ?? [];
+  const { missing: _missing, nascent: _nascent, open: _open, away: _away, excised: _excised, ...rest } = after;
+  // Sites follow the map of this instant. One that only the origin had lies on material that is going, and is not drawn.
+  const sites = map ? after.sites.map(site => site.at ? { ...site, x: site.at.from === site.at.to ? map.place(site.at.from) : (map.place(site.at.from) + map.place(site.at.to)) / 2 } : site) : after.sites;
   return {
     ...rest,
+    sites,
+    ...(map && { phaseX: lerp(helixPhase(before, width), helixPhase(after, width), t) }),
     y: lerp(before.y, after.y, t),
+    ...(excised.length && { excised: excised.map(stretch => ({ ...span(stretch), share: stretch.share })) }),
     ...(missing.length && { missing }),
     ...(nascent.length && { nascent }),
     ...(open.length && { open: open.map(span) }),
