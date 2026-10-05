@@ -1,0 +1,75 @@
+name: Release
+
+# Publishes the three packages when a version tag is pushed: v0.1.0 publishes 0.1.0.
+#
+# Authentication is npm Trusted Publishing: npm exchanges the OIDC token GitHub gives this workflow.
+# There is no npm token, here or in the repository's secrets, and none may be added: a token would be
+# a second way to publish. Each package names this file as its trusted publisher on npmjs.com
+# (CONTRIBUTING.md, "Releasing"), so renaming it breaks publishing until that is updated there.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write   # lets npm verify that it is this workflow, in this repository, that publishes
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'alvaroestebanperez/molecular-motion'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Trusted Publishing needs Node >= 22.14.0 and npm >= 11.5.1. No dependency cache in a release build.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: npm supports Trusted Publishing
+        run: |
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            const ok = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!ok) { console.error(`npm ${process.argv[1]} is older than 11.5.1`); process.exit(1); }
+          ' "$(npm --version)"
+      - name: The tag is the one version of the three packages, on main
+        run: |
+          version="$(node -p "require('./packages/core/package.json').version")"
+          for name in core svg react; do
+            found="$(node -p "require('./packages/$name/package.json').version")"
+            if [ "$found" != "$version" ]; then
+              echo "@molecular-motion/$name is $found, core is $version: the packages are released together" >&2
+              exit 1
+            fi
+          done
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag $GITHUB_REF_NAME is not a commit of main" >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run check
+      - run: npm run check:pack
+      # In dependency order: svg needs core, react needs both. Provenance is attached by npm itself under
+      # Trusted Publishing. A version that is already on the registry is left alone, so a run that failed
+      # part of the way can be started again.
+      - name: Publish
+        run: |
+          version="$(node -p "require('./packages/core/package.json').version")"
+          for name in core svg react; do
+            package="@molecular-motion/$name"
+            if [ "$(npm view "$package@$version" version 2>/dev/null)" = "$version" ]; then
+              echo "$package@$version is already published"
+              continue
+            fi
+            npm publish --workspace "$package"
+          done

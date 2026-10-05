@@ -2,15 +2,45 @@
   "name": "@molecular-motion/svg",
   "version": "0.1.0",
   "description": "Accessible SVG scene builder for Molecular Motion.",
+  "keywords": [
+    "biology",
+    "molecular-biology",
+    "visualization",
+    "svg",
+    "diagram"
+  ],
+  "homepage": "https://molecular-motion.alvaroesteban.dev/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alvaroestebanperez/molecular-motion.git",
+    "directory": "packages/svg"
+  },
+  "bugs": "https://github.com/alvaroestebanperez/molecular-motion/issues",
+  "author": "Álvaro Esteban",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": { "@molecular-motion/core": "^0.1.0" },
-  "license": "MIT"
+  "dependencies": {
+    "@molecular-motion/core": "^0.1.0"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
