@@ -21,16 +21,18 @@ concurrency:
 jobs:
   publish:
     if: github.repository == 'alvaroestebanperez/molecular-motion'
-    runs-on: ubuntu-latest
+    # The image CI runs on, so a release never meets a system the checks have not seen.
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Trusted Publishing needs Node >= 22.14.0 and npm >= 11.5.1. No dependency cache in a release build.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: npm supports Trusted Publishing
         run: |
           node -e '
