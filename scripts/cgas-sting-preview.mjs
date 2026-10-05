@@ -1,7 +1,8 @@
 // Build the packages first. Renders every step of the cGAS–STING example, on the wide and the phone canvas.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { compileMechanism, parseMechanism } from '../packages/core/dist/index.js';
+import { compileMechanism } from '../packages/core/dist/index.js';
+import { parseMechanism } from '../packages/core/dist/yaml.js';
 import { buildSvgScene, exportSvg } from '../packages/svg/dist/index.js';
 
 const dest = new URL('../artifacts/cgas-sting-sequence/', import.meta.url);

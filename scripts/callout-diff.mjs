@@ -5,7 +5,8 @@
 //   npx esbuild packages/react/src/player.ts --bundle --format=esm --platform=node --external:@molecular-motion/core --external:react --outfile=artifacts/callout-diff/_before/player.mjs
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { compileMechanism, parseMechanism } from '../packages/core/dist/index.js';
+import { compileMechanism } from '../packages/core/dist/index.js';
+import { parseMechanism } from '../packages/core/dist/yaml.js';
 import * as after from '../packages/svg/dist/index.js';
 const dest = new URL('../artifacts/callout-diff/', import.meta.url);
 const before = await import(new URL('_before/svg.mjs', dest));

@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  builtinRegistry, compileMechanism, definePrimitive, field, parseMechanism,
+  builtinRegistry, compileMechanism, definePrimitive, field,
   type ActionNode, type ActionSpec, type CompiledMechanism, type MechanismSnapshot,
 } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, layoutReservation, mechanismReservation, renderSvg } from '../src';
 import { coordinateMapOf } from '../src/coordinate-map';
 

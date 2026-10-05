@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  compileMechanism, excisedOf, extantLength, migrateV5, parseMechanism, partnerOf, toJsonSchema,
+  compileMechanism, excisedOf, extantLength, migrateV5, partnerOf, toJsonSchema,
   type ActionNode, type MechanismSnapshot,
 } from '../src';
+import { parseMechanism } from '../src/yaml';
 import { EXAMPLES, allStates } from './helpers';
 
 /** A gene and its transcript on pre-mRNA coordinates (intron 12–24), a recombining locus, and things that rest on them. */

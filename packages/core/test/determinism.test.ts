@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism, primaryPartner, type MechanismDefinition } from '../src';
+import { compileMechanism, primaryPartner, type MechanismDefinition } from '../src';
+import { parseMechanism } from '../src/yaml';
 import { EXAMPLES, allStates, readExample } from './helpers';
 
 /** Deterministic permutation (no Math.random) so failures are reproducible. */

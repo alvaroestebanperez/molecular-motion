@@ -6,6 +6,7 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@molecular-motion/core": ["../../packages/core/src/index.ts"],
+      "@molecular-motion/core/yaml": ["../../packages/core/src/yaml.ts"],
       "@molecular-motion/svg": ["../../packages/svg/src/index.ts"],
       "@molecular-motion/react": ["../../packages/react/src/index.tsx"]
     }

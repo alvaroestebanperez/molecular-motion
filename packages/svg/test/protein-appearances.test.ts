@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { compileMechanism, parseMechanism, toJsonSchema } from '@molecular-motion/core';
+import { compileMechanism, toJsonSchema } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import {
   buildSvgScene, exportSvg, renderProteinPrimitive, proteinGeometry, proteinProfileGeometry,
   renderVocabularyGlyph, renderProteinAssembly, renderProteinArchitectureSurface,

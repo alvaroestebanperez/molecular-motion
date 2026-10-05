@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 // The player's own ghost selection, so the baseline covers the path the viewer actually renders.
 import { firstAppearances, upcomingActors } from '../../react/src/player';
 import { buildSvgScene, renderSvg } from '../src';

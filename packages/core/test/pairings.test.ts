@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  compileMechanism, migrateV4, normalizePairings, pairingConflicts, parseMechanism, partnerOf, toJsonSchema,
+  compileMechanism, migrateV4, normalizePairings, pairingConflicts, partnerOf, toJsonSchema,
   type ActionNode, type MechanismSnapshot, type Pairing,
 } from '../src';
+import { parseMechanism } from '../src/yaml';
 
 /** A chromosome broken at 40 and its intact sister, aligned over their whole length; an oligo and a guide RNA. */
 const ACTORS = [

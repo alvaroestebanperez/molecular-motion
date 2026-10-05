@@ -2,7 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, exportCss, exportPng, exportSvg, membraneSceneCss, molecularMotionCss, renderSvg, THEME_TOKENS } from '../src';
 
 const hr = compileMechanism(parseMechanism(readFileSync(resolve(process.cwd(), 'examples/homologous-recombination.yaml'), 'utf8')));

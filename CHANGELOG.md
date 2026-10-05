@@ -4,6 +4,24 @@ The three packages, `@molecular-motion/core`, `@molecular-motion/svg` and `@mole
 
 Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a minor release; documents written for an earlier one keep loading, migrated automatically.
 
+## 0.2.0
+
+**Breaking: `parseMechanism` moves to `@molecular-motion/core/yaml`.**
+
+```diff
+- import { compileMechanism, parseMechanism } from '@molecular-motion/core';
++ import { compileMechanism } from '@molecular-motion/core';
++ import { parseMechanism } from '@molecular-motion/core/yaml';
+```
+
+Nothing else changes: the function, its arguments and what it returns are the same, and so are the language and every figure.
+
+Why: the main entry of core imported the YAML parser, and a bundler kept it in every page that used core, `svg` or `react`, even one that never parsed YAML. The main entry now imports no package at all. A page that receives its mechanisms already parsed loads no parser, without a rule of its own: about 39 KB less (11 KB gzip). A page that parses YAML imports the new entry, and only then is the parser loaded.
+
+- The main entry keeps `compileMechanism` and `validateMechanism`, which take a parsed document.
+- `@molecular-motion/svg` and `@molecular-motion/react` use only the main entry.
+- The rule 0.1.1 needed (`treeshake.moduleSideEffects` or similar) can be removed.
+
 ## 0.1.1
 
 Lighter pages for sites that inline figures. No change to the language or to how anything is drawn.

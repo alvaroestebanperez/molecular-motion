@@ -1,6 +1,5 @@
 export { compileMechanism, diff, initialState, DEFAULT_ACTION_DURATION } from './engine';
 export type { CompiledMechanism, CompileOptions } from './engine';
-export { parseMechanism } from './parse';
 export { MechanismValidationError, validateMechanism } from './validate';
 export type { ValidateOptions } from './validate';
 export { migrateV1, migrateV2, migrateV3, migrateV4, migrateV5 } from './migrate';

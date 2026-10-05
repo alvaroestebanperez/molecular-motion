@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism, type ActionNode } from '@molecular-motion/core';
+import { compileMechanism, type ActionNode } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, geometryFrame, interpolateGeometry, nucleicLayerMarkup, renderSvg } from '../src';
 import { coordinateMapOf } from '../src/coordinate-map';
 

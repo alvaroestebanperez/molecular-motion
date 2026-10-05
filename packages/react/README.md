@@ -9,7 +9,7 @@ npm install @molecular-motion/core @molecular-motion/react
 React 18 or newer is a peer dependency.
 
 ```tsx
-import { parseMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { MolecularMechanism } from '@molecular-motion/react';
 
 const definition = parseMechanism(yamlSource);

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism } from '../src';
+import { compileMechanism } from '../src';
+import { parseMechanism } from '../src/yaml';
 import { EXAMPLES, MECHANISMS, semanticProjection } from './helpers';
 
 /**

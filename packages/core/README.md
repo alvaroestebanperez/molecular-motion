@@ -7,14 +7,16 @@ npm install @molecular-motion/core
 ```
 
 ```ts
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 
 const mechanism = compileMechanism(parseMechanism(yamlSource));
 const snapshot = mechanism.at('damage');   // by step id or index, O(1)
 snapshot.actors;                            // resolved state of every actor at that step
 ```
 
-- `parseMechanism` accepts `schemaVersion` 1 to 6 and migrates older documents automatically.
+- `parseMechanism` reads YAML and is in its own entry, `@molecular-motion/core/yaml`: the main entry loads no YAML parser. A document that is already parsed goes straight to `compileMechanism` or `validateMechanism`.
+- `schemaVersion` 1 to 6 are accepted, and older documents are migrated automatically.
 - `schema.json` is the JSON Schema of the current version, generated from the action registry.
 - Custom actions are registered with `builtinRegistry.extend([...])`.
 
