@@ -10,7 +10,9 @@ Lighter pages for sites that inline figures. No change to the language or to how
 
 - **`exportSvg` with `theme: 'auto'`** fixes no colours, so one inlined copy of a figure serves the light and the dark theme of the page. The default is unchanged: a standalone file with its theme resolved.
 - **`exportSvg` with `styles: false`** leaves the stylesheet out of the figure, and **`exportCss`** is that stylesheet, to be included once per page.
-- **`"sideEffects": false`** in the three packages. None of them does anything when imported, and bundlers can now drop what a page does not use without being told.
+- **`"sideEffects": false`** in the three packages. None of them does anything when imported, so bundlers can drop the parts of them a page does not use.
+
+Known limit: this does not remove the YAML parser. The main entry of `@molecular-motion/core` imports `yaml`, and `yaml` does not declare itself free of side effects, so a bundler keeps it in any page that imports core, `svg` or `react`, even one that never parses YAML. That is about 39 KB minified (11 KB gzip). Until core has an entry without it, a site that wants it gone needs its own rule, for example `treeshake.moduleSideEffects` in Rollup or Vite.
 
 ## 0.1.0
 
