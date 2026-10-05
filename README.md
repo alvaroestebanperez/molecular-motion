@@ -297,6 +297,8 @@ Actors: `dna`, `rna`, `protein`, `molecule`, and `complex`, optionally placed in
 
 A `molecule` actor may name its structure with an optional `molecule` key from the small-molecule vocabulary (`atp`, `adp`, `gtp`, `gdp`, `nad-plus`, `nadh`, `cgamp`, `glucose`, `calcium`, `zinc`), for example `molecule: nad-plus`. The viewer then draws the same topology glyph as the visual language; without a key, or with an unknown one, it draws a generic ball-and-stick glyph. The renderer never infers structure from the label.
 
+The whole document is described in [the language](docs/language.md), and every action with its fields in [Actions](docs/actions.md), which is generated from the compiler.
+
 Actions come from an extensible **registry**. A small set of primitives defines every state transition:
 
 `bind` · `unbind` · `set-state` · `modify` · `translocate` · `synthesize` · `degrade` · `cleave` · `ligate`

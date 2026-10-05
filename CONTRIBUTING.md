@@ -36,7 +36,7 @@ npm run check
 ## Pull requests
 
 - Keep changes focused and add tests for new behavior.
-- Update the TypeScript types, README, and demo together when the public language changes. `packages/core/schema.json` is generated from the action registry: run `npm run schema` after changing an action, and the test suite fails if it is out of date.
+- Update the TypeScript types, README, and demo together when the public language changes. `packages/core/schema.json` and `docs/actions.md` are generated from the action registry: run `npm run schema` and `npm run reference` after changing an action, and the test suite fails if either is out of date. `docs/language.md` is written by hand; the complete documents it shows are compiled by the tests.
 - Describe a user-visible change in `CHANGELOG.md`, under the next version.
 - Use clear commit messages; Conventional Commits are welcome but not required.
 
