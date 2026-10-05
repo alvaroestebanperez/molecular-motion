@@ -327,7 +327,8 @@ examples/     # complete mechanism definitions
 - [x] Export to standalone SVG and PNG
 - [ ] Export to video
 - [ ] Visual editor and schema-aware YAML language service
-- [ ] Published npm packages and stable `1.0` schema
+- [x] Published npm packages: [`@molecular-motion/core`](https://www.npmjs.com/package/@molecular-motion/core), [`@molecular-motion/svg`](https://www.npmjs.com/package/@molecular-motion/svg) and [`@molecular-motion/react`](https://www.npmjs.com/package/@molecular-motion/react)
+- [ ] Stable `1.0` schema
 
 See an important biological primitive missing? [Open a proposal](https://github.com/alvaroestebanperez/molecular-motion/issues/new) describing the concept independently from its desired animation.
 
