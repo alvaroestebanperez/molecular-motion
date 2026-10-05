@@ -1,0 +1,32 @@
+[
+  {
+    "step": "initiation",
+    "full": "b38b9954557e4b80fef638d641d62ee2dd1ff1429f4db0ea0875be774338ed26",
+    "compact": "99431114ab5df600de501f0e1a049fea37e9b8f7458286828c3be045d06fd12e",
+    "ghosts": "1877fd69fa08f429dcae9b021010ac04351b61a686dc2c0dd973017036b3ecae"
+  },
+  {
+    "step": "elongation",
+    "full": "fbfe04aef4a9376d30b08e106fe621b2d648e177921de5d8ce08d629657135a8",
+    "compact": "51ce70f3136ab8b15aa3e4c86cc7d68aa7ff18bd81dffda0dee64bfb7a3bdb6d",
+    "ghosts": "19f9a55334d8edf30cfe62d3e2540494d2ea360569970a1a32a1502f8d6b0356"
+  },
+  {
+    "step": "release",
+    "full": "61e0ff46b4231d2097761930a7f75123655ed11db6eb770ae584dbe4a47ba4eb",
+    "compact": "e92ce924ee55bcb8e6565ded57eab48579783f4ec3cf8e3e6ff3f7c71d3f7e73",
+    "ghosts": "ad0128635060aeec0c8712d70e7f33c61e387abc75313038f48c8298ca7bc2be"
+  },
+  {
+    "step": "splicing",
+    "full": "c478fd939a8d045aa9ae91ea32c84e96c4905b07d465240697b1a02c2590ce7e",
+    "compact": "50b007607580349002da4885521a412670f2a48632f0550715f1484c9d936a8a",
+    "ghosts": "cae5a54ecacf6aaaf6bfd67d966bbeff002ce9afa563316887046ed91391f515"
+  },
+  {
+    "step": "junction",
+    "full": "7b4ccafbf25cfe340397e56a20c801c5422695536bd58def25f3644d3760946a",
+    "compact": "ab4093fc918457434ebbbfd780a553d163c974f0cb1eb4da28f41b08fe5f8015",
+    "ghosts": "7b4ccafbf25cfe340397e56a20c801c5422695536bd58def25f3644d3760946a"
+  }
+]
