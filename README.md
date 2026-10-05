@@ -57,7 +57,7 @@ The aim is not to reproduce atomistic simulations. Molecular Motion communicates
 ## A mechanism in YAML
 
 ```yaml
-schemaVersion: 5
+schemaVersion: 6
 
 mechanism:
   id: parp1-ssb-repair
@@ -121,11 +121,13 @@ steps:
 
 Targets use `actor.site` references. Sites on DNA and RNA have an interbase coordinate (`at`, or `span: [from, to]`) and a `strand`: `top` runs 5′→3′ as the coordinate grows, and `bottom` is antiparallel. The validator catches unknown actors, sites, compartments, and actions, as well as misspelled fields, before the renderer runs. The compiler also rejects biologically impossible sequences, such as ligating a site that has no break or binding an actor that was degraded.
 
-`schemaVersion: 1`, `2`, `3` and `4` documents are still accepted and migrated automatically. The design of the schema is described in [RFC 0001](docs/rfcs/0001-schema-v2.md), and nucleic-acid geometry (v3) in [RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md).
+`schemaVersion: 1` to `5` documents are still accepted and migrated automatically. The design of the schema is described in [RFC 0001](docs/rfcs/0001-schema-v2.md), and nucleic-acid geometry (v3) in [RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md).
 
 Several copies of one molecule are declared with `copies: n` and addressed as `id#1 … id#n`. Each copy has its own state but the same silhouette and colour ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md)).
 
 Strands of two nucleic acids can base-pair. A top-level `alignments` list declares which ranges correspond, and `pair` / `unpair` change the pairing that actually exists; neither unwinds nor anneals a duplex ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md), schema v5).
+
+A nucleic acid may begin with only part of itself present: `initial.nucleic` takes the strand state of a snapshot (`missing`, `nascent`, `open`, `excised`), so a transcript can start as its first nucleotides and grow with `extend`. `excise-interval` removes an internal interval and makes its flanks covalent neighbours, as in splicing or a V(D)J coding joint. Coordinates are never renumbered, so sites and alignments keep their meaning ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md), schema v6). The viewer does not yet draw an excised interval.
 
 ## React
 
@@ -283,6 +285,8 @@ examples/     # complete mechanism definitions
 - [x] Extensible action registry, compartments, and typed actor state
 - [x] Nucleic-acid coordinates, strand polarity, resection, synthesis and unwinding ([RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md))
 - [x] Pairing between nucleic-acid molecules: strand invasion, displaced strands, synthesis on another molecule ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md))
+- [x] Nucleic acids that begin partial, and internal excision with resealing, in the core ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md))
+- [ ] Drawing an excised interval in the viewer
 - [ ] Strand exchange between molecules: nuclease resolution of junctions, crossovers, flaps
 - [x] Actor copies, interaction graph with interfaces, and footprint occupancy on nucleic acids ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md))
 - [x] Per-step references, key events, and summaries

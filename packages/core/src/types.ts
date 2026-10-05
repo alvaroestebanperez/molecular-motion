@@ -73,7 +73,11 @@ export interface ActorDefinition {
    * names its structure. Opaque to the core; renderers fall back to a generic glyph for unknown keys.
    */
   molecule?: string;
-  initial?: { present?: boolean; visible?: boolean; activity?: Activity };
+  /**
+   * `nucleic` (dna/rna only, RFC 0007 §3): the strand state the molecule begins with, as in a snapshot.
+   * It is state, not an event: nothing is narrated and no lesion is set.
+   */
+  initial?: { present?: boolean; visible?: boolean; activity?: Activity; nucleic?: Partial<NucleicState> };
 }
 
 /** One side of an alignment: an interbase range of a nucleic acid. */
@@ -134,7 +138,7 @@ export interface MechanismStep {
 }
 
 export interface MechanismDefinition {
-  schemaVersion: 5;
+  schemaVersion: 6;
   mechanism: { id: string; name: string; description?: string; references?: string[] };
   references: ReferenceDefinition[];
   compartments: CompartmentDefinition[];
@@ -178,6 +182,12 @@ export interface NucleicState {
   nascent: StrandRange[];
   /** Regions where both strands are present but unpaired (bubble). */
   open: Array<{ from: number; to: number }>;
+  /**
+   * Intervals removed from the molecule, on every strand (RFC 0007 §4.3). Coordinates are never
+   * renumbered: the nucleotides either side of each interval are covalent neighbours. Absent while
+   * nothing was excised, so earlier snapshots are unchanged.
+   */
+  excised?: Array<{ from: number; to: number }>;
 }
 
 export interface ActorState {

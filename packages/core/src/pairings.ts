@@ -65,6 +65,8 @@ export function normalizePairings(list: readonly Pairing[]): Pairing[] {
 export type PartnerSegment = Interval & (
   /** The strand does not exist here: missing nucleotides, or the bottom of a single-stranded molecule. */
   | { partner: 'absent' }
+  /** The nucleotides were excised from the molecule (RFC 0007 §6.8): not present, not a gap, not paired. */
+  | { partner: 'excised' }
   | { partner: 'unpaired' }
   /** Paired with its own molecule's other strand (derived, RFC 0004). */
   | { partner: 'cis' }
@@ -100,7 +102,7 @@ export function partnerOf(state: TopologyState, definition: Definition, span: St
   const partnerMissing = strandIntervals(nucleic.missing, otherStrand(span.strand));
   const trans = transPartners(state, span);
   const cuts = new Set([span.from, span.to]);
-  for (const item of [...missing, ...partnerMissing, ...nucleic.open, ...trans.map(entry => entry.own)]) {
+  for (const item of [...missing, ...partnerMissing, ...nucleic.open, ...nucleic.excised, ...trans.map(entry => entry.own)]) {
     for (const edge of [item.from, item.to]) if (edge > span.from && edge < span.to) cuts.add(edge);
   }
   const edges = [...cuts].sort((a, b) => a - b);
@@ -109,7 +111,8 @@ export function partnerOf(state: TopologyState, definition: Definition, span: St
     const piece = { from: edges[index]!, to: edges[index + 1]! };
     const pairing = trans.find(entry => overlapsInterval([entry.own], piece));
     let segment: PartnerSegment;
-    if (overlapsInterval(missing, piece)) segment = { ...piece, partner: 'absent' };
+    if (overlapsInterval(nucleic.excised, piece)) segment = { ...piece, partner: 'excised' };
+    else if (overlapsInterval(missing, piece)) segment = { ...piece, partner: 'absent' };
     else if (pairing) {
       const reversed = pairing.with.strand === span.strand;
       const [i0, i1] = [piece.from - pairing.own.from, piece.to - pairing.own.from];
@@ -139,6 +142,7 @@ export function partnerOf(state: TopologyState, definition: Definition, span: St
 export function pairingConflicts(state: TopologyState, definition: Definition, span: StrandSpan): string | undefined {
   for (const segment of partnerOf(state, definition, span)) {
     const where = rangeLabel({ ...span, from: segment.from, to: segment.to });
+    if (segment.partner === 'excised') return `${where} was excised`;
     if (segment.partner === 'absent') return `${where} is not present`;
     if (segment.partner === 'cis') return `${where} is paired with its own ${otherStrand(span.strand)} strand; unwind it first`;
     if (segment.partner === 'trans') return `${where} is already paired with ${rangeLabel(segment.with)}`;

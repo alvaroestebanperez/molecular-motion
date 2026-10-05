@@ -44,13 +44,13 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://molecular-motion.dev/schema/v5.json',
+    $id: 'https://molecular-motion.dev/schema/v6.json',
     title: 'Molecular Motion mechanism',
     type: 'object',
     required: ['schemaVersion', 'mechanism', 'actors', 'steps'],
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: 5 },
+      schemaVersion: { const: 6 },
       mechanism: {
         type: 'object',
         required: ['id', 'name'],
@@ -139,6 +139,27 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
           },
         },
       },
+      interval: {
+        type: 'object', required: ['from', 'to'], additionalProperties: false,
+        description: 'Interbase interval [from, to).',
+        properties: { from: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 1 } },
+      },
+      strandRange: {
+        type: 'object', required: ['strand', 'from', 'to'], additionalProperties: false,
+        description: 'Nucleotides of one strand, as an interbase interval [from, to).',
+        properties: { strand: { enum: ['top', 'bottom'] }, from: { type: 'integer', minimum: 0 }, to: { type: 'integer', minimum: 1 } },
+      },
+      nucleicState: {
+        type: 'object',
+        additionalProperties: false,
+        description: 'dna/rna actors only: the strand state the molecule begins with (RFC 0007). State, not an event: nothing is narrated.',
+        properties: {
+          missing: { type: 'array', items: { $ref: '#/$defs/strandRange' }, description: 'Nucleotides absent from a strand: a gap, which extend may fill.' },
+          nascent: { type: 'array', items: { $ref: '#/$defs/strandRange' }, description: 'Nucleotides marked as newly made.' },
+          open: { type: 'array', items: { $ref: '#/$defs/interval' }, description: 'Duplex only: regions where both strands are present but unpaired.' },
+          excised: { type: 'array', items: { $ref: '#/$defs/interval' }, description: 'Internal intervals removed from the molecule; the nucleotides either side of each are covalent neighbours.' },
+        },
+      },
       alignmentSide: {
         type: 'object', required: ['acid', 'span'], additionalProperties: false,
         properties: { acid: { $ref: '#/$defs/id' }, span: { $ref: '#/$defs/range' } },
@@ -191,6 +212,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
               present: { type: 'boolean' },
               visible: { type: 'boolean' },
               activity: { enum: ['active', 'inactive', 'inhibited'] },
+              nucleic: { $ref: '#/$defs/nucleicState' },
             },
           },
         },
