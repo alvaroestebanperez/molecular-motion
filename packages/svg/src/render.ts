@@ -250,7 +250,10 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
     if (site.lesion === 'nick') for (const strand of strands) gaps.push([strand, site.x - 3, site.x + 3]);
     if (site.lesion === 'double-strand-break') for (const strand of strands) gaps.push([strand, site.x - 15, site.x + 15]);
   }
-  for (const range of [...acid.missing ?? [], ...acid.away ?? []]) gaps.push([strandIndex(range.strand), range.x0, range.x1]);
+  // A strand that is absent up to an end of the molecule is absent past it too: the helix is traced a
+  // little beyond both ends, and without this the rounded tip of that overshoot shows at the canvas edge.
+  const [firstX, lastX] = extent ? [extent.x0, extent.x1] : [0, width];
+  for (const range of [...acid.missing ?? [], ...acid.away ?? []]) gaps.push([strandIndex(range.strand), range.x0 <= firstX ? -Infinity : range.x0, range.x1 >= lastX ? Infinity : range.x1]);
   const beyond: [0 | 1, number, number][] = extent ? ([0, 1] as const).flatMap((strand): [0 | 1, number, number][] => [[strand, -Infinity, extent.x0], [strand, extent.x1, Infinity]]) : [];
   gaps.push(...beyond);
   // Polarity is labelled where it tells the story: the molecule's ends, resected ends and the two sides
