@@ -64,6 +64,15 @@ export function migrateV4(document: unknown): unknown {
 }
 
 /**
+ * Convert a schemaVersion 5 document to schemaVersion 6 (RFC 0007). Initial strand state, excised
+ * intervals and `excise-interval` are new and optional, so only the version moves. Best effort on malformed input.
+ */
+export function migrateV5(document: unknown): unknown {
+  if (!isObject(document) || document.schemaVersion !== 5) return document;
+  return { ...document, schemaVersion: 6 };
+}
+
+/**
  * Convert a schemaVersion 2 document to schemaVersion 3 (RFC 0004). Sites on nucleic acids trade
  * their layout keyword (or its absence, which meant `center`) for an interbase coordinate on the
  * implicit 100-unit molecule; a `Point` position stays a layout override without a coordinate.

@@ -1,0 +1,68 @@
+[
+  {
+    "step": "intact",
+    "full": "ea333007ea4ea5d88d3f6820a705d600d45167101e8eeea5222f432c64c45215",
+    "compact": "67792894ae6735f107f766faabdc2a33be5e68f7aa40d1dce383b558f7a59611",
+    "ghosts": "2daa88751ab654ff58fa32dffba7d02e3f64444748f41d32332f73722f1f0944"
+  },
+  {
+    "step": "lesion",
+    "full": "4c93fdf1765ff55932c38cb003551765f6f48b96ccd8d354bca296c1085f0ab9",
+    "compact": "60aabf919c9342423d6cdfdf5d141d16bdc037cea2de1dead6c7a28e5ab5256a",
+    "ghosts": "6fbc84d1cbb6c123bf3c3f1c3ca42505f3cb7da0aa31e7aa069306fee903b4df"
+  },
+  {
+    "step": "excision",
+    "full": "9ebb35272ff4fca739adb7d691002a5b469064c2143968e7613be6701edd7a09",
+    "compact": "8ae7bcfd896f05cdff2746f6062e739c4a4f896a0d5ece1aaf47bf4aee8a640d",
+    "ghosts": "9e515683418579d938ac53366265e270a2361ae78e3ca60bf62f767a337918fe"
+  },
+  {
+    "step": "incision",
+    "full": "6e0143226d7a7d10fd87c6574a076f672bceac4a044f1819c25ec062cf0ebc83",
+    "compact": "da35749d49e1c382041b78b14ffcfd62fd84a94bccf5962be1427ef732c4f8f6",
+    "ghosts": "24f2007fb2d381ad3acb3400187681d4fe176e4d98ee272a9f844a1afce1280f"
+  },
+  {
+    "step": "binding",
+    "full": "03e4d69399e6ce0f2ecdf308131ca87271497bc06703738bf4338a11c0ab3a53",
+    "compact": "75705211edd9bc0b100aa40b5c2d40275b9ac4a01c00bc144384e69301842331",
+    "ghosts": "91e11cbf82b87bcdb1e180b3e26617dc9a7612f721df1d56c91c4076a3e4b4e0"
+  },
+  {
+    "step": "activation",
+    "full": "940d520f5f583e43746dd5abee5dd760ece53d53cd77b07ebd358c9dd4ea0cc7",
+    "compact": "10ef4804b18586b0d3ef84e155c69c566b4e141bea07e6841a37abb11d3beb04",
+    "ghosts": "081aca56ed006edf1db21bed1a77f215a81af7167c6a00ed70af274b534d3796"
+  },
+  {
+    "step": "parylation",
+    "full": "452d5b0be581376e0d799c0b02de6fa63619be1262262aa33cff3890a040847e",
+    "compact": "5e61def6790709d822ee20512a198fbe9d2a2b6c52b71e206d317d1cb15fb673",
+    "ghosts": "3518d6be06710894385a93e13b32d5abbe4adc97bd81df3752bebff0a5c7cb40"
+  },
+  {
+    "step": "scaffold",
+    "full": "04c09d7eb6045c1f4edecf808ae4531a0ad42b1faec86a32706a7e536c8605ba",
+    "compact": "2eb4487bea33084b5a3629c4c4fbc55c924561313ad76814fa2f63730bd83024",
+    "ghosts": "d8a2da84f64ce1ce86a45616a16b3975d16eb766ece40fa58a11e3c50e3c6cc3"
+  },
+  {
+    "step": "gap-filling",
+    "full": "cb4eec09d01d42a636eec2c3417e4980048d04b58340297e66f79146adb2a491",
+    "compact": "9fb213806423468e61b6cdf545c49a3783857df9d08c3d9d56d23e25031d8ee0",
+    "ghosts": "a53a3fecd02df19b2dac905c1f98228841bff51b3825c6d07c7a5405b04f0c51"
+  },
+  {
+    "step": "ligation",
+    "full": "dc9ac310bbffcd92e6eba87bea58adaa5da3ed1e18c5fbe76cc7e60910a21f38",
+    "compact": "602d8b19f33beba8142e83a5e0e2903378aab84dd1b9a24f46cd8102c67ccb07",
+    "ghosts": "dc9ac310bbffcd92e6eba87bea58adaa5da3ed1e18c5fbe76cc7e60910a21f38"
+  },
+  {
+    "step": "repaired",
+    "full": "4cb414b83517910122880c0c4ac82e9b2a537016a86811b98246f460bcb1cf80",
+    "compact": "d0510d32870817d9320d1548c4a9f3bdf513ca692bca2de899dd3440fe453ba1",
+    "ghosts": "4cb414b83517910122880c0c4ac82e9b2a537016a86811b98246f460bcb1cf80"
+  }
+]

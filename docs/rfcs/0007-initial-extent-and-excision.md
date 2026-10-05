@@ -1,9 +1,8 @@
 # RFC 0007 — Nucleic acids that begin partial, and internal excision with resealing
 
-- **Status:** Ready for review. Decisions in §9; D2, D5, D6, D11, D14 and D15 are resolved, the others are proposals for review.
+- **Status:** Implemented in the core as proposed (§9). The renderer is not part of it (§13).
 - **Builds on:** [RFC 0004](0004-nucleic-acid-geometry.md) (coordinates, strand state), [RFC 0005](0005-assemblies-and-occupancy.md) (occupancy), [RFC 0006](0006-nucleic-acid-pairing.md) (pairing, templated `extend`)
-- **Schema:** proposes `schemaVersion: 6`
-- **Not implemented.** Nothing in this RFC exists in the code.
+- **Schema:** `schemaVersion: 6`
 
 ## 1. Problem
 
@@ -124,9 +123,11 @@ One field on `NucleicState`, at molecule level like `open`:
 interface NucleicState {
   missing: StrandRange[]; nascent: StrandRange[]; open: Interval[];
   /** Intervals removed from the molecule. The nucleotides either side of each are covalent neighbours. */
-  excised: Interval[];
+  excised?: Interval[];
 }
 ```
+
+`excised` is optional, and an absent list means exactly the same as an empty one. The core stores it only while it is non-empty, as `nucleic` itself is stored only on a molecule that is not intact: a v5 document that resects or unwinds must not gain `excised: []` (I9).
 
 Everything else is derived:
 
@@ -145,6 +146,14 @@ Excision is molecule-level: on a duplex it removes both strands across the inter
 ```
 
 A primitive. It is atomic: after it, the interval is `excised` and the junction is sealed. Break lesions on point sites at its two boundaries are cleared, because the bond they interrupted no longer exists; the bond that replaces it is the junction. An author who wants to narrate the chemistry writes `cleave` at each boundary in an earlier step, then `excise-interval`. Without them it still stands alone.
+
+**What goes with the interval.** `excise-interval` removes state that belongs only to excised material, and nothing else:
+
+- every lesion on a site wholly inside the interval (a span with no extant nucleotide left, or a point strictly inside), and every lesion on a point site at `a`, whose nucleotide `a` was excised;
+- the break lesions on point sites at `b`, with those at `a`: the boundary rule above;
+- `nascent` and `open` ranges, clipped to what remains (I3).
+
+State on surviving material stays. A base lesion on a point site at `b` is on nucleotide `b`, which is extant, and is kept (D14). A lesion on a span site that keeps at least one extant nucleotide is kept. Nothing is moved to a neighbour (I11). State that relates the interval to something else is never removed silently: an occupant, a legacy point occupancy on a site that would be wholly excised, or a trans pairing makes the action fail (§8).
 
 Name: **`excise-interval`**. Not `splice`, which names one biological use. Not `excise`: v5 already has an alias `excise` — *"excises the base at"* a site, setting an abasic-site lesion (base-excision repair; used by the PARP1 example). That alias removes a base, not backbone, and changes no adjacency. It is kept exactly as it is.
 
@@ -178,7 +187,7 @@ Coordinates stay stable **for reference**: a site keeps its definition, and tool
 ### 6.2 Occupancy
 
 - `excise-interval` fails while any occupant covers a nucleotide of the interval: *vacate it first*. Same rule and wording as the existing fit check.
-- A footprint counts **extant** nucleotides. An 8-nt footprint placed forward from coordinate 8 covers `[8, 12)` and `[24, 28)`: a ribosome sitting on an exon–exon junction. The stored span is the coordinate interval `[8, 28)`; what it covers is derived.
+- A footprint counts **extant** nucleotides. The stored occupancy span is the smallest coordinate interval that contains the nucleotides actually covered: it begins at the first extant nucleotide covered and ends after the last, and may contain excised intervals in between. A span that an author gives over excised nucleotides is cut back to that: `span: [10, 20]` over an excised `[12, 24)` is stored as `[10, 12)`. Two stored spans therefore overlap by coordinate exactly when they share an extant nucleotide, and the occupancy rule of RFC 0005 is unchanged. An 8-nt footprint placed forward from coordinate 8 covers `[8, 12)` and `[24, 28)`: a ribosome sitting on an exon–exon junction. The stored span is the coordinate interval `[8, 28)`; what it covers is derived.
 - `coat` places copies side by side along the covalent order.
 
 ### 6.3 Alignments and pairings
@@ -249,7 +258,7 @@ Definitions are never rejected for pointing at coordinates that are excised in t
 - **I5.** No occupancy and no trans pairing covers an excised nucleotide.
 - **I6.** A junction is one covalent bond between `a−1` and `b`. It exists on a strand only where both of those nucleotides are present; where one is `missing`, the junction is the edge of a gap, as any other position would be.
 - **I7.** Initial strand state obeys the same invariants as any snapshot, and no others (§3.3): ranges inside `[0, length)`; `missing` and `nascent` disjoint on a strand; `open` only on a duplex, only where both strands are present; a single-stranded molecule has only `top`.
-- **I8.** A molecule that is present has at least one extant, non-missing nucleotide.
+- **I8.** A molecule never *begins*, and never comes out of `excise-interval`, with nothing present. Validation of `initial.nucleic` requires at least one extant nucleotide that is not `missing` on some strand (§8). `excise-interval` requires both flanks present on every strand, so after it at least two such nucleotides remain. This is not a global invariant of state: `resect` keeps its v5 behaviour and may remove the last nucleotides of a strand, so a present molecule with no extant, non-missing nucleotide is reachable through it (I9).
 - **I9.** A v5 document produces exactly the snapshots it produced before.
 - **I10.** No action reads an excised nucleotide as present, as a fillable gap, or as paired (§6.8).
 - **I11.** A base coordinate always denotes the same nucleotide. No lesion, occupancy or pairing is moved to a neighbour because its nucleotide was excised.
@@ -278,6 +287,7 @@ Excision (`excise-interval`), and any action afterwards:
 | interval lies wholly in an excised stretch | nothing left to excise there |
 | a nucleotide of the interval is `missing` on a strand | the interval must be present; a gap is filled or resected, not excised |
 | an occupant covers part of the interval | vacate it first |
+| a legacy point occupancy (`bind` to a site) rests on a site that would be wholly excised | release it first |
 | a trans pairing covers part of the interval | unpair it first |
 | the interval overlaps an unwound bubble only in part | anneal it, or excise the whole bubble |
 | any action targets a site wholly inside an excised interval | the site was excised (§6.8) |
@@ -423,9 +433,18 @@ actors:
 
 First snapshot: nucleotide 11 is bonded to 24; extant length 24. `occupy` over `[8, 28)` covers 8 nucleotides; `cleave mrna.junction` breaks the junction bond; `pair` over `[14, 20)` fails, because nothing is there.
 
-## 13. Implementation outline (not started)
+## 13. Implementation outline
 
 1. Core: `initial.nucleic` validation and `initialState`; tests that `extend` continues from an initial 3′ end with no lesion.
 2. Core: `excised`, the derived extant/successor helpers, `excise-interval`, the `excised` answer and the checks of §6.8, and the changes of §6 to occupancy, pairing, `resect` and site targeting.
 3. Schema v6, `migrateV5`, fixtures and legacy baselines.
 4. Renderer: out of scope here. It will need to decide how an excised interval is drawn; until then a molecule with `excised` state has no agreed drawing.
+
+### 13.1 Implementation notes
+
+Steps 1–3 are implemented. Where the text above leaves something open, the code decides as follows:
+
+- **`repair` follows the lesion that is on the site**: a break is read at the boundary, anything else, or no lesion, as a base. So a break at the junction can be cleared through the site that holds it, and `repair` at `a` with no break fails.
+- **A legacy point occupancy** (`bind` to a site) on a site that would be wholly excised blocks `excise-interval`, like a span occupant: *release it first*.
+- **`extend` reads its 3′ end covalently on its own molecule.** I6 allows a junction to be the edge of a gap (an initial state with `excised [12, 24)` and `missing [24, 36)`); the 3′-terminal nucleotide is then 11, and synthesis continues at 24. The template is still followed by coordinate (§6.5).
+- **`unwind` centred on a point site counts extant nucleotides** either side of it, as footprints do.

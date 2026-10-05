@@ -1,10 +1,11 @@
 import { builtinRegistry } from './actions';
 import { normalizeCompartments } from './compartments';
 import { instanceIds, INSTANCE_SEPARATOR } from './instances';
-import { migrateV1, migrateV2, migrateV3, migrateV4 } from './migrate';
-import { nucleicForm, nucleicLength } from './nucleic';
+import { extantIntervals, normalizeNucleicState, nucleicForm, nucleicLength, strandIntervals } from './nucleic';
+import { overlapsInterval, subtractInterval, type Interval } from './intervals';
+import { migrateV1, migrateV2, migrateV3, migrateV4, migrateV5 } from './migrate';
 import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
-import type { ActionSpec, ActorDefinition, AlignmentDefinition, MechanismDefinition } from './types';
+import type { ActionSpec, ActorDefinition, AlignmentDefinition, MechanismDefinition, NucleicState } from './types';
 
 const ACTOR_TYPES = new Set(['dna', 'rna', 'protein', 'molecule', 'complex']);
 const ACTIVITIES = new Set(['active', 'inactive', 'inhibited']);
@@ -30,15 +31,15 @@ interface References {
 }
 
 /**
- * Structural and referential validation. Accepts v1–v4 documents (migrated automatically) and
- * returns a normalised, deep-copied v5 definition. State-dependent checks happen later, during compilation.
+ * Structural and referential validation. Accepts v1–v5 documents (migrated automatically) and
+ * returns a normalised, deep-copied v6 definition. State-dependent checks happen later, during compilation.
  */
 export function validateMechanism(input: unknown, options: ValidateOptions = {}): MechanismDefinition {
   const registry = options.registry ?? builtinRegistry;
-  const value = migrateV4(migrateV3(migrateV2(migrateV1(input))));
+  const value = migrateV5(migrateV4(migrateV3(migrateV2(migrateV1(input)))));
   const issues: string[] = [];
   if (!isObject(value)) throw new MechanismValidationError(['root must be an object']);
-  if (value.schemaVersion !== 5) issues.push('schemaVersion must be 1, 2, 3, 4 or 5');
+  if (value.schemaVersion !== 6) issues.push('schemaVersion must be 1, 2, 3, 4, 5 or 6');
   if (!isObject(value.mechanism)) issues.push('mechanism must be an object');
   else {
     requiredString(value.mechanism.id, 'mechanism.id', issues);
@@ -85,10 +86,10 @@ export function validateMechanism(input: unknown, options: ValidateOptions = {})
       if (actor.type !== 'molecule') issues.push(`${path}.molecule is only allowed on molecule actors`);
       else if (typeof actor.molecule !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(actor.molecule)) issues.push(`${path}.molecule must be a lowercase key such as "atp" or "nad-plus"`);
     }
-    if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, issues);
+    const acid = nucleicDescriptor(actor);
+    if (actor.initial !== undefined) validateInitial(actor.initial, `${path}.initial`, acid, issues);
     if (actor.interfaces !== undefined) validateInterfaces(actor, path, issues);
     if (actor.footprint !== undefined) validateFootprint(actor, path, issues);
-    const acid = nucleicDescriptor(actor);
     if (acid && typeof actor.id === 'string') acids.set(actor.id, acid);
     if (actor.nucleic !== undefined) {
       if (!acid) issues.push(`${path}.nucleic is only allowed on dna and rna actors`);
@@ -354,13 +355,73 @@ function unknownActor(value: string, refs: References): string {
   return `references unknown actor "${value}"`;
 }
 
-function validateInitial(initial: unknown, path: string, issues: string[]) {
+function validateInitial(initial: unknown, path: string, acid: NucleicDescriptor | undefined, issues: string[]) {
   if (!isObject(initial)) return issues.push(`${path} must be an object`);
   for (const key of Object.keys(initial)) {
     if (key === 'present' || key === 'visible') { if (typeof initial[key] !== 'boolean') issues.push(`${path}.${key} must be a boolean`); }
     else if (key === 'activity') { if (!ACTIVITIES.has(initial.activity as string)) issues.push(`${path}.activity must be one of: active, inactive, inhibited`); }
+    else if (key === 'nucleic') validateInitialNucleic(initial, `${path}.nucleic`, acid, issues);
     else issues.push(`${path}.${key} is not supported`);
   }
+}
+
+const STRAND_STATE_LISTS = ['missing', 'nascent', 'open', 'excised'] as const;
+
+/**
+ * Initial strand state (RFC 0007 §3). It obeys the invariants of any snapshot and no others (I7):
+ * whether it is valid never depends on some sequence of actions being able to reach it.
+ */
+function validateInitialNucleic(initial: Record<string, unknown>, path: string, acid: NucleicDescriptor | undefined, issues: string[]) {
+  const value = initial.nucleic;
+  if (!acid) return issues.push(`${path} is only allowed on dna and rna actors`);
+  if (initial.present === false) return issues.push(`${path} is not allowed with present: false: a product that does not exist yet has no strand state`);
+  if (!isObject(value)) return issues.push(`${path} must be an object`);
+  const length = nucleicLength(acid);
+  const duplex = nucleicForm(acid) === 'duplex';
+  const before = issues.length;
+  for (const key of Object.keys(value)) if (!(STRAND_STATE_LISTS as readonly string[]).includes(key)) issues.push(`${path}.${key} is not supported`);
+  for (const key of STRAND_STATE_LISTS) {
+    const list = value[key];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) { issues.push(`${path}.${key} must be an array`); continue; }
+    const stranded = key === 'missing' || key === 'nascent';
+    const shape = stranded ? '{ strand, from, to }' : '{ from, to }';
+    list.forEach((item, index) => {
+      const at = `${path}.${key}[${index}]`;
+      const keys = stranded ? ['strand', 'from', 'to'] : ['from', 'to'];
+      if (!isObject(item) || Object.keys(item).some(name => !keys.includes(name)) || !Number.isInteger(item.from) || !Number.isInteger(item.to)) return issues.push(`${at} must be ${shape} with integer coordinates`);
+      if (stranded && !STRANDS.has(item.strand as string)) issues.push(`${at}.strand must be one of: top, bottom`);
+      else if (stranded && item.strand === 'bottom' && !duplex) issues.push(`${at}.strand: a single-stranded molecule has no bottom strand`);
+      const [from, to] = [item.from as number, item.to as number];
+      if (from < 0 || to > length || from >= to) issues.push(`${at} is empty or runs past the molecule: it needs 0 ≤ from < to ≤ ${length}`);
+    });
+  }
+  if (issues.length > before) return;
+
+  const state = normalizeNucleicState(value as Partial<NucleicState>);
+  const strands = duplex ? ['top', 'bottom'] as const : ['top'] as const;
+  const label = ({ from, to }: Interval) => `${from}–${to}`;
+  const clash = (list: readonly Interval[], others: readonly Interval[]) => list.find(item => overlapsInterval(others, item));
+  for (const strand of strands) {
+    const both = clash(strandIntervals(state.nascent, strand), strandIntervals(state.missing, strand));
+    if (both) issues.push(`${path}: missing and nascent overlap on the ${strand} strand around ${label(both)}; a nucleotide cannot be both absent and newly made`);
+  }
+  if (state.open.length && !duplex) issues.push(`${path}.open: a bubble needs both strands present, and this molecule is single-stranded`);
+  else for (const strand of strands) {
+    const gone = clash(state.open, strandIntervals(state.missing, strand));
+    if (gone) issues.push(`${path}.open ${label(gone)}: a bubble needs both strands present, but the ${strand} strand is missing there`);
+  }
+  // The same rules as after excise-interval (I2, I3): internal, and in no other list.
+  for (const item of state.excised) {
+    if (item.from === 0 || item.to === length) issues.push(`${path}.excised ${label(item)} is not internal: removing an end of the molecule is truncation, not excision`);
+    const lists = { missing: state.missing, nascent: state.nascent, open: state.open };
+    for (const [name, list] of Object.entries(lists)) {
+      if (overlapsInterval(list, item)) issues.push(`${path}.excised ${label(item)} overlaps ${name}: an excised nucleotide is neither a gap, newly made, nor unwound`);
+    }
+  }
+  const extant = extantIntervals(state.excised, { from: 0, to: length });
+  const present = (strand: 'top' | 'bottom') => strandIntervals(state.missing, strand).reduce<Interval[]>((rest, gap) => subtractInterval(rest, gap), extant).length > 0;
+  if (!strands.some(present)) issues.push(`${path}: nothing is present; use initial: { present: false }`);
 }
 
 const IDENTIFIERS = {

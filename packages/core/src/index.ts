@@ -3,7 +3,7 @@ export type { CompiledMechanism, CompileOptions } from './engine';
 export { parseMechanism } from './parse';
 export { MechanismValidationError, validateMechanism } from './validate';
 export type { ValidateOptions } from './validate';
-export { migrateV1, migrateV2, migrateV3, migrateV4 } from './migrate';
+export { migrateV1, migrateV2, migrateV3, migrateV4, migrateV5 } from './migrate';
 export {
   anonymousAttachment, boundTo, componentOf, interactionId, occupancyId, partnersOf, primaryPartner,
 } from './bindings';
@@ -19,7 +19,8 @@ export { COMPARTMENT_KINDS, STANDARD_COMPARTMENTS } from './compartments';
 export { toJsonSchema } from './schema';
 export type * from './types';
 export {
-  DEFAULT_NUCLEIC_LENGTH, isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, siteInterval, strandIntervals,
+  DEFAULT_NUCLEIC_LENGTH, excisedOf, extantIntervals, extantLength, isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, siteInterval,
+  strandIntervals,
 } from './nucleic';
 export { addInterval, intervalAt, normalizeIntervals, overlapsInterval, subtractInterval } from './intervals';
 export type { Interval } from './intervals';

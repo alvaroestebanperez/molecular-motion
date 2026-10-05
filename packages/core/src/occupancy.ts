@@ -1,6 +1,6 @@
 import { overlapsInterval, type Interval } from './intervals';
 import { instanceDefinition } from './instances';
-import { nucleicLength, otherStrand, readNucleicState } from './nucleic';
+import { excisedOf, extantIntervals, nucleicLength, otherStrand, readNucleicState } from './nucleic';
 import { partnerOf } from './pairings';
 import type { ApplyContext } from './registry';
 import type { FootprintForm, MechanismState, Occupancy, SiteStrand, StrandId } from './types';
@@ -25,6 +25,14 @@ export function occupancyConflicts(existing: readonly Occupancy[], candidate: Oc
     && overlapsInterval([other.span], candidate.span!) && strandsOf(other.strand).some(strand => strands.includes(strand)));
 }
 
+/**
+ * The nucleotides a span occupancy covers: its span without what was excised (RFC 0007 §6.2). A
+ * footprint counts extant nucleotides, so the stored span of one resting on a junction contains the
+ * excised interval between its two parts.
+ */
+export const coveredIntervals = (state: Pick<MechanismState, 'actors'>, occupancy: Pick<Occupancy, 'acid' | 'span'>): Interval[] =>
+  occupancy.span ? extantIntervals(excisedOf(state.actors[occupancy.acid]), occupancy.span) : [];
+
 /** Form an occupant needs: its footprint's, or `any` for an explicit span without a footprint. */
 export const occupantForm = (state: { definition: ApplyContext['definition'] }, instance: string): FootprintForm =>
   instanceDefinition(state.definition, instance)?.footprint?.form ?? 'any';
@@ -42,7 +50,11 @@ export function occupancyMisfit(state: StrandState, definition: Definition, occu
   const span = occupancy.span!; const strand = occupancy.strand!;
   const length = nucleicLength(instanceDefinition(definition, occupancy.acid)!);
   if (span.from < 0 || span.to > length) return `${range(span)} runs past the molecule (0–${length})`;
-  const partners = strandsOf(strand).map(item => ({ strand: item, segments: partnerOf(state, definition, { acid: occupancy.acid, strand: item, ...span }) }));
+  // Excised nucleotides are not there to be covered: the forms read the extant ones either side of a junction.
+  const partners = strandsOf(strand).map(item => ({
+    strand: item, segments: partnerOf(state, definition, { acid: occupancy.acid, strand: item, ...span }).filter(segment => segment.partner !== 'excised'),
+  }));
+  if (!partners[0]!.segments.length) return `${range(span)} was excised: nothing is there`;
   for (const { strand: item, segments } of partners) {
     if (segments.some(segment => segment.partner === 'absent')) return `the ${item} strand is missing within ${range(span)}`;
   }
@@ -67,7 +79,7 @@ export function occupancyMisfit(state: StrandState, definition: Definition, occu
 
 /** Strand an occupant takes when the action names none: the one its form allows, or fail when ambiguous. */
 export function defaultStrand(state: StrandState, definition: Definition, acid: string, span: Interval, form: FootprintForm, fail: (message: string) => never): SiteStrand {
-  const partners = (strand: StrandId) => partnerOf(state, definition, { acid, strand, ...span });
+  const partners = (strand: StrandId) => partnerOf(state, definition, { acid, strand, ...span }).filter(segment => segment.partner !== 'excised');
   const present = (strand: StrandId) => partners(strand).every(segment => segment.partner !== 'absent');
   if (form === 'duplex') return 'both';
   if (form === 'any') return present('top') && present('bottom') ? 'both' : present('top') ? 'top' : 'bottom';

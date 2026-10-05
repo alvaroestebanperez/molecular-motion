@@ -1,5 +1,6 @@
 import { builtinRegistry } from './actions';
 import { actorInstances } from './instances';
+import { normalizeNucleicState, writeNucleicState } from './nucleic';
 import { ActionFailure, type ActionRegistry, type ApplyContext } from './registry';
 import type {
   ActionNode, ActionSpec, ActorState, MechanismDefinition, MechanismSnapshot, MechanismState, NucleicState, StateChange, TimedAction,
@@ -121,6 +122,8 @@ export function initialState(definition: MechanismDefinition): MechanismState {
       ...(actor.initial?.activity && { activity: { state: actor.initial.activity } }),
       modifications: [],
     };
+    // Initial strand state is state, not an event (RFC 0007 §3): no action, no lesion, nothing narrated.
+    if (actor.initial?.nucleic) writeNucleicState(actors[id]!, normalizeNucleicState(actor.initial.nucleic));
     for (const site of actor.sites ?? []) sites[`${id}.${site.id}`] = {};
   }
   return { actors, sites, interactions: {}, occupancy: {}, pairings: {} };

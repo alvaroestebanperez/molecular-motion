@@ -16,7 +16,7 @@ const overlap = (a: SvgScene['actors'][number], b: SvgScene['actors'][number]) =
 describe('cGAS–STING in schema v5', () => {
   it('is eleven steps, and hides the DNA and cGAS after cGAMP is made without degrading them', () => {
     expect(mechanism.length).toBe(11);
-    expect(mechanism.definition.schemaVersion).toBe(5);
+    expect(mechanism.definition.schemaVersion).toBe(6);
     for (const id of ['dna', 'cgas#1', 'cgas#2']) {
       expect(mechanism.at('cgamp').actors[id]).toMatchObject({ present: true, visible: true });
       expect(mechanism.at('sting-binding').actors[id]).toMatchObject({ present: true, visible: false });

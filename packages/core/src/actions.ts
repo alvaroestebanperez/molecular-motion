@@ -1,12 +1,13 @@
 import {
   addInteraction, addOccupancy, boundTo, detachAnonymous, interactionId, interfaceUse, occupancyId, partnersOf, releaseAll,
 } from './bindings';
-import { defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
+import { coveredIntervals, defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
 import { addPairing, alignedSpan, alignmentRelates, brokenPairings, pairingConflicts, partnerOf, removePairings } from './pairings';
 import { actorIdOf, instanceDefinition } from './instances';
-import { addInterval, intervalAt, overlapsInterval, subtractInterval, type Interval } from './intervals';
+import { addInterval, intervalAt, normalizeIntervals, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
-  isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
+  excisedOf, extantIntervals, extantLength, extantRun, insideExcised, isNucleicActor, junctionAt, lesionStrands, nucleicForm, nucleicLength, otherStrand,
+  readNucleicState, siteInterval, strandIntervals, withStrandIntervals, writeNucleicState,
 } from './nucleic';
 import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
 import type {
@@ -48,6 +49,7 @@ export const bind = definePrimitive<BindAction>({
     ctx.requirePresent(targetInstance);
     actor.visible = true;
     if (isNucleicActor(instanceDefinition(ctx.definition, targetInstance)!)) {
+      requireExtantSite(state, ctx, action.target);
       if (state.occupancy[occupancyId(actor.id, targetInstance)]?.span) ctx.fail(`"${actor.id}" already occupies ${targetInstance}; vacate it first`);
       detachAnonymous(state, actor.id);
       addOccupancy(state, actor.id, targetInstance, site);
@@ -129,12 +131,16 @@ export const occupy = definePrimitive<OccupyAction>({
     const { acid, site } = occupancyTarget(action.target, ctx);
     if (state.occupancy[occupancyId(actor.id, acid)]) ctx.fail(`"${actor.id}" is already on ${acid}; vacate it first`);
     const footprint = instanceDefinition(ctx.definition, actor.id)!.footprint;
+    const excised = excisedOf(state.actors[acid]);
+    requireExtantSite(state, ctx, action.target);
+    // A footprint counts extant nucleotides (RFC 0007 §6.2): anchored at a point it follows covalent order across a junction.
     let span: { from: number; to: number };
-    if (action.span) span = { from: action.span[0], to: action.span[1] };
-    else if (site!.span) span = { from: site!.span[0], to: site!.span[1] };
-    else span = action.orientation === 'reverse' ? { from: site!.at! - footprint!.length, to: site!.at! } : { from: site!.at!, to: site!.at! + footprint!.length };
-    if (!action.span && footprint && span.to - span.from !== footprint.length) {
-      ctx.fail(`"${actor.id}" covers ${footprint.length} nt but "${action.target}" spans ${span.to - span.from}; give a span, or use coat for several copies`);
+    if (action.span) span = extantHull(state, ctx, acid, { from: action.span[0], to: action.span[1] });
+    else if (site!.span) span = extantHull(state, ctx, acid, { from: site!.span[0], to: site!.span[1] });
+    else span = extantRun(excised, site!.at!, footprint!.length, action.orientation);
+    const covered = extantLength(excised, span);
+    if (!action.span && footprint && covered !== footprint.length) {
+      ctx.fail(`"${actor.id}" covers ${footprint.length} nt but "${action.target}" spans ${covered}; give a span, or use coat for several copies`);
     }
     const strand = action.strand ?? defaultStrand(state, ctx.definition, acid, span, occupantForm(ctx, actor.id), ctx.fail);
     placeOccupancy(state, ctx, {
@@ -166,16 +172,20 @@ export const coat = definePrimitive<CoatAction>({
   },
   apply(state, action, ctx) {
     const { acid, site } = occupancyTarget(action.target, ctx);
-    const span = action.span ? { from: action.span[0], to: action.span[1] } : { from: site!.span![0], to: site!.span![1] };
+    const excised = excisedOf(state.actors[acid]);
+    requireExtantSite(state, ctx, action.target);
+    const span = extantHull(state, ctx, acid, action.span ? { from: action.span[0], to: action.span[1] } : { from: site!.span![0], to: site!.span![1] });
     const sizes = action.actors.map(instance => instanceDefinition(ctx.definition, instance)!.footprint!.length);
     const total = sizes.reduce((sum, size) => sum + size, 0);
-    if (total > span.to - span.from) ctx.fail(`${action.actors.length} instances need ${total} nt but ${acid} ${span.from}–${span.to} has ${span.to - span.from}`);
+    const room = extantLength(excised, span);
+    if (total > room) ctx.fail(`${action.actors.length} instances need ${total} nt but ${acid} ${span.from}–${span.to} has ${room}`);
     let cursor = action.orientation === 'reverse' ? span.to : span.from;
     action.actors.forEach((instance, index) => {
       const actor = ctx.requirePresent(instance);
       if (state.occupancy[occupancyId(instance, acid)]) ctx.fail(`"${instance}" is already on ${acid}; vacate it first`);
       const size = sizes[index]!;
-      const covered = action.orientation === 'reverse' ? { from: cursor - size, to: cursor } : { from: cursor, to: cursor + size };
+      // Side by side along the covalent order: a copy that meets a junction continues on its other flank.
+      const covered = extantRun(excised, cursor, size, action.orientation);
       cursor = action.orientation === 'reverse' ? covered.from : covered.to;
       const strand = action.strand ?? defaultStrand(state, ctx.definition, acid, covered, occupantForm(ctx, instance), ctx.fail);
       placeOccupancy(state, ctx, {
@@ -232,9 +242,12 @@ export const setState = definePrimitive<SetStateAction>({
     if (isSite && (action.visible !== undefined || action.activity !== undefined)) ctx.issue('visible and activity apply to actors, not sites');
     if (!isSite && action.lesion !== undefined) ctx.issue('lesion applies to a site (actor.site)');
   },
-  apply(_state, action, ctx) {
+  apply(state, action, ctx) {
     if (action.lesion !== undefined) {
       const site = ctx.site(action.target);
+      // A break is read at the boundary, a base lesion at the nucleotide (RFC 0007 D14). Clearing follows the lesion that is there.
+      const lesion = action.lesion === 'none' ? site.lesion : action.lesion;
+      requireExtantSite(state, ctx, action.target, { base: !lesion || !BREAKS.includes(lesion) });
       if (action.lesion === 'none') delete site.lesion;
       else site.lesion = action.lesion;
       return;
@@ -340,7 +353,10 @@ export const cleave = definePrimitive<CleaveAction>({
       ctx.issue(`a double-strand break cuts both strands, but site "${action.target}" is on the ${site.strand} strand`);
     }
   },
-  apply(_state, action, ctx) { ctx.site(action.target).lesion = action.lesion ?? 'single-strand-break'; },
+  apply(state, action, ctx) {
+    requireExtantSite(state, ctx, action.target);
+    ctx.site(action.target).lesion = action.lesion ?? 'single-strand-break';
+  },
 });
 
 interface LigateAction extends ActionSpec { target: string }
@@ -351,6 +367,7 @@ export const ligate = definePrimitive<LigateAction>({
   presentation: { verb: 'ligates' },
   validate(action, ctx) { requireNucleicAcid(action.target, ctx); },
   apply(_state, action, ctx) {
+    requireExtantSite(_state, ctx, action.target);
     const site = ctx.site(action.target);
     if (!site.lesion || !BREAKS.includes(site.lesion)) ctx.fail(`no strand break to ligate at "${action.target}"`);
     // A ligase seals adjacent ends only: a strand still missing nucleotides at the break has a gap, not a nick.
@@ -360,8 +377,8 @@ export const ligate = definePrimitive<LigateAction>({
       for (const strand of lesionStrands(located.acid, located.site, site.lesion)) {
         // Partial synthesis moves the gap away from the break, so look past the nascent stretch on either side.
         const nascent = strandIntervals(state.nascent, strand);
-        const left = intervalAt(nascent, located.site.at - 1)?.from ?? located.site.at;
-        const right = intervalAt(nascent, located.site.at)?.to ?? located.site.at;
+        const left = runEdge(nascent, state.excised, located.site.at, 'left');
+        const right = runEdge(nascent, state.excised, located.site.at, 'right');
         if (missingOn(state, strand).some(gap => gap.to === left || gap.from === right)) {
           ctx.fail(`the ${strand} strand is missing nucleotides at "${action.target}"; fill the gap with extend before ligating`);
         }
@@ -399,6 +416,55 @@ function strandTarget(reference: string, ctx: ApplyContext) {
 }
 
 const missingOn = (state: NucleicState, strand: StrandId) => strandIntervals(state.missing, strand);
+
+// ---- Excision (RFC 0007 §6): coordinates are stable, but nothing acts on a nucleotide that was excised ----
+
+/** True when nothing of a site is left: a span with no extant nucleotide, or a point strictly inside an excised interval. */
+const siteExcised = (excised: readonly Interval[], site: Pick<ActorSite, 'at' | 'span'>) =>
+  site.span ? !extantLength(excised, { from: site.span[0], to: site.span[1] }) : site.at !== undefined && insideExcised(excised, site.at);
+
+/**
+ * An action acts on extant nucleotides only (RFC 0007 §6.8): a site that was excised cannot be a target,
+ * and nothing falls back to a neighbour. A point site at either end of an excised interval is the
+ * junction, unless the action reads it as a base (`base`): then `at` is still the nucleotide [at, at + 1),
+ * which at the lower end was excised (D14).
+ */
+function requireExtantSite(state: MechanismState, ctx: ApplyContext, reference: string, options: { base?: boolean } = {}): void {
+  const located = locate(reference, ctx.definition);
+  if (!located || !isNucleicActor(located.acid)) return;
+  const excised = excisedOf(state.actors[actorOf(reference)]);
+  if (siteExcised(excised, located.site)) ctx.fail(`site "${reference}" was excised`);
+  if (options.base && located.site.at !== undefined && intervalAt(excised, located.site.at)) ctx.fail(`the nucleotide at "${reference}" was excised`);
+}
+
+/** A span cut back to its first and last extant nucleotide; what it covers in between is derived. Fails when nothing is there. */
+function extantHull(state: MechanismState, ctx: ApplyContext, acid: string, span: Interval): Interval {
+  const extant = extantIntervals(excisedOf(state.actors[acid]), span);
+  if (!extant.length) ctx.fail(`${acid} ${span.from}–${span.to} was excised: nothing is there`);
+  return { from: extant[0]!.from, to: extant.at(-1)!.to };
+}
+
+/** A pairing span may not contain an excised nucleotide (RFC 0007 D10): across a junction it is one pairing per flank. */
+function requireUnexcised(state: MechanismState, ctx: ApplyContext, acid: string, span: Interval): void {
+  const extant = extantLength(excisedOf(state.actors[acid]), span);
+  if (!extant) ctx.fail(`${acid} ${span.from}–${span.to} was excised: nothing is there`);
+  if (extant < span.to - span.from) ctx.fail(`${acid} ${span.from}–${span.to} crosses a junction; pair each flank separately`);
+}
+
+/**
+ * Where a covalent run stops on one side of the boundary `at`: past the stretch of `list` that reaches
+ * it and across any junction, as often as they follow each other. `list` is one strand's nascent or
+ * missing nucleotides; without one at `at` and away from a junction the edge is `at` itself.
+ */
+function runEdge(list: readonly Interval[], excised: readonly Interval[], at: number, side: 'left' | 'right'): number {
+  for (let edge = at; ;) {
+    const next = side === 'left'
+      ? intervalAt(list, edge - 1)?.from ?? excised.find(item => item.to === edge)?.from
+      : intervalAt(list, edge)?.to ?? excised.find(item => item.from === edge)?.to;
+    if (next === undefined) return edge;
+    edge = next;
+  }
+}
 const spanLabel = (span: StrandSpan) => `${span.acid} ${span.strand} strand ${span.from}–${span.to}`;
 const rangeLabel = (strand: StrandId, range: Interval) => `${strand} strand ${range.from}–${range.to}`;
 
@@ -413,6 +479,7 @@ export const resect = definePrimitive<ResectAction>({
   presentation: { verb: 'resects' },
   validate(action, ctx) { requireCoordinate(action.target, ctx, { point: true }); },
   apply(_state, action, ctx) {
+    requireExtantSite(_state, ctx, action.target);
     const lesion = ctx.site(action.target).lesion;
     if (!lesion || !BREAKS.includes(lesion)) ctx.fail(`no strand break to resect at "${action.target}"`);
     const { acid, site, actor, state, length } = strandTarget(action.target, ctx);
@@ -420,17 +487,18 @@ export const resect = definePrimitive<ResectAction>({
     for (const strand of lesionStrands(acid, site, lesion)) {
       // The 5′ end at the break: on top it faces increasing coordinates, on bottom decreasing ones.
       // Earlier resection has already moved it away from the break, so continue from where it is now.
+      // It counts extant nucleotides (RFC 0007 §6.6), so what it removes may lie either side of an excised interval.
       const missing = missingOn(state, strand);
-      const range = strand === 'top'
-        ? (end => ({ from: end, to: end + action.length }))(intervalAt(missing, at)?.to ?? at)
-        : (end => ({ from: end - action.length, to: end }))(intervalAt(missing, at - 1)?.from ?? at);
+      const end = runEdge(missing, state.excised, at, strand === 'top' ? 'right' : 'left');
+      const range = extantRun(state.excised, end, action.length, strand === 'top' ? 'forward' : 'reverse');
       if (range.from < 0 || range.to > length) {
-        const room = strand === 'top' ? length - range.from : range.to;
+        const room = extantLength(state.excised, strand === 'top' ? { from: end, to: length } : { from: 0, to: end });
         ctx.fail(`resecting ${action.length} nt from the 5′ end on the ${strand} strand runs past the molecule end (${room} nt left)`);
       }
-      if (overlapsInterval(state.open, range)) ctx.fail(`cannot resect into an unwound region (${rangeLabel(strand, range)}); anneal it first`);
-      state.missing = withStrandIntervals(state.missing, strand, addInterval(missing, range));
-      state.nascent = withStrandIntervals(state.nascent, strand, subtractInterval(strandIntervals(state.nascent, strand), range));
+      const removed = extantIntervals(state.excised, range);
+      if (removed.some(piece => overlapsInterval(state.open, piece))) ctx.fail(`cannot resect into an unwound region (${rangeLabel(strand, range)}); anneal it first`);
+      state.missing = withStrandIntervals(state.missing, strand, [...missing, ...removed]);
+      state.nascent = withStrandIntervals(state.nascent, strand, subtractAll(strandIntervals(state.nascent, strand), removed));
     }
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id);
@@ -450,6 +518,7 @@ export const extend = definePrimitive<ExtendAction>({
   presentation: { verb: 'extends', tone: 'activating' },
   validate(action, ctx) { requireCoordinate(action.target, ctx, { point: true }); },
   apply(_state, action, ctx) {
+    requireExtantSite(_state, ctx, action.target);
     const { acid, site, actor, state, length } = strandTarget(action.target, ctx);
     const at = site.at!;
     const duplex = nucleicForm(acid) === 'duplex';
@@ -458,11 +527,11 @@ export const extend = definePrimitive<ExtendAction>({
     const gapFrom = (strand: StrandId): Interval | undefined => {
       const missing = missingOn(state, strand);
       if (strand === 'top') {
-        const end = intervalAt(nascentRun('top'), at)?.to ?? at;
+        const end = runEdge(nascentRun('top'), state.excised, at, 'right');
         const gap = missing.find(item => item.from === end);
         return gap && end > 0 ? gap : undefined;
       }
-      const end = intervalAt(nascentRun('bottom'), at - 1)?.from ?? at;
+      const end = runEdge(nascentRun('bottom'), state.excised, at, 'left');
       const gap = missing.find(item => item.to === end);
       return gap && end < length ? gap : undefined;
     };
@@ -472,7 +541,10 @@ export const extend = definePrimitive<ExtendAction>({
     // The template is whatever the 3′-terminal nucleotide is paired with (RFC 0006 §6.1): nothing is searched for.
     const terminal = (strand: StrandId) => {
       const gap = gapFrom(strand)!;
-      const nucleotide = strand === 'top' ? { from: gap.from - 1, to: gap.from } : { from: gap.to, to: gap.to + 1 };
+      // The 3′-terminal nucleotide is the gap's covalent neighbour, which a junction puts further away by coordinate.
+      const nucleotide = strand === 'top'
+        ? (edge => ({ from: edge - 1, to: edge }))(junctionAt(state.excised, gap.from).lower)
+        : (edge => ({ from: edge, to: edge + 1 }))(junctionAt(state.excised, gap.to).upper);
       return partnerOf(_state, ctx.definition, { acid: actor.id, strand, ...nucleotide })[0]!;
     };
     if (ctx.site(action.target).lesion === 'double-strand-break') {
@@ -565,16 +637,21 @@ export const unwind = definePrimitive<UnwindAction>({
     if (site?.span && action.length !== undefined) ctx.issue(`length is not used with a span; "${action.target}" already gives the bubble`);
   },
   apply(_state, action, ctx) {
+    requireExtantSite(_state, ctx, action.target);
     const { site, actor, state, length } = strandTarget(action.target, ctx);
+    // A bubble is a stretch of extant nucleotides: centred on a point it is counted along the covalent order.
+    const half = Math.floor((action.length ?? 0) / 2);
     const range = site.span
-      ? { from: site.span[0], to: site.span[1] }
-      : (from => ({ from, to: from + action.length! }))(site.at! - Math.floor(action.length! / 2));
-    if (range.from < 0 || range.to > length) ctx.fail(`a ${range.to - range.from}-nt bubble at "${action.target}" runs past the molecule ends (0–${length})`);
+      ? extantHull(_state, ctx, actor.id, { from: site.span[0], to: site.span[1] })
+      : { from: extantRun(state.excised, site.at!, half, 'reverse').from, to: extantRun(state.excised, site.at!, action.length! - half, 'forward').to };
+    if (range.from < 0 || range.to > length) ctx.fail(`a ${extantLength(state.excised, range)}-nt bubble at "${action.target}" runs past the molecule ends (0–${length})`);
+    // Across a junction the bubble is stored as one interval per flank (RFC 0007 §6.8).
+    const opened = extantIntervals(state.excised, range);
     for (const strand of ['top', 'bottom'] as const) {
-      if (overlapsInterval(missingOn(state, strand), range)) ctx.fail(`cannot unwind ${range.from}–${range.to}: the ${strand} strand is missing there`);
+      if (opened.some(piece => overlapsInterval(missingOn(state, strand), piece))) ctx.fail(`cannot unwind ${range.from}–${range.to}: the ${strand} strand is missing there`);
     }
-    if (overlapsInterval(state.open, range)) ctx.fail(`${range.from}–${range.to} is already unwound`);
-    state.open = addInterval(state.open, range);
+    if (opened.some(piece => overlapsInterval(state.open, piece))) ctx.fail(`${range.from}–${range.to} is already unwound`);
+    state.open = normalizeIntervals([...state.open, ...opened]);
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
@@ -592,15 +669,31 @@ export const anneal = definePrimitive<AnnealAction>({
   presentation: { verb: 'anneals' },
   validate(action, ctx) { requireCoordinate(action.target, ctx, { duplex: true }); },
   apply(_state, action, ctx) {
+    requireExtantSite(_state, ctx, action.target);
     const { site, actor, state } = strandTarget(action.target, ctx);
     const probe = siteInterval(site)!;
-    const bubble = state.open.find(region => region.from <= probe.to && probe.from <= region.to)
+    const found = state.open.find(region => region.from <= probe.to && probe.from <= region.to)
       ?? ctx.fail(`no unwound region at "${action.target}" to anneal`);
+    // A bubble across a junction is stored as one interval per flank; they are one bubble and close together.
+    const regions = [found];
+    const bubble = { ...found };
+    for (let grown = true; grown;) {
+      grown = false;
+      for (const region of state.open) {
+        if (regions.includes(region)) continue;
+        const before = junctionAt(state.excised, bubble.from).lower === region.to && region.to !== bubble.from;
+        const after = junctionAt(state.excised, bubble.to).upper === region.from && region.from !== bubble.to;
+        if (!before && !after) continue;
+        regions.push(region);
+        if (before) bubble.from = region.from; else bubble.to = region.to;
+        grown = true;
+      }
+    }
     if (action.span) {
       const part = { from: action.span[0], to: action.span[1] };
       if (part.from < bubble.from || part.to > bubble.to) ctx.fail(`${part.from}–${part.to} is not inside the unwound region ${bubble.from}–${bubble.to} at "${action.target}"`);
       state.open = subtractInterval(state.open, part);
-    } else state.open = state.open.filter(region => region !== bubble);
+    } else state.open = state.open.filter(region => !regions.includes(region));
     writeNucleicState(actor, state);
     requireOccupantsFit(_state, ctx, actor.id);
     requirePairingsHold(_state, ctx, actor.id);
@@ -644,6 +737,8 @@ export const pair = definePrimitive<PairAction>({
     ctx.requirePresent(action.with);
     const site = locate(action.target, ctx.definition)?.site;
     const range = action.span ? { from: action.span[0], to: action.span[1] } : { from: site!.span![0], to: site!.span![1] };
+    requireExtantSite(state, ctx, action.target);
+    requireUnexcised(state, ctx, acid, range);
     const named = action.strand ?? (site?.strand === 'top' || site?.strand === 'bottom' ? site.strand : undefined);
     const conflicts = (['top', 'bottom'] as const).map(strand => pairingConflicts(state, ctx.definition, { acid, strand, ...range }));
     const free = (['top', 'bottom'] as const).filter((_, index) => !conflicts[index]);
@@ -656,6 +751,7 @@ export const pair = definePrimitive<PairAction>({
     if (!partners.length) ctx.fail(`no alignment between "${acid}" and "${action.with}" covers ${acid} ${range.from}–${range.to}`);
     if (partners.length > 1) ctx.fail(`several alignments between "${acid}" and "${action.with}" cover ${acid} ${range.from}–${range.to}; name one with alignment`);
     const partner = partners[0]!;
+    requireUnexcised(state, ctx, partner.acid, partner);
     for (const span of [own, partner]) {
       const conflict = pairingConflicts(state, ctx.definition, span);
       if (conflict) ctx.fail(`cannot pair ${spanLabel(own)} with ${spanLabel(partner)}: ${conflict}`);
@@ -692,6 +788,84 @@ export const unpair = definePrimitive<UnpairAction>({
     const removed = strands.reduce((sum, strand) => sum + removePairings(state, { acid, strand, ...range }), 0);
     if (!removed) ctx.fail(`nothing is paired with ${acid} ${named ? `${named} strand ` : ''}${range.from}–${range.to}`);
     requireOccupantsFit(state, ctx);
+  },
+});
+
+// ---- Excision (RFC 0007 §4): an internal interval leaves, and its flanks become covalent neighbours ----
+
+interface ExciseIntervalAction extends ActionSpec { target: string; span?: [number, number] }
+export const exciseInterval = definePrimitive<ExciseIntervalAction>({
+  type: 'excise-interval',
+  description: 'Remove an internal interval of a nucleic acid, on every strand, and join the nucleotides either side of it. Coordinates are not renumbered. Not a gap: nothing is left to fill or ligate.',
+  fields: {
+    target: field.reference({ required: true, description: 'The nucleic acid, or one of its sites with a span.' }),
+    span: field.interval({ description: 'Interval to remove, overriding the site. It must be internal: it reaches neither end of the molecule.' }),
+  },
+  presentation: { verb: 'excises' },
+  validate(action, ctx) {
+    const acid = instanceDefinition(ctx.definition, actorOf(action.target));
+    if (acid && !isNucleicActor(acid)) return ctx.issue(`"${acid.id}" is not a nucleic acid; excise-interval needs a nucleic acid and an interval`);
+    const span = action.span ?? locate(action.target, ctx.definition)?.site.span;
+    if (!span) return ctx.issue('excise-interval needs an interval: a site with a span, or span');
+    if (!acid) return;
+    const length = nucleicLength(acid);
+    if (span[1] > length) ctx.issue(`${span[0]}–${span[1]} runs past the molecule (0–${length})`);
+    else if (span[0] === 0 || span[1] === length) ctx.issue(`${span[0]}–${span[1]} is not internal: removing an end of "${acid.id}" is truncation, not excision`);
+  },
+  apply(state, action, ctx) {
+    const acidId = actorOf(action.target);
+    const actor = ctx.requirePresent(acidId);
+    const acid = instanceDefinition(ctx.definition, acidId)!;
+    const [from, to] = action.span ?? locate(action.target, ctx.definition)!.site.span!;
+    const interval = { from, to };
+    const where = `${acidId} ${from}–${to}`;
+    const nucleic = readNucleicState(actor);
+    const strands: readonly StrandId[] = nucleicForm(acid) === 'duplex' ? ['top', 'bottom'] : ['top'];
+    if (!extantLength(nucleic.excised, interval)) ctx.fail(`${where} was already excised: nothing left to excise there`);
+    // The junction is one bond between exactly these two nucleotides; it never looks for the next surviving one.
+    for (const flank of [from - 1, to]) {
+      if (intervalAt(nucleic.excised, flank)) ctx.fail(`nothing to join at ${where}: nucleotide ${flank} was excised; excise one interval that covers both`);
+      for (const strand of strands) {
+        if (intervalAt(missingOn(nucleic, strand), flank)) ctx.fail(`nothing to join at ${where}: nucleotide ${flank} is missing on the ${strand} strand; fill the gap first`);
+      }
+    }
+    for (const strand of strands) {
+      if (overlapsInterval(missingOn(nucleic, strand), interval)) ctx.fail(`the ${strand} strand is missing within ${where}: the interval must be present; a gap is filled or resected, not excised`);
+    }
+    const excised = addInterval(nucleic.excised, interval);
+    for (const occupancy of Object.values(state.occupancy)) {
+      if (occupancy.acid !== acidId) continue;
+      if (occupancy.span && overlapsInterval(coveredIntervals(state, occupancy), interval)) {
+        ctx.fail(`"${occupancy.instance}" occupies ${acidId} ${occupancy.span.from}–${occupancy.span.to}, within ${where}; vacate it first`);
+      }
+      const resting = occupancy.span ? undefined : acid.sites?.find(item => item.id === occupancy.site);
+      if (resting && siteExcised(excised, resting)) ctx.fail(`"${occupancy.instance}" rests on "${acidId}.${resting.id}", within ${where}; release it first`);
+    }
+    for (const { ends } of Object.values(state.pairings).flat()) {
+      ends.forEach((end, index) => {
+        if (end.acid === acidId && overlapsInterval([end], interval)) ctx.fail(`${spanLabel(end)} is paired with ${spanLabel(ends[1 - index]!)}, within ${where}; unpair it first`);
+      });
+    }
+    for (const region of nucleic.open) {
+      if (overlapsInterval([region], interval) && (region.from < from || region.to > to)) {
+        ctx.fail(`${where} overlaps the unwound region ${region.from}–${region.to} only in part; anneal it, or excise the whole bubble`);
+      }
+    }
+    // Excised nucleotides are in no other list (I3): what was newly made or unwound there goes with them.
+    nucleic.excised = excised;
+    nucleic.open = subtractInterval(nucleic.open, interval);
+    for (const strand of strands) nucleic.nascent = withStrandIntervals(nucleic.nascent, strand, subtractInterval(strandIntervals(nucleic.nascent, strand), interval));
+    writeNucleicState(actor, nucleic);
+    // The bond a break at either boundary interrupted no longer exists: the junction replaces it (D7).
+    // A lesion on a nucleotide that left goes with it; one on the nucleotide at `to`, which stays, is kept (D14).
+    for (const site of acid.sites ?? []) {
+      const siteState = state.sites[`${acidId}.${site.id}`];
+      if (!siteState?.lesion) continue;
+      const gone = siteExcised(excised, site) || site.at === from;
+      if (gone || (site.at === to && BREAKS.includes(siteState.lesion))) delete siteState.lesion;
+    }
+    requireOccupantsFit(state, ctx, acidId);
+    requirePairingsHold(state, ctx, acidId);
   },
 });
 
@@ -773,6 +947,7 @@ export const builtinActions = [
   resect, extend, unwind, anneal,
   occupy, coat, vacate,
   pair, unpair,
+  exciseInterval,
   recruit, invade,
   visibility('show', true, 'shows'),
   visibility('hide', false, 'hides'),
