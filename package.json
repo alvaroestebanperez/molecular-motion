@@ -15,7 +15,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check": "npm run typecheck && npm test && npm run build",
     "schema": "UPDATE_SCHEMA=1 vitest run packages/core/test/schema.test.ts",
-    "check:browser": "node scripts/browser-check.mjs"
+    "check:browser": "node scripts/browser-check.mjs",
+    "check:pack": "node scripts/pack-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

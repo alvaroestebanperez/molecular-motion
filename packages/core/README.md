@@ -1,0 +1,23 @@
+# @molecular-motion/core
+
+Framework-agnostic compiler and state engine for [Molecular Motion](https://github.com/alvaroestebanperez/molecular-motion): it parses and validates a mechanism written in YAML or JSON and folds its steps into immutable, seekable snapshots. No DOM, no rendering.
+
+```bash
+npm install @molecular-motion/core
+```
+
+```ts
+import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+
+const mechanism = compileMechanism(parseMechanism(yamlSource));
+const snapshot = mechanism.at('damage');   // by step id or index, O(1)
+snapshot.actors;                            // resolved state of every actor at that step
+```
+
+- `parseMechanism` accepts `schemaVersion` 1 to 6 and migrates older documents automatically.
+- `schema.json` is the JSON Schema of the current version, generated from the action registry.
+- Custom actions are registered with `builtinRegistry.extend([...])`.
+
+To draw a snapshot use [`@molecular-motion/svg`](https://www.npmjs.com/package/@molecular-motion/svg); for a player, [`@molecular-motion/react`](https://www.npmjs.com/package/@molecular-motion/react).
+
+The schema is not stable before `1.0`. See the [repository](https://github.com/alvaroestebanperez/molecular-motion) for the language, the examples and the design documents. MIT licensed.

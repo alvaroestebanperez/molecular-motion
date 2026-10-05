@@ -40,6 +40,32 @@ The repository includes six mechanisms to exercise different parts of the langua
 - [cGAS–STING sensing of cytosolic DNA](examples/cgas-sting.yaml)
 - [Gene expression: a transcript that begins as its first nucleotides, and splicing by excision](examples/gene-expression.yaml)
 
+## Install
+
+```bash
+npm install @molecular-motion/core @molecular-motion/svg     # figures, with or without a browser
+npm install @molecular-motion/core @molecular-motion/react   # the React player
+```
+
+The packages are ES modules and need Node.js 20 or newer. `@molecular-motion/react` needs React 18 or newer. The three are versioned together; see the [changelog](CHANGELOG.md).
+
+Without React, a compiled step becomes a standalone SVG in a few lines, in Node or in a browser:
+
+```ts
+import { readFileSync, writeFileSync } from 'node:fs';
+import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { buildSvgScene, exportSvg, mechanismReservation } from '@molecular-motion/svg';
+
+const mechanism = compileMechanism(parseMechanism(readFileSync('mechanism.yaml', 'utf8')));
+// Space reserved from every step, so regions stay where they are from one step to the next.
+const reservation = mechanismReservation(mechanism);
+
+for (let step = 0; step < mechanism.length; step += 1) {
+  const snapshot = mechanism.at(step);
+  writeFileSync(`${snapshot.step.id}.svg`, exportSvg(buildSvgScene(snapshot, { reservation }), { theme: 'light' }));
+}
+```
+
 ## Why Molecular Motion?
 
 Interactive pathway figures are usually written as one-off combinations of SVG markup, animation code, and scientific content. That makes them expensive to create and difficult to review, update, reuse, or reproduce.

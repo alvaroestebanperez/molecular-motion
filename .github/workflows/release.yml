@@ -1,0 +1,42 @@
+name: Release
+
+# Publishes the three packages when a version tag is pushed: v0.1.0 publishes 0.1.0.
+# Needs the repository secret NPM_TOKEN, an npm token allowed to publish under @molecular-motion.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: The tag is the version of the packages
+        run: |
+          version="$(node -p "require('./packages/core/package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          fi
+      - run: npm run check
+      - run: npm run check:pack
+      # In dependency order: svg needs core, react needs both.
+      - run: npm publish --provenance --workspace @molecular-motion/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --provenance --workspace @molecular-motion/svg
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --provenance --workspace @molecular-motion/react
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
