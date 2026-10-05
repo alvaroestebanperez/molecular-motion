@@ -9,6 +9,7 @@ import {
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, transmembraneGeometry, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
+import { coordinateMap, coordinateMapOf, type ExcisedStretch } from './coordinate-map';
 
 /** An actor definition seen as one instance: `id` is the instance id, `visual` the definition id. */
 type InstanceView = ActorDefinition & { visual: string };
@@ -20,6 +21,8 @@ export interface SceneSite extends Point {
   lesionStrands?: StrandId[];
   /** Strand declared on the site, if any. */
   strand?: SiteStrand;
+  /** Interbase interval of the site on its molecule; absent for a site that is layout only. */
+  at?: { from: number; to: number };
 }
 
 /** Interbase range of a nucleic acid with its drawn extent (`x0` < `x1`). */
@@ -33,7 +36,7 @@ export interface SceneNucleicAcid {
   color?: string;
   y: number;
   sites: SceneSite[];
-  /** Coordinate length; x = width · coordinate / length. */
+  /** Coordinate length; x = width · coordinate / length, unless something was excised: then positions come from the coordinate map. */
   length?: number;
   /** Draw 5′/3′ labels: the actor declares its nucleic geometry. */
   polarity?: boolean;
@@ -41,6 +44,14 @@ export interface SceneNucleicAcid {
   missing?: SceneStrandRange[];
   nascent?: SceneStrandRange[];
   open?: SceneRange[];
+  /**
+   * Intervals excised from the molecule (RFC 0007), present only when there are any. They take no
+   * width: `x0` and `x1` are the junction (ADR 0002). Only a frame of a transition gives one a `share`
+   * of its former width, and then `x0` < `x1`.
+   */
+  excised?: Array<SceneRange & ExcisedStretch>;
+  /** Where the helix is phased, when not on the first site: only in a frame whose sites are moving (ADR 0002 §5). */
+  phaseX?: number;
   /**
    * Stretches of this molecule's strands drawn beside another molecule's strand instead (RFC 0006 §10).
    * `continues` says, for the lower and the higher end, whether the strand goes on along this molecule.
@@ -242,6 +253,9 @@ export interface SceneOptions {
 /** Helix geometry shared with the renderer: strand amplitude, wavelength and stroke widths. */
 export const HELIX = { amplitude: 30, wavelength: 196, tube: 12, backTube: 10 } as const;
 
+/** The x the helix crests at: the first site, by convention (RFC 0004 §7). */
+export const helixPhase = (acid: Pick<SceneNucleicAcid, 'sites' | 'phaseX'>, width: number) => acid.phaseX ?? acid.sites[0]?.x ?? width / 2;
+
 /** Strand 0 is `top`, strand 1 is `bottom`. */
 export const strandIndex = (strand: StrandId): 0 | 1 => strand === 'top' ? 0 : 1;
 
@@ -294,8 +308,8 @@ export const singleStranded = (acid: Pick<SceneNucleicAcid, 'missing'>, strand: 
  * (RFC 0004 §7): a single-stranded stretch relaxes into a shallow wave on its own side of the axis,
  * and in an unwound bubble both strands bow apart; an intact molecule is the plain double helix.
  */
-export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites' | 'missing' | 'open' | 'nascent' | 'away'>, strand: 0 | 1, x: number, width: number): number {
-  const phaseX = acid.sites[0]?.x ?? width / 2;
+export function helixY(acid: Pick<SceneNucleicAcid, 'y' | 'sites' | 'missing' | 'open' | 'nascent' | 'away' | 'phaseX'>, strand: 0 | 1, x: number, width: number): number {
+  const phaseX = helixPhase(acid, width);
   const side = strand === 0 ? -1 : 1;
   const helical = acid.y + side * HELIX.amplitude * Math.cos(2 * Math.PI / HELIX.wavelength * (x - phaseX));
   if (!acid.missing && !acid.open) return helical;
@@ -351,36 +365,42 @@ export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>,
   if (!own || !other) return undefined;
   const { width } = scene;
   const [ownScale, otherScale] = [width / (own.length ?? 100), width / (other.length ?? 100)];
+  // Positions along each molecule come from its coordinate map once something was excised (ADR 0002).
+  const [ownMap, otherMap] = [own.excised && coordinateMapOf(own, width), other.excised && coordinateMapOf(other, width)];
+  const ownX = (p: number) => ownMap ? ownMap.place(p) : p * ownScale;
+  const otherX = (q: number) => otherMap ? otherMap.place(q) : q * otherScale;
+  /** Drawn distance along the travelling strand's own molecule from coordinate `a` to `b`. */
+  const ownReach = (a: number, b: number) => ownMap ? ownMap.place(b) - ownMap.place(a) : (b - a) * ownScale;
   const [strand, partner] = [strandIndex(traveller.strand), strandIndex(host.strand)];
   const mirrored = traveller.strand === host.strand;
   const side = partner === 0 ? -1 : 1;
-  const reach = (traveller.to - traveller.from) * ownScale;
+  const reach = ownReach(traveller.from, traveller.to);
   const ramp = Math.min(PAIRING.ramp, reach * .4);
   const stretch = own.away?.find(range => range.strand === traveller.strand && range.from === traveller.from && range.to === traveller.to);
   const continues = { from: stretch?.continues[0] ?? false, to: stretch?.continues[1] ?? false };
   // Beside the partner the strand keeps one level: it does not follow the partner's own easing at the
   // edges of its bubble, so a free end stays straight and clearly inside.
-  const [hostFrom, hostTo] = [host.from * otherScale, host.to * otherScale];
+  const [hostFrom, hostTo] = [otherX(host.from), otherX(host.to)];
   const settle = Math.min(RELAX, (hostTo - hostFrom) / 2);
   const level = (x: number) => helixY(other, partner, Math.max(hostFrom + settle, Math.min(hostTo - settle, x)), width);
   // `travel` is how far the stretch has come from its own molecule's line (0) to its place here (1).
   // A settled step is always 1; frames of a transition pass through the values in between (ADR 0001 §4.3).
   const weight = (p: number) => travel * Math.min(
-    continues.from ? smooth((p - traveller.from) * ownScale / ramp) : 1,
-    continues.to ? smooth((traveller.to - p) * ownScale / ramp) : 1,
+    continues.from ? smooth(ownReach(traveller.from, p) / ramp) : 1,
+    continues.to ? smooth(ownReach(p, traveller.to) / ramp) : 1,
   );
   const partnerAt = (p: number): Point => {
     const q = mirrored ? host.to - (p - traveller.from) : host.from + (p - traveller.from);
-    return { x: q * otherScale, y: helixY(other, partner, q * otherScale, width) };
+    return { x: otherX(q), y: helixY(other, partner, otherX(q), width) };
   };
   const at = (p: number): Point => {
     const w = weight(p);
     const beside = partnerAt(p);
-    const home = { x: p * ownScale, y: helixY(own, strand, p * ownScale, width) };
+    const home = { x: ownX(p), y: helixY(own, strand, ownX(p), width) };
     return { x: home.x + (beside.x - home.x) * w, y: home.y + (level(beside.x) - side * PAIRING.inset - home.y) * w };
   };
   const trace = (from: number, to: number): Point[] => {
-    const steps = Math.max(2, Math.ceil((to - from) * ownScale / 3));
+    const steps = Math.max(2, Math.ceil(ownReach(from, to) / 3));
     return Array.from({ length: steps + 1 }, (_, index) => at(from + (to - from) * index / steps));
   };
   const rungs: [Point, Point][] = [];
@@ -420,6 +440,7 @@ export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneSt
     if (!acid) continue;
     const length = acid.length ?? 100;
     const scale = width / length;
+    const map = acid.excised && coordinateMapOf(acid, width);
     const on = (list: readonly { strand: StrandId; from: number; to: number }[] | undefined, at: number) =>
       (list ?? []).some(range => range.strand === traveller.strand && range.from <= at && at < range.to);
     const others = travellers.filter(other => other.acid === traveller.acid);
@@ -428,7 +449,7 @@ export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneSt
       && !on(acid.missing, outside) && !on(others, outside)
       && !(threePrime && on(acid.nascent, inside) && !on(acid.nascent, outside));
     acid.away = [...acid.away ?? [], {
-      strand: traveller.strand, from: traveller.from, to: traveller.to, x0: traveller.from * scale, x1: traveller.to * scale,
+      strand: traveller.strand, from: traveller.from, to: traveller.to, x0: map ? map.place(traveller.from) : traveller.from * scale, x1: map ? map.place(traveller.to) : traveller.to * scale,
       continues: [goesOn(traveller.from + NEAR, traveller.from - NEAR, !top), goesOn(traveller.to - NEAR, traveller.to + NEAR, top)],
     }];
   }
@@ -776,9 +797,12 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const nucleicAcids = acidViews.map((definition, index): SceneNucleicAcid => {
     const y = definition.position?.y ?? stack.top + index * stack.gap;
     const length = nucleicLength(definition);
-    const x = (coordinate: number) => width * coordinate / length;
-    const range = ({ from, to }: { from: number; to: number }): SceneRange => ({ from, to, x0: x(from), x1: x(to) });
     const strandState = snapshot.actors[definition.id]!.nucleic;
+    // One map per molecule (ADR 0002 §4): everything placed along it goes through it. With nothing
+    // excised it is the linear rule, so such a molecule is drawn exactly as before.
+    const excised = strandState?.excised ?? [];
+    const map = coordinateMap(width, length, excised);
+    const range = ({ from, to }: { from: number; to: number }): SceneRange => ({ from, to, x0: map.place(from), x1: map.place(to) });
     // A single-stranded molecule (the default for RNA) has no bottom strand at all: it is drawn as one
     // relaxed strand through the same strand-state path as resected DNA, never as a duplex.
     const single = nucleicForm(definition) === 'single';
@@ -788,14 +812,20 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       label: definition.label ?? definition.id,
       ...(definition.color && { color: definition.color }),
       y,
-      sites: (definition.sites ?? []).map(site => {
+      sites: (definition.sites ?? []).flatMap((site): SceneSite[] => {
         const reference = `${definition.id}.${site.id}`;
         const lesion = snapshot.sites[reference]?.lesion;
-        return {
-          reference, x: siteX(definition, site, width), y: y - HELIX.amplitude,
+        const at = site.position ? undefined : siteInterval(site);
+        // A site whose every nucleotide was excised has no position: it is not part of the scene. One
+        // that keeps extant material is projected from it; either end of an excised interval is its junction.
+        const x = !excised.length || !at ? siteX(definition, site, width) : at.from === at.to ? map.x(at.from) : map.centre(at);
+        if (x === undefined) return [];
+        return [{
+          reference, x, y: y - HELIX.amplitude,
           ...(lesion && { lesion, lesionStrands: lesionStrands(definition, site, lesion) }),
           ...(site.strand && { strand: site.strand }),
-        };
+          ...(at && { at }),
+        }];
       }),
       length,
       ...(definition.nucleic && { polarity: true }),
@@ -806,6 +836,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       ] }),
       ...(strandState?.nascent.length && { nascent: strandState.nascent.map(item => ({ strand: item.strand, ...range(item) })) }),
       ...(strandState?.open.length && { open: strandState.open.map(range) }),
+      ...(excised.length && { excised: excised.map(range) }),
     };
   });
   const siteIndex = new Map(nucleicAcids.flatMap(acid => acid.sites.map(site => [site.reference, site] as const)));
@@ -978,7 +1009,8 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const occupancy = spanOf(definition.id);
     const acid = occupancy && acidIndex.get(occupancy.acid);
     if (!occupancy || !acid || definition.position) continue;
-    const x = width * ((occupancy.span!.from + occupancy.span!.to) / 2) / (acid.length ?? 100);
+    // Centred on what it covers: across a junction that is the junction itself (ADR 0002 §4).
+    const x = acid.excised ? coordinateMapOf(acid, width).centre(occupancy.span!) ?? width / 2 : width * ((occupancy.span!.from + occupancy.span!.to) / 2) / (acid.length ?? 100);
     const body = { actor: definition.visual, type: definition.type, radius: radiusOf(definition), molecule: definition.molecule, visual: visualOf(definition), membrane: membraneOf(definition) };
     // An occupant follows its strand: on a stretch drawn beside another molecule it rests there.
     const moved = travelling(occupancy.acid, occupancy.strand, (occupancy.span!.from + occupancy.span!.to) / 2);
@@ -1478,7 +1510,8 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const acid = acidIndex.get(occupancy.acid);
     if (!actor || actor.ghost || !acid || !occupancy.span || spanOf(occupancy.instance) === occupancy) return [];
     const scale = width / (acid.length ?? 100);
-    const [x0, x1] = [occupancy.span.from * scale, occupancy.span.to * scale];
+    const drawn = acid.excised && coordinateMapOf(acid, width);
+    const [x0, x1] = drawn ? [drawn.place(occupancy.span.from), drawn.place(occupancy.span.to)] : [occupancy.span.from * scale, occupancy.span.to * scale];
     const strands = occupancy.strand === 'top' ? [0] as const : occupancy.strand === 'bottom' ? [1] as const : [0, 1] as const;
     const ys = strands.flatMap(strand => [0, .25, .5, .75, 1].map(part => helixY(acid, strand, x0 + (x1 - x0) * part, width)));
     const [top, bottom] = [Math.min(...ys) - HELIX.tube / 2 - 4, Math.max(...ys) + HELIX.tube / 2 + 4];

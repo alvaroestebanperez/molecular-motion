@@ -1,10 +1,11 @@
 import { renderRepeatedMarker } from './repeated-marker';
 import type { LesionType } from '@molecular-motion/core';
 import {
-  areaLabels, actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  areaLabels, actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixPhase, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
   type SceneActor, type SceneConnection, type SceneMembrane, type SceneNucleicAcid, type SceneRegion, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
+import { coordinateMapOf } from './coordinate-map';
 import { mix, primitiveCss, renderMembranePrimitive, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, renderProteinInhibition, type ModificationVisualKind } from './primitives';
 
 import { renderProteinVisualSurface } from './protein-assembly';
@@ -53,7 +54,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   const defs = `<defs>${colors.map((color, index) => sphereGradient(`${prefix}-g${index}`, color) + haloGradient(`${prefix}-halo-${index}`, color)).join('')}`
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
-  const { acids, pairings } = nucleicLayerMarkup(geometryFrame(scene), prefix);
+  const { acids, pairings } = nucleicLayerMarkup(geometryFrame(scene), prefix, { junctionMarks: !compact });
   const footprints = scene.footprints.map(mark => `<rect class="mm-footprint" data-key="footprint:${escape(mark.id)}" x="${round(mark.x)}" y="${round(mark.y)}" width="${round(mark.width)}" height="${round(mark.height)}" rx="7" style="--mm-actor:${escape(mark.color)}" aria-hidden="true"/>`).join('');
   const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false, options.groupIdenticalCopies === true)).join('');
@@ -156,6 +157,7 @@ export function describeScene(scene: SvgScene): string {
       ...(acid.missing ?? []).map(range => `${range.strand} strand missing ${range.from}–${range.to} (${range.strand === 'top' ? 'bottom' : 'top'} strand single-stranded)`),
       ...(acid.nascent ?? []).map(range => `${range.strand} strand newly synthesised ${range.from}–${range.to}`),
       ...(acid.open ?? []).map(range => `unwound ${range.from}–${range.to}`),
+      ...(acid.excised ?? []).map(range => `${range.from}–${range.to} excised, its flanks joined`),
     ];
     return facts.length ? [`${acid.label}: ${facts.join('; ')}`] : [];
   });
@@ -198,10 +200,10 @@ function pairedStrands(frame: GeometryFrame, pairing: FramePairing): string {
  * Content of the two nucleic layers for a frame: a settled step (`geometryFrame(scene)`) or an instant
  * of a transition (ADR 0001). The viewer's animator redraws only these, on the elements already there.
  */
-export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm'): { acids: string; pairings: string } {
+export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm', options: { junctionMarks?: boolean } = {}): { acids: string; pairings: string } {
   const prefix = escape(idPrefix);
   return {
-    acids: frame.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, frame.width, prefix)}</g>`).join(''),
+    acids: frame.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, frame.width, prefix, options.junctionMarks ?? true)}</g>`).join(''),
     pairings: frame.pairings.map(pairing => pairedStrands(frame, pairing)).join(''),
   };
 }
@@ -211,10 +213,17 @@ export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm'): { aci
 /** Half-width of the gap drawn at a free strand end, in px. */
 const FREE_END = 7;
 
-function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
+function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMarks = true): string {
   const { wavelength } = HELIX;
   const k = (2 * Math.PI) / wavelength;
-  const phaseX = acid.sites[0]?.x ?? width / 2;
+  const phaseX = helixPhase(acid, width);
+  // After an excision the molecule is shorter and ends inside the canvas (ADR 0002 §4.2). A stretch that
+  // is still closing, in a frame of a transition, is drawn narrower and fading (§5).
+  const extent = acid.excised && coordinateMapOf(acid, width).extent;
+  const outside = (x: number) => extent !== undefined && (x <= extent.x0 || x >= extent.x1);
+  const closing = (acid.excised ?? []).filter(stretch => (stretch.share ?? 0) > 0 && stretch.x1 > stretch.x0);
+  const closingAt = (x: number) => closing.length ? closing.findIndex(stretch => x > stretch.x0 && x < stretch.x1) : -1;
+  const fading = closing.map(() => ({ back: [] as string[], front: [] as string[], rungs: [] as string[], nascentBack: [] as string[], nascentFront: [] as string[] }));
   const theta = (x: number) => k * (x - phaseX);
   const strandY = (strand: 0 | 1, x: number) => helixY(acid, strand, x, width);
   const strandState = Boolean(acid.missing || acid.open);
@@ -242,12 +251,15 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     if (site.lesion === 'double-strand-break') for (const strand of strands) gaps.push([strand, site.x - 15, site.x + 15]);
   }
   for (const range of [...acid.missing ?? [], ...acid.away ?? []]) gaps.push([strandIndex(range.strand), range.x0, range.x1]);
+  const beyond: [0 | 1, number, number][] = extent ? ([0, 1] as const).flatMap((strand): [0 | 1, number, number][] => [[strand, -Infinity, extent.x0], [strand, extent.x1, Infinity]]) : [];
+  gaps.push(...beyond);
   // Polarity is labelled where it tells the story: the molecule's ends, resected ends and the two sides
   // of a DSB. A nick or SSB keeps its strand continuous for labelling, so no 5′/3′ crowds the lesion.
   const polarityCuts: [0 | 1, number, number][] = [
     ...acid.sites.filter(site => site.lesion === 'double-strand-break').flatMap(site => ([0, 1] as const).filter(strand => !bridges(strand, site.x)).map((strand): [0 | 1, number, number] => [strand, site.x - 15, site.x + 15])),
     ...freeEnds.map(([strand, x]): [0 | 1, number, number] => [strand, x - FREE_END, x + FREE_END]),
     ...[...acid.missing ?? [], ...acid.away ?? []].map((range): [0 | 1, number, number] => [strandIndex(range.strand), range.x0, range.x1]),
+    ...beyond,
   ];
   // A strand that leaves for another molecule does not end there, so those edges carry no label.
   const continuing = (acid.away ?? []).flatMap((range): [0 | 1, number][] => [
@@ -262,14 +274,17 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   for (const strand of [0, 1] as const) {
     let current: string[] = [];
     let currentFront = isFront(strand, -20);
-    const flush = () => { if (current.length > 1) segments[currentFront ? 'front' : 'back'].push(`M${current.join('L')}`); current = []; };
+    let currentClosing = closingAt(-20);
+    const flush = () => { if (current.length > 1) (currentClosing < 0 ? segments : fading[currentClosing]!)[currentFront ? 'front' : 'back'].push(`M${current.join('L')}`); current = []; };
     for (let x = -20; x <= width + 20; x += 3) {
       const front = isFront(strand, x);
-      if (inGap(strand, x)) { flush(); currentFront = front; continue; }
-      if (front !== currentFront) {
+      const stretch = closingAt(x);
+      if (inGap(strand, x)) { flush(); currentFront = front; currentClosing = stretch; continue; }
+      if (front !== currentFront || stretch !== currentClosing) {
         current.push(`${round(x)} ${round(strandY(strand, x))}`);
         flush();
         currentFront = front;
+        currentClosing = stretch;
       }
       current.push(`${round(x)} ${round(strandY(strand, x))}`);
     }
@@ -283,11 +298,12 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
   for (let x = phaseX - Math.ceil((phaseX + 20) / spacing) * spacing; x <= width + 20; x += spacing) {
     const y0 = strandY(0, x);
     const y1 = strandY(1, x);
-    if (Math.abs(y0 - y1) < 5 || unpaired(x)) continue;
+    if (Math.abs(y0 - y1) < 5 || unpaired(x) || outside(x)) continue;
     const lesion = lesionSites.get(Math.round(x));
     if (lesion === 'abasic-site' || lesion === 'single-strand-break' || lesion === 'double-strand-break') continue;
     const path = `M${round(x)} ${round(y0)}L${round(x)} ${round(y1)}`;
-    (lesion === 'base-damage' || lesion === 'adduct' ? damaged : rungs).push(path);
+    const stretch = closingAt(x);
+    (stretch >= 0 ? fading[stretch]!.rungs : lesion === 'base-damage' || lesion === 'adduct' ? damaged : rungs).push(path);
   }
 
   const markers = acid.sites.filter(site => site.lesion)
@@ -302,22 +318,46 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string): string {
     const [start, stop] = [range.x0 + (free(range.x0) ? FREE_END : 0), range.x1 - (free(range.x1) ? FREE_END : 0)];
     let current: string[] = [];
     let currentFront = isFront(strand, start);
-    const flush = () => { if (current.length > 1) nascent[currentFront ? 'front' : 'back'].push(`M${current.join('L')}`); current = []; };
+    let currentClosing = closingAt(start + 1);
+    const flush = () => {
+      if (current.length > 1) (currentClosing < 0 ? nascent[currentFront ? 'front' : 'back'] : fading[currentClosing]![currentFront ? 'nascentFront' : 'nascentBack']).push(`M${current.join('L')}`);
+      current = [];
+    };
     for (let x = start; ; x = Math.min(x + 3, stop)) {
       const front = isFront(strand, x);
+      const stretch = closing.length ? closingAt(x) : currentClosing;
       current.push(`${round(x)} ${round(strandY(strand, x))}`);
-      if (front !== currentFront) { flush(); current.push(`${round(x)} ${round(strandY(strand, x))}`); currentFront = front; }
+      if (front !== currentFront || stretch !== currentClosing) { flush(); current.push(`${round(x)} ${round(strandY(strand, x))}`); currentFront = front; currentClosing = stretch; }
       if (x >= stop) break;
     }
     flush();
   }
-  const nascentPath = (layer: 'back' | 'front') => nascent[layer].length ? `<path class="mm-dna__nascent mm-dna__nascent--${layer}" d="${nascent[layer].join('')}"/>` : '';
+  const nascentPath = (layer: 'back' | 'front', paths: string[] = nascent[layer]) => paths.length ? `<path class="mm-dna__nascent mm-dna__nascent--${layer}" d="${paths.join('')}"/>` : '';
+  // What is still closing, drawn with the same classes inside one fading group per stretch.
+  const closingMarkup = closing.map((stretch, index) => {
+    const part = fading[index]!;
+    return `<g class="mm-dna__closing" opacity="${round(stretch.share!)}"><g class="mm-dna__back"><path d="${part.back.join('')}"/></g>`
+      + nascentPath('back', part.nascentBack)
+      + (part.rungs.length ? `<path class="mm-dna__rungs" d="${part.rungs.join('')}"/>` : '')
+      + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${part.front.join('')}"/><path class="mm-dna__shine" d="${part.front.join('')}"/></g>`
+      + nascentPath('front', part.nascentFront) + '</g>';
+  }).join('');
+  // The junction mark (ADR 0002 §4.3): a tick across each strand where an excised interval was. It is
+  // derived from `excised` alone, styled inline so no stylesheet changes, and unlike any lesion or actor.
+  // A break at the junction is drawn as a break and replaces it.
+  const isBreak = (lesion: LesionType | undefined) => lesion === 'single-strand-break' || lesion === 'double-strand-break' || lesion === 'nick';
+  const junctions = junctionMarks ? (acid.excised ?? []).flatMap(stretch => {
+    const x = (stretch.x0 + stretch.x1) / 2;
+    if (acid.sites.some(site => isBreak(site.lesion) && site.x >= stretch.x0 - .5 && site.x <= stretch.x1 + .5)) return [];
+    const ticks = ([0, 1] as const).filter(strand => !strandMissingAt(acid, strand, x)).map(strand => `M${round(x)} ${round(strandY(strand, x) - 10)}V${round(strandY(strand, x) + 10)}`);
+    return ticks.length ? [`<path class="mm-dna__junction" d="${ticks.join('')}" fill="none" stroke="var(--mm-muted)" stroke-width="1.5" stroke-linecap="round" opacity="${round(1 - (stretch.share ?? 0))}"/>`] : [];
+  }).join('') : '';
   return `<g class="mm-dna__back"><path d="${segments.back.join('')}"/></g>`
     + nascentPath('back')
     + `<path class="mm-dna__rungs" d="${rungs.join('')}"/>`
     + (damaged.length ? `<path class="mm-dna__rungs mm-dna__rungs--damaged" d="${damaged.join('')}"/>` : '')
     + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${segments.front.join('')}"/><path class="mm-dna__shine" d="${segments.front.join('')}"/></g>`
-    + nascentPath('front') + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts, continuing) : '');
+    + nascentPath('front') + closingMarkup + junctions + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts, continuing) : '');
 }
 
 /**

@@ -1,6 +1,6 @@
 # ADR 0002 — Drawing an excised interval
 
-- **Status:** accepted, ready for implementation. Decisions in §7. Nothing here is implemented yet.
+- **Status:** accepted and implemented. Decisions in §7; implementation notes in §9.
 - **Scope:** renderer and viewer only. No schema change, no core state change.
 - **Out of scope:** pairings and partner loops across a junction, and movement between compartments (the export of an mRNA). Neither is designed here.
 - **Context:** [RFC 0007](../rfcs/0007-initial-extent-and-excision.md) §13 (step 4), [ADR 0001](0001-nucleic-geometry-animation.md) (animation of nucleic geometry)
@@ -125,3 +125,12 @@ Not touched: the core, the schema, and `SvgScene` for molecules without `excised
 
 1. **A bubble across a junction** is stored as one interval per flank. With the map they are drawn adjacent, which reads as one bubble; whether the junction mark is shown inside it is undecided.
 2. **Should authors be able to keep the gap visible** (D1 b) for teaching figures that show where the intron was? That would be a presentation option, not state, and is not proposed.
+
+## 9. Implementation notes
+
+- **The map** is `packages/svg/src/coordinate-map.ts`. With no excised interval it returns the linear rule written as the renderer always wrote it, and every caller keeps its previous arithmetic on that path: a molecule without an excision is drawn digit for digit as before.
+- **A site carries its coordinate interval** in the scene (`SceneSite.at`). Transition geometry needs the coordinate of a break, and on a molecule with an excision a position no longer gives it back. This is what makes an inverse map unnecessary.
+- **A closing stretch is drawn as it was in the frame that has it**, narrower and with an opacity equal to its share, in a group of its own. Strand state inside it is not tweened: the other frame says nothing about nucleotides it does not have.
+- **The helix phase** follows the first site, as before. In a frame whose sites are moving it is interpolated between the two steps, so the helix does not jump when the first site moves or leaves.
+- **The junction mark** is styled inline. No stylesheet changes, so exported SVG of other documents is unchanged. In a frame it fades in as the stretch closes.
+- **The molecule ends inside the canvas**: both strands stop at the ends of its drawn extent, base pairs are not drawn beyond them, and polarity labels sit at the new ends.

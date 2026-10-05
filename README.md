@@ -128,7 +128,7 @@ Several copies of one molecule are declared with `copies: n` and addressed as `i
 
 Strands of two nucleic acids can base-pair. A top-level `alignments` list declares which ranges correspond, and `pair` / `unpair` change the pairing that actually exists; neither unwinds nor anneals a duplex ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md), schema v5).
 
-A nucleic acid may begin with only part of itself present: `initial.nucleic` takes the strand state of a snapshot (`missing`, `nascent`, `open`, `excised`), so a transcript can start as its first nucleotides and grow with `extend`. `excise-interval` removes an internal interval and makes its flanks covalent neighbours, as in splicing or a V(D)J coding joint. Coordinates are never renumbered, so sites and alignments keep their meaning ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md), schema v6). The viewer does not yet draw an excised interval.
+A nucleic acid may begin with only part of itself present: `initial.nucleic` takes the strand state of a snapshot (`missing`, `nascent`, `open`, `excised`), so a transcript can start as its first nucleotides and grow with `extend`. `excise-interval` removes an internal interval and makes its flanks covalent neighbours, as in splicing or a V(D)J coding joint. Coordinates are never renumbered, so sites and alignments keep their meaning ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md), schema v6). The viewer draws the molecule closed, with its flanks joined at a junction mark ([ADR 0002](docs/adr/0002-drawing-excision.md)).
 
 ## React
 
@@ -287,7 +287,8 @@ examples/     # complete mechanism definitions
 - [x] Nucleic-acid coordinates, strand polarity, resection, synthesis and unwinding ([RFC 0004](docs/rfcs/0004-nucleic-acid-geometry.md))
 - [x] Pairing between nucleic-acid molecules: strand invasion, displaced strands, synthesis on another molecule ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md))
 - [x] Nucleic acids that begin partial, and internal excision with resealing, in the core ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md))
-- [ ] Drawing an excised interval in the viewer
+- [x] Drawing an excised interval: the molecule closes about its centre, and the closure is animated ([ADR 0002](docs/adr/0002-drawing-excision.md))
+- [ ] Pairing loops across a junction, and visible movement between compartments
 - [ ] Strand exchange between molecules: nuclease resolution of junctions, crossovers, flaps
 - [x] Actor copies, interaction graph with interfaces, and footprint occupancy on nucleic acids ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md))
 - [x] Per-step references, key events, and summaries
