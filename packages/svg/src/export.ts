@@ -2,13 +2,31 @@ import { membraneSceneCss, molecularMotionCss, renderSvg, THEME_TOKENS, usesMemb
 import { actorRepeatedMarker, type SvgScene } from './scene';
 
 export interface ExportOptions extends Pick<RenderOptions, 'idPrefix' | 'compact'> {
-  /** Colours to resolve; the file never depends on the viewer's theme or OS preference. Default `light`. */
-  theme?: keyof typeof THEME_TOKENS;
+  /**
+   * Colours to resolve. `light` (default) and `dark` fix them, so a file never depends on the viewer's
+   * theme or OS preference. `auto` leaves them to the page the figure is inlined in: one copy serves
+   * both themes, following `[data-theme=dark]` or `.mm-theme-dark` on an ancestor, else the OS preference.
+   */
+  theme?: keyof typeof THEME_TOKENS | 'auto';
+  /**
+   * `false` leaves the stylesheet out of the figure. For several figures inlined in one page, which
+   * then includes `exportCss` once instead of a copy in each. Default `true`: a standalone file.
+   */
+  styles?: boolean;
   /** Fill behind the figure: `true` (default) uses the theme canvas colour, a string is any CSS colour, `false` is transparent. */
   background?: boolean | string;
   /** Pixel size relative to the viewBox (sets `width`/`height`). Default 1. */
   scale?: number;
 }
+
+/** What an exported figure adds to the stylesheet: its own size, and every animation frozen in its final state. */
+const EXPORT_RULES = 'svg.mm-svg.mm-export{width:auto;height:auto}\n.mm-export *{animation:none!important;transition:none!important}';
+
+/**
+ * The stylesheet of figures exported with `styles: false`, to be included once in the page that
+ * inlines them. It is what `exportSvg` embeds by default, without a fixed theme.
+ */
+export const exportCss = `${molecularMotionCss}\n${membraneSceneCss}\n${EXPORT_RULES}`;
 
 /** XML text escaping for the embedded stylesheet: valid for every SVG consumer, unlike CDATA in some. */
 const escapeText = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -61,15 +79,19 @@ export function exportSvg(scene: SvgScene, options: ExportOptions = {}): string 
   const markup = rendered.replace(/viewBox="[^"]+"/, `viewBox="${x} ${y} ${width} ${height}"`);
   const scale = options.scale ?? 1;
   const theme = options.theme ?? 'light';
+  const tokens = theme === 'auto' ? undefined : THEME_TOKENS[theme];
+  const embedded = options.styles ?? true;
   // Declared after the stylesheet and more specific than `.mm-svg`, so the chosen theme always wins.
-  const css = `${molecularMotionCss}${usesMembraneSceneCss(scene) ? `\n${membraneSceneCss}` : ''}\nsvg.mm-svg.mm-export{${THEME_TOKENS[theme]};width:auto;height:auto}`
-    + `\n.mm-export *{animation:none!important;transition:none!important}`;
+  const css = `${molecularMotionCss}${usesMembraneSceneCss(scene) ? `\n${membraneSceneCss}` : ''}\n`
+    + (tokens ? `svg.mm-svg.mm-export{${tokens};width:auto;height:auto}\n.mm-export *{animation:none!important;transition:none!important}` : EXPORT_RULES);
+  // Without its own stylesheet a fixed theme is carried on the element itself, where no page rule overrides it.
+  const pinned = tokens ? ` data-theme="${theme}"${embedded ? '' : ` style="${tokens}"`}` : '';
   const fill = options.background === false ? undefined : options.background === true || options.background === undefined ? 'var(--mm-canvas)' : options.background;
   const background = fill ? `<rect class="mm-export__background" x="${x}" y="${y}" width="${width}" height="${height}" fill="${escapeAttribute(fill)}"/>` : '';
   return '<?xml version="1.0" encoding="UTF-8"?>\n' + markup
-    .replace(/^<svg class="mm-svg/, `<svg width="${Math.round(width * scale)}" height="${Math.round(height * scale)}" data-theme="${theme}" class="mm-svg mm-export`)
+    .replace(/^<svg class="mm-svg/, `<svg width="${Math.round(width * scale)}" height="${Math.round(height * scale)}"${pinned} class="mm-svg mm-export`)
     // After <title>/<desc>, so they stay the first children for assistive technology.
-    .replace('</desc>', `</desc><style>${escapeText(css)}</style>${background}`);
+    .replace('</desc>', `</desc>${embedded ? `<style>${escapeText(css)}</style>` : ''}${background}`);
 }
 
 export interface PngOptions {

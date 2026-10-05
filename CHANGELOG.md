@@ -4,6 +4,14 @@ The three packages, `@molecular-motion/core`, `@molecular-motion/svg` and `@mole
 
 Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a minor release; documents written for an earlier one keep loading, migrated automatically.
 
+## 0.1.1
+
+Lighter pages for sites that inline figures. No change to the language or to how anything is drawn.
+
+- **`exportSvg` with `theme: 'auto'`** fixes no colours, so one inlined copy of a figure serves the light and the dark theme of the page. The default is unchanged: a standalone file with its theme resolved.
+- **`exportSvg` with `styles: false`** leaves the stylesheet out of the figure, and **`exportCss`** is that stylesheet, to be included once per page.
+- **`"sideEffects": false`** in the three packages. None of them does anything when imported, and bundlers can now drop what a page does not use without being told.
+
 ## 0.1.0
 
 The first release. It fixes `schemaVersion: 6` as the current language.

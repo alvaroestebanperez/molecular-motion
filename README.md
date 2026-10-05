@@ -243,6 +243,22 @@ const png = await exportPng(svg, { pixelRatio: 2 });   // Blob, browser only
 
 Pass `compact: true` for a thumbnail cropped to the action, and `background: false` for a transparent figure. The demo offers both downloads for the current step.
 
+### Figures inlined in a page
+
+A standalone file carries its own stylesheet and one fixed theme. A page that inlines many figures, in light and dark, would repeat both. Two options avoid that:
+
+```ts
+import { buildSvgScene, exportCss, exportSvg } from '@molecular-motion/svg';
+
+const figure = exportSvg(buildSvgScene(mechanism.at('filament')), { theme: 'auto', styles: false });
+// Once per page: <style>{exportCss}</style>
+```
+
+- `theme: 'auto'` fixes no colours. One copy of the figure follows the page: `data-theme="dark"` or the class `mm-theme-dark` on an ancestor, else the reader's OS preference.
+- `styles: false` leaves the stylesheet out of the figure. The page includes `exportCss` once.
+
+For the seven steps of the gene-expression example this takes the inlined SVG from 576 KB (two themes, a stylesheet in each) to about 208 KB. `theme: 'auto'` is for inlined figures: a file opened on its own, or used as an image, has no page to follow and is drawn light.
+
 ## Architecture
 
 ```text

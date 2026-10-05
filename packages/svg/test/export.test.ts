@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { compileMechanism, parseMechanism } from '@molecular-motion/core';
-import { buildSvgScene, exportPng, exportSvg, molecularMotionCss, renderSvg, THEME_TOKENS } from '../src';
+import { buildSvgScene, exportCss, exportPng, exportSvg, membraneSceneCss, molecularMotionCss, renderSvg, THEME_TOKENS } from '../src';
 
 const hr = compileMechanism(parseMechanism(readFileSync(resolve(process.cwd(), 'examples/homologous-recombination.yaml'), 'utf8')));
 const scene = buildSvgScene(hr.at('filament'));
@@ -77,6 +77,48 @@ describe('exportPng', () => {
     expect(revoke).toHaveBeenCalledOnce();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+});
+
+describe('exportSvg for figures inlined in a page', () => {
+  it('with theme auto fixes no colours: one copy follows the theme of the page', () => {
+    const file = exportSvg(scene, { theme: 'auto' });
+    expect(file).not.toMatch(/<svg[^>]*data-theme/);
+    expect(file).not.toContain('svg.mm-svg.mm-export{--mm-');
+    // The stylesheet it embeds still carries both themes and the rules that select between them.
+    expect(file).toContain(THEME_TOKENS.light);
+    expect(file).toContain(THEME_TOKENS.dark);
+    expect(file).toContain('svg.mm-svg.mm-export{width:auto;height:auto}');
+    expect(file).toContain('.mm-export *{animation:none!important;transition:none!important}');
+    expect(file).toContain('fill="var(--mm-canvas)"');
+  });
+
+  it('with styles false embeds no stylesheet, and is otherwise the same figure', () => {
+    const [bare, full] = [exportSvg(scene, { theme: 'auto', styles: false }), exportSvg(scene, { theme: 'auto' })];
+    expect(bare).not.toContain('<style>');
+    expect(bare).toBe(full.replace(/<style>.*?<\/style>/s, ''));
+    expect(full.length - bare.length).toBeGreaterThan(molecularMotionCss.length);
+  });
+
+  it('exportCss is the stylesheet those figures need, once per page', () => {
+    expect(exportCss).toContain(molecularMotionCss);
+    expect(exportCss).toContain(membraneSceneCss);
+    expect(exportCss).toContain('svg.mm-svg.mm-export{width:auto;height:auto}');
+    expect(exportCss).toContain('.mm-export *{animation:none!important;transition:none!important}');
+    expect(exportCss).not.toContain('svg.mm-svg.mm-export{--mm-');
+  });
+
+  it('a fixed theme without a stylesheet is carried on the element, where no page rule overrides it', () => {
+    const file = exportSvg(scene, { theme: 'dark', styles: false });
+    expect(file).toContain(`data-theme="dark" style="${THEME_TOKENS.dark}" class="mm-svg mm-export"`);
+    expect(file).not.toContain('<style>');
+  });
+
+  it('leaves the default export exactly as it was: a standalone file with its theme resolved', () => {
+    const file = exportSvg(scene);
+    expect(file).toContain('data-theme="light" class="mm-svg mm-export"');
+    expect(file).toContain(`svg.mm-svg.mm-export{${THEME_TOKENS.light};width:auto;height:auto}\n.mm-export *{animation:none!important;transition:none!important}</style>`);
+    expect(exportSvg(scene, { theme: 'light', styles: true })).toBe(file);
   });
 });
 

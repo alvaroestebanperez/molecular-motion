@@ -6,7 +6,7 @@ export { layoutReservation, mechanismReservation } from './layout-reservation';
 export type { LayoutReservation, ReservationOptions } from './layout-reservation';
 export type { FramePairing, FramePairingSegment, GeometryFrame } from './frame';
 export type { RenderOptions } from './render';
-export { exportPng, exportSvg } from './export';
+export { exportCss, exportPng, exportSvg } from './export';
 export type { ExportOptions, PngOptions } from './export';
 export {
   ACTION_ARROW_STROKE,
