@@ -22,4 +22,4 @@ snapshot.actors;                            // resolved state of every actor at 
 
 To draw a snapshot use [`@molecular-motion/svg`](https://www.npmjs.com/package/@molecular-motion/svg); for a player, [`@molecular-motion/react`](https://www.npmjs.com/package/@molecular-motion/react).
 
-The schema is not stable before `1.0`. See the [repository](https://github.com/alvaroestebanperez/molecular-motion) for the language, the examples and the design documents. MIT licensed.
+The schema is not stable before `1.0`. The document format is described in [the language](https://github.com/alvaroestebanperez/molecular-motion/blob/main/docs/language.md), and every action in [Actions](https://github.com/alvaroestebanperez/molecular-motion/blob/main/docs/actions.md). See the [repository](https://github.com/alvaroestebanperez/molecular-motion) for the examples and the design documents. MIT licensed.
