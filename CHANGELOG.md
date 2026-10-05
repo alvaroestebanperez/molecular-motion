@@ -4,6 +4,10 @@ The three packages, `@molecular-motion/core`, `@molecular-motion/svg` and `@mole
 
 Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a minor release; documents written for an earlier one keep loading, migrated automatically.
 
+## Unreleased
+
+- The JSON Schemas are published at `https://molecular-motion.alvaroesteban.dev/schema/v<n>.json`, and every schema names that address as its `$id`. The previous `$id` pointed to a domain that served nothing. `SCHEMA_BASE_URL` is exported from core.
+
 ## 0.2.0
 
 **Breaking: `parseMechanism` moves to `@molecular-motion/core/yaml`.**

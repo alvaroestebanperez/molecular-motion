@@ -15,7 +15,7 @@ export { ActionFailure, ActionRegistry, BASE_FIELDS, defineAlias, definePrimitiv
 export type { ActionDefinition, AliasDefinition, ApplyContext, FieldSpec, PrimitiveDefinition, ResolvedAction, ValidationContext } from './registry';
 export { ACTIVITIES, LESIONS, builtinActions, builtinRegistry } from './actions';
 export { COMPARTMENT_KINDS, STANDARD_COMPARTMENTS } from './compartments';
-export { toJsonSchema } from './schema';
+export { SCHEMA_BASE_URL, toJsonSchema } from './schema';
 export type * from './types';
 export {
   DEFAULT_NUCLEIC_LENGTH, excisedOf, extantIntervals, extantLength, isNucleicActor, lesionStrands, nucleicForm, nucleicLength, otherStrand, siteInterval,
