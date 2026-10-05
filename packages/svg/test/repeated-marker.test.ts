@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, exportSvg, renderSvg, MODIFICATION_VISUAL_PROFILES } from '../src';
 import { actorContactShape, actorRepeatedMarker } from '../src/scene';
 const profile = MODIFICATION_VISUAL_PROFILES.ubiquitination!;

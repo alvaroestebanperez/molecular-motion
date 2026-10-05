@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism, type Occupancy } from '@molecular-motion/core';
+import { compileMechanism, type Occupancy } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, firstContact, PROTEIN_MORPHOLOGIES, proteinGeometry, proteinOutlineWidth, renderSvg, type SvgScene } from '../src';
 import { actorContactShape, helixY, HELIX, strandMissingAt, type SceneNucleicAcid } from '../src/scene';
 import { outline, outlineDistance, penetration, type Placed } from './contact';

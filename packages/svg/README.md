@@ -7,7 +7,8 @@ npm install @molecular-motion/core @molecular-motion/svg
 ```
 
 ```ts
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, exportSvg, mechanismReservation } from '@molecular-motion/svg';
 
 const mechanism = compileMechanism(parseMechanism(yamlSource));

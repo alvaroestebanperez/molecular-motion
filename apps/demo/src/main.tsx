@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
-import { compileMechanism, MechanismValidationError, parseMechanism, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
+import { compileMechanism, MechanismValidationError, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, COMPOSED_COMPLEX_VISUAL, exportPng, exportSvg, mechanismReservation, type LayoutReservation, type ProteinActorVisuals } from '@molecular-motion/svg';
 import {
   MechanismStage, MolecularMechanism, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, VisualVocabulary, useMechanismPlayer, useMolecularMotionStyles,

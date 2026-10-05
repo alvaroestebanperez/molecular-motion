@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  builtinRegistry, compileMechanism, defineAlias, definePrimitive, field, MechanismValidationError, parseMechanism, primaryPartner,
+  builtinRegistry, compileMechanism, defineAlias, definePrimitive, field, MechanismValidationError, primaryPartner,
 } from '../src';
+import { parseMechanism } from '../src/yaml';
 
 const yaml = `
 schemaVersion: 2

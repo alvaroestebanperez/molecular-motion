@@ -49,11 +49,14 @@ npm install @molecular-motion/core @molecular-motion/react   # the React player
 
 The packages are ES modules and need Node.js 20 or newer. `@molecular-motion/react` needs React 18 or newer. The three are versioned together; see the [changelog](CHANGELOG.md).
 
+`parseMechanism` reads YAML and lives in its own entry, `@molecular-motion/core/yaml`, the only one that loads a YAML parser. A page that gets its mechanisms already parsed, as JSON or from a build step, imports only `@molecular-motion/core` and hands the document to `compileMechanism` or `validateMechanism`.
+
 Without React, a compiled step becomes a standalone SVG in a few lines, in Node or in a browser:
 
 ```ts
 import { readFileSync, writeFileSync } from 'node:fs';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, exportSvg, mechanismReservation } from '@molecular-motion/svg';
 
 const mechanism = compileMechanism(parseMechanism(readFileSync('mechanism.yaml', 'utf8')));
@@ -159,7 +162,7 @@ A nucleic acid may begin with only part of itself present: `initial.nucleic` tak
 ## React
 
 ```tsx
-import { parseMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { MolecularMechanism } from '@molecular-motion/react';
 import source from './parp1.yaml?raw';
 
@@ -224,7 +227,8 @@ Each step can carry a `summary`, a `description`, ordered `keyEvents`, and `refe
 JSON definitions can be passed directly. YAML is parsed once into the same typed definition:
 
 ```ts
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 
 const mechanism = compileMechanism(parseMechanism(yaml));
 const state = mechanism.at('recruitment');

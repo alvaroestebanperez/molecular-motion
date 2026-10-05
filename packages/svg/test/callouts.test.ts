@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, COMPOSED_COMPLEX_VISUAL, renderSvg, type SvgScene } from '../src';
 import { actorContactShape, actorParticles, CALLOUT_COST, HELIX, labelBox, labelGeometry, labelLeader } from '../src/scene';
 import { firstAppearances, upcomingActors } from '../../react/src/player';

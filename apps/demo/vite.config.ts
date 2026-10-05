@@ -9,6 +9,8 @@ export default defineConfig({
   // Use package sources directly so the demo never runs against stale builds.
   resolve: {
     alias: {
+      // The more specific entry first: an alias matches by prefix.
+      '@molecular-motion/core/yaml': source('core/src/yaml.ts'),
       '@molecular-motion/core': source('core/src/index.ts'),
       '@molecular-motion/svg': source('svg/src/index.ts'),
       '@molecular-motion/react': source('react/src/index.tsx'),

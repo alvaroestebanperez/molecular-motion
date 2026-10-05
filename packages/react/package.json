@@ -1,6 +1,6 @@
 {
   "name": "@molecular-motion/react",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "React player for declarative molecular mechanisms.",
   "keywords": [
     "biology",
@@ -36,8 +36,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@molecular-motion/core": "^0.1.1",
-    "@molecular-motion/svg": "^0.1.1"
+    "@molecular-motion/core": "^0.2.0",
+    "@molecular-motion/svg": "^0.2.0"
   },
   "peerDependencies": {
     "react": ">=18"

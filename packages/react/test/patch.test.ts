@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, molecularMotionCss, renderSvg } from '@molecular-motion/svg';
 import { patchSvg } from '../src/patch';
 import { firstAppearances, upcomingActors } from '../src/player';

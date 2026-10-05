@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, migrateV1, migrateV2, parseMechanism } from '../src';
+import { compileMechanism, migrateV1, migrateV2 } from '../src';
+import { parseMechanism } from '../src/yaml';
 import { MECHANISMS, projectToV1, readGolden, readV1Fixture } from './helpers';
 
 describe('v1 → v2 migration', () => {

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import {
   MOLECULAR_VOCABULARY, PROTEIN_MORPHOLOGIES, buildSvgScene, proteinAnchors, proteinGeometry, proteinMorphology, proteinOutlineWidth,
   renderProteinPrimitive, renderProteinSurface, renderSvg, renderVocabularyGlyph,

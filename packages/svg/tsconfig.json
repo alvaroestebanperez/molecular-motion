@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.json",
   "include": ["src", "test"],
-  "compilerOptions": { "paths": { "@molecular-motion/core": ["../core/src/index.ts"] } }
+  "compilerOptions": { "paths": { "@molecular-motion/core": ["../core/src/index.ts"], "@molecular-motion/core/yaml": ["../core/src/yaml.ts"] } }
 }

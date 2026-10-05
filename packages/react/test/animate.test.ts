@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, geometryFrame, interpolateGeometry, renderSvg, type GeometryFrame } from '@molecular-motion/svg';
 import { animateGeometry, applyGeometryFrame, cubicBezier, motionTiming, NUCLEIC_LAYERS } from '../src/animate';
 import { patchSvg } from '../src/patch';

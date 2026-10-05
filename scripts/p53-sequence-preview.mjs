@@ -1,7 +1,8 @@
 // Build the packages first. Renders every step of the p53–MDM2 example with the demo's presentation choices.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { compileMechanism, parseMechanism } from '../packages/core/dist/index.js';
+import { compileMechanism } from '../packages/core/dist/index.js';
+import { parseMechanism } from '../packages/core/dist/yaml.js';
 import { buildSvgScene, exportSvg, COMPOSED_COMPLEX_VISUAL } from '../packages/svg/dist/index.js';
 
 const dest = new URL('../artifacts/p53-mdm2-sequence/', import.meta.url);

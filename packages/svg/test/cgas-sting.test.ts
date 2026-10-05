@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compileMechanism, parseMechanism } from '@molecular-motion/core';
+import { compileMechanism } from '@molecular-motion/core';
+import { parseMechanism } from '@molecular-motion/core/yaml';
 import { buildSvgScene, renderSvg, type SvgScene } from '../src';
 import { actorContactShape, areaLabels } from '../src/scene';
 import { insideParticle } from '../src/primitives/protein-geometry';

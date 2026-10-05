@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { actorInstances, compileMechanism, instanceDefinition, migrateV3, parseMechanism, primaryPartner, type ActionNode } from '../src';
+import { actorInstances, compileMechanism, instanceDefinition, migrateV3, primaryPartner, type ActionNode } from '../src';
+import { parseMechanism } from '../src/yaml';
 
 const doc = (actors: Record<string, unknown>[], actions: ActionNode[] = []) => ({
   schemaVersion: 4, mechanism: { id: 'x', name: 'X' },
