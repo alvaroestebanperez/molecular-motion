@@ -1,7 +1,7 @@
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { compileMechanism, MechanismValidationError, parseMechanism, type MechanismDefinition, type MechanismSnapshot } from '@molecular-motion/core';
-import { buildSvgScene, COMPOSED_COMPLEX_VISUAL, exportPng, exportSvg, type ProteinActorVisuals } from '@molecular-motion/svg';
+import { buildSvgScene, COMPOSED_COMPLEX_VISUAL, exportPng, exportSvg, mechanismReservation, type LayoutReservation, type ProteinActorVisuals } from '@molecular-motion/svg';
 import {
   MechanismStage, MolecularMechanism, PlaybackControls, StepDetails, StepThumbnails, StepTimeline, VisualVocabulary, useMechanismPlayer, useMolecularMotionStyles,
 } from '@molecular-motion/react';
@@ -188,11 +188,11 @@ function download(blob: Blob, name: string) {
 }
 
 /** Static figure of the current step, in the theme the reader is looking at (no out-of-focus actors). */
-function ExportButtons({ snapshot, proteinVisuals }: { snapshot: MechanismSnapshot; proteinVisuals?: ProteinActorVisuals }) {
+function ExportButtons({ snapshot, proteinVisuals, reservation }: { snapshot: MechanismSnapshot; proteinVisuals?: ProteinActorVisuals; reservation?: LayoutReservation }) {
   const [busy, setBusy] = useState(false);
   const file = () => {
     const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-    return { svg: exportSvg(buildSvgScene(snapshot, { proteinVisuals }), { theme }), name: `${snapshot.definition.mechanism.id}-${snapshot.step.id}` };
+    return { svg: exportSvg(buildSvgScene(snapshot, { proteinVisuals, reservation }), { theme }), name: `${snapshot.definition.mechanism.id}-${snapshot.step.id}` };
   };
   const png = async () => {
     setBusy(true);
@@ -212,6 +212,8 @@ function MechanismPage({ example }: { example: Example }) {
   const stageRef = useRef<HTMLElement>(null);
   const fullscreen = useFullscreen(stageRef);
   const { snapshot } = player;
+  // The exported figure uses the bands the viewer shows: lanes reserved across the whole mechanism.
+  const reservation = useMemo(() => mechanismReservation(player.mechanism), [player.mechanism]);
 
   useEffect(() => { setSelectedActor(null); }, [player.stepIndex]);
   useEffect(() => { document.title = `${example.definition.mechanism.name} · Molecular Motion`; }, [example]);
@@ -232,7 +234,7 @@ function MechanismPage({ example }: { example: Example }) {
         <p>Step {player.stepIndex + 1}/{player.length}</p>
         <h2>{snapshot.step.title}</h2>
         {snapshot.step.summary && <span>{snapshot.step.summary}</span>}
-        <ExportButtons snapshot={snapshot} proteinVisuals={example.proteinVisuals} />
+        <ExportButtons snapshot={snapshot} proteinVisuals={example.proteinVisuals} reservation={reservation} />
       </header>
       <MechanismStage
         className="viewer__canvas"

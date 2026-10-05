@@ -1,6 +1,6 @@
 import { useEffect, useId, useInsertionEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { CompiledMechanism } from '@molecular-motion/core';
-import { buildSvgScene, geometryFrame, membraneSceneCss, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame, type ProteinActorVisuals } from '@molecular-motion/svg';
+import { buildSvgScene, geometryFrame, mechanismReservation, membraneSceneCss, molecularMotionCss, nucleicLayerMarkup, renderSvg, type GeometryFrame, type ProteinActorVisuals } from '@molecular-motion/svg';
 import { animateGeometry, motionTiming, NUCLEIC_LAYERS, type GeometryAnimation } from './animate';
 import { patchSvg } from './patch';
 import { uiCss } from './styles';
@@ -64,7 +64,9 @@ export function MechanismStage({ mechanism, stepIndex, ghosts, proteinVisuals, s
   }, []);
 
   const canvas = canvasFor(room);
-  const scene = useMemo(() => buildSvgScene(mechanism.at(stepIndex), { width: canvas.width, height: canvas.height, ghosts, proteinVisuals }), [mechanism, stepIndex, ghosts, proteinVisuals, canvas.width, canvas.height]);
+  // Lanes reserved from every resolved snapshot, so bands stay where they are from step to step (ADR 0003 §4.2).
+  const reservation = useMemo(() => mechanismReservation(mechanism), [mechanism]);
+  const scene = useMemo(() => buildSvgScene(mechanism.at(stepIndex), { width: canvas.width, height: canvas.height, ghosts, proteinVisuals, reservation }), [mechanism, stepIndex, ghosts, proteinVisuals, reservation, canvas.width, canvas.height]);
   const markup = useMemo(() => renderSvg(scene, { idPrefix, selectedActor, groupIdenticalCopies: true }), [scene, idPrefix, selectedActor]);
 
   // The geometry on screen, and the transition drawing it if one is running (ADR 0001). Everything but
@@ -137,7 +139,7 @@ export function MechanismThumbnail({ mechanism, stepIndex, proteinVisuals }: Mec
   useMolecularMotionStyles();
   const idPrefix = `mmt${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const markup = useMemo(
-    () => renderSvg(buildSvgScene(mechanism.at(stepIndex), { proteinVisuals }), { idPrefix, compact: true }),
+    () => renderSvg(buildSvgScene(mechanism.at(stepIndex), { proteinVisuals, reservation: mechanismReservation(mechanism) }), { idPrefix, compact: true }),
     [mechanism, stepIndex, proteinVisuals, idPrefix],
   );
   return <div className="mm-thumbnail__art" aria-hidden="true" dangerouslySetInnerHTML={{ __html: markup }} />;

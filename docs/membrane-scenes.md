@@ -47,6 +47,8 @@ The membrane's name is written where no spanning actor stands: left above the bi
 
 A compartment can be drawn as a delimited, labelled region with no membrane of its own (`scene.regions`). A compartment of kind `nucleus` gets one when the document also declares another compartment beside it, so that `translocate` between the two is a visible change of place. A document whose only such compartment is the nucleus has no region: the whole canvas is the nucleus, as before.
 
+Since [ADR 0003](adr/0003-compartment-aware-layout.md) every actor is drawn in the band of its resolved compartment, nucleic acids included: a band keeps a lane for each DNA or RNA that is ever in it, reserved from the resolved snapshots of the mechanism and never from its actions.
+
 The region is a band across the bottom with a shallow boundary and its name inside. It has no envelope, pores or inner structure, and it comes from the compartment's existing `kind`: nothing is added to the schema. Free actors in that compartment wait inside it, and so do upcoming ones.
 
 ## Stacking

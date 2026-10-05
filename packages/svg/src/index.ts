@@ -1,7 +1,9 @@
 export { buildSvgScene, chainReach, defaultColor, HELIX, PAIRING, pairingGeometry } from './scene';
-export type { PairingGeometry, SceneActor, SceneFootprint, SceneConnection, SceneLesion, SceneNucleicAcid, SceneOptions, ScenePairing, ScenePairingSegment, SceneSite, SceneStrandSpan, SvgScene } from './scene';
+export type { PairingGeometry, SceneActor, SceneCompartmentConflict, SceneFootprint, SceneConnection, SceneLesion, SceneNucleicAcid, SceneOptions, ScenePairing, ScenePairingSegment, SceneSite, SceneStrandSpan, SvgScene } from './scene';
 export { describeScene, LESION_LABELS, membraneSceneCss, mix, molecularMotionCss, nucleicLayerMarkup, renderSvg, THEME_TOKENS } from './render';
 export { geometryFrame, interpolateGeometry } from './frame';
+export { layoutReservation, mechanismReservation } from './layout-reservation';
+export type { LayoutReservation, ReservationOptions } from './layout-reservation';
 export type { FramePairing, FramePairingSegment, GeometryFrame } from './frame';
 export type { RenderOptions } from './render';
 export { exportPng, exportSvg } from './export';
