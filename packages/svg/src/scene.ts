@@ -70,15 +70,42 @@ export interface ScenePairing { key: string; segments: ScenePairingSegment[] }
  * the compartment gives the geometry, and actors in it are then placed on that geometry.
  */
 export interface SceneMembrane {
-  /** Compartment id. */
+  /** Id and label of the membrane compartment the scene is at: the one its spanning actors are in. */
   id: string;
   label: string;
   /** Midplane of the bilayer; it runs the width of the canvas. The outer leaflet faces up. */
   y: number;
+  /** Where the membrane's name is written, when its usual place (left, above the bilayer) is taken by a spanning actor. */
+  labelAt?: 'right' | 'top';
   /** The compartments on each side, when the document declares them. */
   outside?: { id: string; label: string };
   inside?: { id: string; label: string };
 }
+/**
+ * A compartment drawn as a delimited, labelled region of the canvas, with no membrane of its own. A
+ * nucleus gets one when the document also declares another compartment beside it, so that moving an
+ * actor between the two is a visible change of place. A document with a single such compartment has none.
+ */
+export interface SceneRegion { id: string; label: string; kind: string; y: number; height: number }
+/** A name written on the canvas for a membrane, a side of it or a region. `box` is what a callout must stay off. */
+export interface SceneAreaLabel { text: string; x: number; y: number; role: 'outside' | 'membrane' | 'inside' | 'region'; box: [number, number, number, number] }
+/**
+ * Where the names of the membrane, its sides and the regions are written. The layout keeps callouts off
+ * them and the renderer writes them here, so the two cannot disagree.
+ */
+export function areaLabels(scene: Pick<SvgScene, 'membranes' | 'regions' | 'height' | 'width'>): SceneAreaLabel[] {
+  const wide = (text: string) => text.length * 8.2 + 8;
+  const at = (text: string | undefined, y: number, role: SceneAreaLabel['role'], right = false): SceneAreaLabel[] => text
+    ? [{ text, x: right ? Math.round(scene.width - 14 - wide(text) + 8) : 14, y, role, box: right ? [scene.width - 18 - wide(text), y - 13, scene.width - 10, y + 5] : [10, y - 13, 10 + wide(text), y + 5] }] : [];
+  const [membrane] = scene.membranes;
+  // The inner side is named at the bottom of the canvas, or just under the bilayer when a region takes the bottom.
+  const floor = membrane && scene.regions.length ? membrane.y + 52 : scene.height - 14;
+  return [
+    ...(membrane ? [...at(membrane.outside?.label, 24, 'outside'), ...at(membrane.label, membrane.labelAt === 'top' ? 18 : membrane.y - 32, 'membrane', membrane.labelAt === 'right'), ...at(membrane.inside?.label, floor, 'inside')] : []),
+    ...scene.regions.flatMap(region => at(region.label, scene.height - 14, 'region')),
+  ];
+}
+
 /** A small modification marker adhered to its carrier's surface, in the carrier's local coordinates. */
 export interface SceneTag { id: string; x: number; y: number; r: number; fill: string; label: string; site?: string }
 export type MembraneSide = 'outside' | 'inside';
@@ -186,8 +213,10 @@ export interface SvgScene {
   pairings: ScenePairing[];
   /** Occupancies held away from where their instance is drawn; empty for most documents. */
   footprints: SceneFootprint[];
-  /** Membranes of the scene, one per compartment of kind `membrane`; empty for most documents. */
+  /** The membrane of the scene, when the document declares a compartment of kind `membrane`; empty for most documents. */
   membranes: SceneMembrane[];
+  /** Compartments drawn as delimited regions; empty for most documents. */
+  regions: SceneRegion[];
   /**
    * Callouts the layout could not place clear of everything, with the cost of the place it settled for
    * (`CALLOUT_COST`). Empty when every callout is clear. A record for review and tests; nothing is drawn from it.
@@ -471,6 +500,11 @@ const PALETTE = ['#8b78d0', '#5aa9a0', '#d5839a', '#dca064', '#7c9cc4', '#8fae86
 const CHAIN_ANGLE = -0.45;
 /** Half the height a bilayer takes on the canvas, heads included: what a callout must stay off. */
 const MEMBRANE_HALF = 24;
+/** How far a spanning actor of the usual size reaches from the midplane on each side, with a little air. */
+const SPAN_REACH = 74;
+/** Room kept above a nucleic acid for what rests on it, and the least height of a region that holds actors. */
+const OCCUPANT_ROOM = 118;
+const REGION_MIN = 150;
 /** Docking directions for actors bound to another actor, in radians (SVG y grows downwards). */
 const SLOTS = [-0.08, -2.2, -0.95, -3.05, 0.75];
 const MOLECULE_SLOTS = [2.95, -2.6, 0.35];
@@ -722,7 +756,23 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const acidViews = shown.filter(definition => isNucleic(definition.type));
   // One molecule keeps its place near the bottom. Several are stacked in declaration order, with room
   // between them for strands that pair across (RFC 0006 §10); the renderer gives them no roles.
-  const stack = acidViews.length > 1 ? { top: height * .56, gap: Math.min(150, height * .34 / (acidViews.length - 1)) } : { top: height * .74, gap: 120 };
+  // ---- Vertical organisation, from what the document declares (never from who is on screen) ----
+  // A membrane alone sits in the middle. When the document also has a nucleic acid or a region below,
+  // the membrane moves up and everything stacks under it, each in its own stretch: the spanning
+  // actors' inner domains, then the nucleic acid with room for what rests on it, then the region.
+  const declared = snapshot.definition.compartments;
+  const membraneDeclared = declared.some(compartment => compartment.kind === 'membrane');
+  const beside = declared.some(compartment => !['membrane', 'extracellular', 'nucleus'].includes(compartment.kind));
+  const nucleus = beside ? declared.find(compartment => compartment.kind === 'nucleus') : undefined;
+  const nucleicDeclared = snapshot.definition.actors.some(actor => isNucleic(actor.type));
+  const stacked = membraneDeclared && (nucleicDeclared || Boolean(nucleus));
+  // A taller canvas gives the room above the membrane to its name and to the callouts of what spans it.
+  const membraneY = stacked ? SPAN_REACH + 26 + Math.max(0, Math.round((height - 540) / 2)) : Math.round(height * .5);
+  const stackedAcidY = membraneY + SPAN_REACH + 10 + OCCUPANT_ROOM + HELIX.amplitude + HELIX.tube / 2;
+  const regionTop = !nucleus ? height : stacked && nucleicDeclared ? Math.min(height - REGION_MIN, Math.round(stackedAcidY + HELIX.amplitude + HELIX.tube / 2 + 16)) : height - Math.max(REGION_MIN, Math.round(height * .3));
+  const regions: SceneRegion[] = nucleus ? [{ id: nucleus.id, label: nucleus.label ?? nucleus.id, kind: nucleus.kind, y: regionTop, height: height - regionTop }] : [];
+  const region = regions[0];
+  const stack = stacked && acidViews.length === 1 ? { top: stackedAcidY, gap: 120 } : acidViews.length > 1 ? { top: height * .56, gap: Math.min(150, height * .34 / (acidViews.length - 1)) } : { top: height * .74, gap: 120 };
   const nucleicAcids = acidViews.map((definition, index): SceneNucleicAcid => {
     const y = definition.position?.y ?? stack.top + index * stack.gap;
     const length = nucleicLength(definition);
@@ -801,10 +851,16 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // The compartments on its two sides, and the actors in it, are then placed on that geometry.
   const compartmentOf = new Map(snapshot.definition.compartments.map(compartment => [compartment.id, compartment]));
   const regionLabel = (kind: string) => { const region = snapshot.definition.compartments.find(compartment => compartment.kind === kind); return region && { id: region.id, label: region.label ?? region.id }; };
-  const membranes: SceneMembrane[] = snapshot.definition.compartments.filter(compartment => compartment.kind === 'membrane').slice(0, 1).map(compartment => {
-    const [outside, inside] = [regionLabel('extracellular'), snapshot.definition.compartments.map(other => other.kind).filter(kind => kind !== 'membrane' && kind !== 'extracellular').map(regionLabel)[0]];
-    return { id: compartment.id, label: compartment.label ?? compartment.id, y: Math.round(height * .5), ...(outside && { outside }), ...(inside && { inside }) };
-  });
+  // One bilayer. With several membrane compartments it stands for the one the scene is at, the one its
+  // present spanning actors are in: when they move to another, the same bilayer is relabelled. That is
+  // a change of context, not a journey between two organelles.
+  const membraneCompartments = declared.filter(compartment => compartment.kind === 'membrane');
+  const occupied = membraneCompartments.find(compartment => snapshot.definition.actors.some(actor => (actor.type === 'protein' || actor.type === 'complex')
+    && Object.values(snapshot.actors).some(state => state.present && state.visible && state.compartment === compartment.id && (state.id === actor.id || state.id.startsWith(`${actor.id}#`))))) ?? membraneCompartments[0];
+  const membranes: SceneMembrane[] = occupied ? [occupied].map(compartment => {
+    const [outside, inside] = [regionLabel('extracellular'), declared.map(other => other.kind).filter(kind => kind !== 'membrane' && kind !== 'extracellular').map(regionLabel)[0]];
+    return { id: compartment.id, label: compartment.label ?? compartment.id, y: membraneY, ...(outside && { outside }), ...(inside && { inside }) };
+  }) : [];
   const membrane = membranes[0];
   /** Which side of the membrane a compartment lies on; undefined for the membrane itself or without one. */
   const sideOfCompartment = (id: string | undefined): MembraneSide | undefined => {
@@ -1014,18 +1070,39 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // Above the DNA when there is one; with no nucleic acid the assemblies get the middle of the canvas,
   // so partners docked above them stay on screen.
   const freeRowY = nucleicAcids.length ? height * .26 : height * .5;
-  const freeDefinitions = [...new Set(free.map(definition => definition.visual))];
   const slotsOf = (visual: string) => snapshot.definition.actors.find(actor => actor.id === visual)!.copies ?? 1;
-  const slotCount = freeDefinitions.reduce((sum, visual) => sum + slotsOf(visual), 0);
+  // With a membrane each band has its own row of slots: an actor that spans the membrane does not move
+  // aside because a soluble one became free below it.
+  const rowOf = (definition: InstanceView) => !membrane ? '' : membraneOf(definition) ? 'membrane'
+    : region && compartmentOf.get(snapshot.actors[definition.id]?.compartment ?? '')?.kind === region.kind ? 'region' : sideOfCompartment(snapshot.actors[definition.id]?.compartment) ?? 'inside';
   free.forEach(definition => {
+    const freeDefinitions = [...new Set(free.filter(other => rowOf(other) === rowOf(definition)).map(other => other.visual))];
+    const slotCount = freeDefinitions.reduce((sum, visual) => sum + slotsOf(visual), 0);
     const block = freeDefinitions.slice(0, freeDefinitions.indexOf(definition.visual)).reduce((sum, visual) => sum + slotsOf(visual), 0);
     const copy = definition.id === definition.visual ? 0 : Number(definition.id.slice(definition.visual.length + 1)) - 1;
     const slot = block + copy;
     const x = slotCount === 1 ? width * .5 : width * (.22 + .56 * slot / (slotCount - 1));
     // With a membrane, a free actor waits in the band of its own compartment; one that spans it sits on it.
     const side = sideOfCompartment(snapshot.actors[definition.id]?.compartment);
-    const y = !membrane ? freeRowY : membraneOf(definition) ? membrane.y : side === 'outside' ? Math.round(membrane.y * .36) : Math.round(membrane.y + (height - membrane.y) * .62);
-    placed.set(definition.id, make(definition, definition.position ?? { x, y }, -1));
+    const inRegion = region && compartmentOf.get(snapshot.actors[definition.id]?.compartment ?? '')?.kind === region.kind;
+    let y = !membrane ? freeRowY : membraneOf(definition) ? membrane.y : side === 'outside' ? Math.round(membrane.y * .36) : Math.round(membrane.y + (height - membrane.y) * .62);
+    if (inRegion) y = Math.round(region.y + region.height * .52);
+    else if (stacked && membrane && !membraneOf(definition) && side !== 'outside') {
+      // Between the inner domains and whatever closes the stretch below: a nucleic acid on screen, else the region.
+      const floor = nucleicAcids.length ? Math.min(...nucleicAcids.map(acid => acid.y)) - HELIX.amplitude - HELIX.tube / 2 : region?.y ?? height;
+      y = Math.round((membrane.y + SPAN_REACH + floor) / 2);
+    }
+    const actor = make(definition, definition.position ?? { x, y }, -1);
+    if (!definition.position && (stacked || inRegion) && !membraneOf(definition)) {
+      // Its slot may be taken by something that rests on the nucleic acid or hangs from the membrane:
+      // the nearest place along the row that is clear of every body already there.
+      // Clear with room to spare, so the callouts of both still have somewhere to go.
+      const clear = (at: number) => [...placed.values()].every(other => other.ghost || ![[0, 0], [-36, 0], [36, 0], [0, -36]].some(([dx, dy]) => bodiesOverlap(actor, at + dx!, y + dy!, other)));
+      const reach = Math.max(...extentX(actor).map(Math.abs));
+      const steps = Array.from({ length: 40 }, (_, index) => (index % 2 ? 1 : -1) * Math.ceil(index / 2) * 24).map(shift => x + shift).filter(at => at - reach >= CANVAS_MARGIN && at + reach <= width - CANVAS_MARGIN);
+      actor.x = steps.find(clear) ?? x;
+    }
+    placed.set(definition.id, actor);
   });
 
   // 3. Actors bound to other actors dock against their partner (body or chain) by first contact along a
@@ -1060,34 +1137,67 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     if (spanOf(partner.id)) angle = -Math.PI / 2;
     // Docking that the scene can place exactly: at the anchor of the site the actor binds, or, on a
     // membrane-spanning partner, on the side the actor's own compartment lies on (beside it when both span).
-    const boundSite = attachedTo(definition.id)?.split('.')[1];
-    const declaredSite = boundSite && !isNucleic(partner.type) && partnerDefinition.sites?.some(site => site.id === boundSite) ? boundSite : undefined;
-    let docking: { origin?: Point; angle: number } | undefined;
-    if (declaredSite) {
-      const anchor = siteAnchor(partner, declaredSite, siteSide(partnerDefinition.visual, declaredSite));
-      docking = { origin: anchor, angle: anchor.angle };
-    } else if (partner.membrane && membraneOf(definition)) {
-      docking = { angle: siblings.filter(item => membraneOf(item)).indexOf(definition) % 2 === 0 ? 0 : Math.PI };
-    } else if (partner.membrane) {
-      const side = sideOfCompartment(snapshot.actors[definition.id]?.compartment);
-      if (side) docking = { origin: spanningGeometry(partner.actor, partner.radius).attach[side].point, angle: side === 'outside' ? -Math.PI / 2 : Math.PI / 2 };
-    }
+    type Docking = { origin?: Point; angle: number; lateral?: true };
+    const dockingOn = (onto: SceneActor, ontoDefinition: InstanceView, reference: string | undefined): Docking | undefined => {
+      const boundSite = reference?.split('.')[1];
+      if (boundSite && !isNucleic(onto.type) && ontoDefinition.sites?.some(site => site.id === boundSite)) {
+        const anchor = siteAnchor(onto, boundSite, siteSide(ontoDefinition.visual, boundSite));
+        return { origin: anchor, angle: anchor.angle };
+      }
+      if (onto.membrane && membraneOf(definition)) return { angle: (children.get(onto.id) ?? []).filter(item => membraneOf(item)).indexOf(definition) % 2 <= 0 ? 0 : Math.PI, lateral: true };
+      if (onto.membrane) {
+        const side = sideOfCompartment(snapshot.actors[definition.id]?.compartment);
+        if (side) return { origin: spanningGeometry(onto.actor, onto.radius).attach[side].point, angle: side === 'outside' ? -Math.PI / 2 : Math.PI / 2 };
+      }
+      return undefined;
+    };
+    const docking = dockingOn(partner, partnerDefinition, attachedTo(definition.id));
     if (docking) angle = docking.angle;
     const actor = make(definition, { x: partner.x, y: partner.y }, Math.cos(angle) >= 0 ? 1 : -1);
     if (definition.position) Object.assign(actor, { x: definition.position.x, y: definition.position.y });
     else if (docking) {
-      const at = (direction: number) => firstContact(actorContactShape(partner), actorContactShape(actor), { x: Math.cos(direction), y: Math.sin(direction) }, docking!.origin && { origin: docking!.origin });
-      // It stays on its side of the anchor, but leans away from a body already there (a neighbour's partner).
-      let fit = at(angle);
-      for (let step = 0; step < 8; step++) {
-        const blocking = [...placed.values()].find(other => other !== partner && !other.ghost && bodiesOverlap(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, other));
-        if (!blocking) break;
-        angle += (blocking.x >= partner.x + fit.offset.x ? -1 : 1) * Math.sign(Math.sin(docking.angle) || -1) * -.12;
-        fit = at(angle);
+      const fitOn = (onto: SceneActor, dock: Docking, direction = dock.angle) => firstContact(actorContactShape(onto), actorContactShape(actor), { x: Math.cos(direction), y: Math.sin(direction) }, dock.origin && { origin: dock.origin });
+      let fit = fitOn(partner, docking);
+      if (docking.lateral) {
+        // Two actors that span the membrane meet along it and stay on its plane: nothing tilts or lifts them.
+        actor.x = Math.round((partner.x + fit.offset.x) * 10) / 10;
+        actor.y = partner.y;
+      } else {
+        // It stays on its side of the anchor, but leans away from a body already there (a neighbour's partner).
+        for (let step = 0; step < 8; step++) {
+          const blocking = [...placed.values()].find(other => other !== partner && !other.ghost && bodiesOverlap(actor, partner.x + fit.offset.x, partner.y + fit.offset.y, other));
+          if (!blocking) break;
+          angle += (blocking.x >= partner.x + fit.offset.x ? -1 : 1) * Math.sign(Math.sin(docking.angle) || -1) * -.12;
+          fit = fitOn(partner, docking, angle);
+        }
+        actor.x = Math.round((partner.x + fit.offset.x) * 10) / 10;
+        actor.y = Math.round((partner.y + fit.offset.y) * 10) / 10;
       }
-      actor.x = Math.round((partner.x + fit.offset.x) * 10) / 10;
-      actor.y = Math.round((partner.y + fit.offset.y) * 10) / 10;
       contacts.set(actor.id, { x: Math.round((partner.x + fit.point.x) * 10) / 10, y: Math.round((partner.y + fit.point.y) * 10) / 10 });
+      // Bound to several partners at once: where it would touch each one gives a contact point, and its
+      // body is brought against all of them from the centre of those points. No partner is special.
+      const others = docking.lateral ? [] : Object.values(snapshot.interactions).flatMap(edge => {
+        const [a, b] = edge.ends;
+        const end = a.instance === definition.id ? b : b.instance === definition.id ? a : undefined;
+        return end && end.instance !== partner.id ? [end] : [];
+      }).flatMap(end => {
+        const otherDefinition = byId.get(end.instance);
+        if (!otherDefinition || resolving.has(otherDefinition.id)) return [];
+        const other = place(otherDefinition);
+        const dock = other.ghost ? undefined : dockingOn(other, otherDefinition, end.site ? `${end.instance}.${end.site}` : end.instance);
+        return dock && !dock.lateral ? [{ onto: other, dock }] : [];
+      });
+      if (others.length) {
+        const all = [{ onto: partner, dock: docking }, ...others];
+        const touches = all.map(({ onto, dock }) => { const touch = fitOn(onto, dock); return { x: onto.x + touch.point.x, y: onto.y + touch.point.y }; });
+        const centre = { x: touches.reduce((sum, point) => sum + point.x, 0) / touches.length, y: touches.reduce((sum, point) => sum + point.y, 0) / touches.length };
+        const heading = Math.atan2(all.reduce((sum, item) => sum + Math.sin(item.dock.angle), 0), all.reduce((sum, item) => sum + Math.cos(item.dock.angle), 0));
+        const together = { particles: all.flatMap(({ onto }) => actorContactShape(onto).particles.map(particle => ({ ...particle, x: particle.x + onto.x - partner.x, y: particle.y + onto.y - partner.y }))) };
+        const joint = firstContact(together, actorContactShape(actor), { x: Math.cos(heading), y: Math.sin(heading) }, { origin: { x: centre.x - partner.x, y: centre.y - partner.y } });
+        actor.x = Math.round((partner.x + joint.offset.x) * 10) / 10;
+        actor.y = Math.round((partner.y + joint.offset.y) * 10) / 10;
+        contacts.set(actor.id, { x: Math.round((partner.x + joint.point.x) * 10) / 10, y: Math.round((partner.y + joint.point.y) * 10) / 10 });
+      }
     } else {
       // A docked actor must not sink into a nucleic acid nor into an actor already placed (other than its
       // partner), nor leave the canvas sideways: tilt its slot towards "up" until it clears.
@@ -1155,10 +1265,11 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const waiting = new Map<string, number>();
   upcoming.forEach((definition, index) => {
     if (membrane) {
-      const band = membraneOf(definition) ? 'membrane' : sideOfCompartment(snapshot.actors[definition.id]?.compartment ?? definition.compartment) ?? 'inside';
+      const waitsInRegion = region && compartmentOf.get(snapshot.actors[definition.id]?.compartment ?? definition.compartment ?? '')?.kind === region.kind;
+      const band = membraneOf(definition) ? 'membrane' : waitsInRegion ? 'region' : sideOfCompartment(snapshot.actors[definition.id]?.compartment ?? definition.compartment) ?? 'inside';
       const turn = waiting.get(band) ?? 0;
       waiting.set(band, turn + 1);
-      const [top, bottom] = band === 'outside' ? [0, membrane.y - MEMBRANE_HALF] : [membrane.y + MEMBRANE_HALF, height];
+      const [top, bottom] = band === 'outside' ? [0, membrane.y - MEMBRANE_HALF] : band === 'region' ? [region!.y, height] : [membrane.y + MEMBRANE_HALF, region?.y ?? height];
       // Staggered down the band; a fourth starts over instead of landing on the first.
       const y = band === 'membrane' ? membrane.y : Math.round(top + (bottom - top) * (.28 + .24 * (turn % 3)));
       const ghost = make(definition, { x: 0, y }, -1, true);
@@ -1267,6 +1378,14 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   const offCanvas = (box: Box) => box[0] < 4 || box[2] > width - 4 || box[1] < 4 || box[3] > height - 4;
   const acidBands = nucleicAcids.map((acid): Box => [0, acid.y - HELIX.amplitude - HELIX.tube, width, acid.y + HELIX.amplitude + HELIX.tube]);
   const membraneBands = membranes.map((item): Box => [0, item.y - MEMBRANE_HALF, width, item.y + MEMBRANE_HALF]);
+  // The membrane's name goes where no spanning actor stands: left above the bilayer, else right, else along the top.
+  if (membrane) {
+    const spanning = bodies.filter(body => body.actor.membrane).map(body => body.box);
+    const taken = (labelAt?: 'right' | 'top') => areaLabels({ membranes: [{ ...membrane, labelAt }], regions, height, width }).filter(label => label.role === 'membrane').some(label => spanning.some(box => meets(label.box, box)));
+    const choice = ([undefined, 'right', ...(membrane.outside ? [] : ['top' as const])] as const).find(option => !taken(option));
+    if (choice) membrane.labelAt = choice;
+  }
+  const areaNames = areaLabels({ membranes, regions, height, width }).map((label): Box => label.box);
   const boxPoints = (box: Box): Point[] => [0, .5, 1].flatMap(u => [0, .5, 1].map(v => ({ x: box[0] + (box[2] - box[0]) * u, y: box[1] + (box[3] - box[1]) * v })));
 
   const calloutConflicts: SceneCalloutConflict[] = [];
@@ -1309,7 +1428,8 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       + ([...chainBeads, ...chainTexts.map(text => text.box)].some(other => meets(box, other)) ? 1 : 0)
       // Only a callout hung below its body can come down onto a nucleic acid; above, the usual place stands.
       + (drop && acidBands.some(band => meets(box, band)) ? 1 : 0)
-      + (membraneBands.some(band => meets(box, band)) ? 1 : 0);
+      + (membraneBands.some(band => meets(box, band)) ? 1 : 0)
+      + areaNames.filter(name => meets(box, name)).length;
     // Leaders: through another body or a chain, through a pill or a chain callout, or across another leader.
     const crossing = live.filter(other => other !== actor && free.some(point => onBody(other, point))).length
       // A leader through the bilayer puts the callout on the wrong side of it.
@@ -1376,7 +1496,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions, pairings, footprints, membranes, calloutConflicts,
+    nucleicAcids, actors, connections, lesions, pairings, footprints, membranes, regions, calloutConflicts,
   };
 }
 

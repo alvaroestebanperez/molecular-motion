@@ -1,8 +1,8 @@
 import { renderRepeatedMarker } from './repeated-marker';
 import type { LesionType } from '@molecular-motion/core';
 import {
-  actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
-  type SceneActor, type SceneConnection, type SceneMembrane, type SceneNucleicAcid, type SvgScene,
+  areaLabels, actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  type SceneActor, type SceneConnection, type SceneMembrane, type SceneNucleicAcid, type SceneRegion, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
 import { mix, primitiveCss, renderMembranePrimitive, renderSmallMoleculePrimitive, renderInteractionPrimitive, renderModificationPrimitive, renderProteinSurface, renderProteinInhibition, type ModificationVisualKind } from './primitives';
@@ -70,7 +70,8 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<g data-layer="defs">${defs}</g>`
     // Under the molecules: a mark on the strands an instance also holds, without hiding them.
     + (footprints ? `<g class="mm-layer" data-layer="footprints">${footprints}</g>` : '')
-    // Only documents with a membrane compartment get this layer, so every other document renders exactly as before.
+    // Only documents that draw a region or a membrane get these layers, so every other document renders exactly as before.
+    + (scene.regions.length ? `<g class="mm-layer" data-layer="regions" aria-hidden="true">${scene.regions.map(region => regionLayer(region, scene)).join('')}</g>` : '')
     + (scene.membranes.length ? `<g class="mm-layer" data-layer="membranes" aria-hidden="true">${scene.membranes.map(membrane => membraneLayer(membrane, scene)).join('')}</g>` : '')
     + `<g class="mm-layer" data-layer="acids">${acids}</g>`
     // Only documents with pairings get this layer, so every other document renders exactly as before.
@@ -422,11 +423,25 @@ function renderChain(actor: SceneActor): string {
 
 // ---- Membranes ----
 
-/** The shared bilayer across the canvas, with the compartment on each side named at the left edge. */
+/**
+ * The shared bilayer across the canvas, named after the membrane compartment the scene is at, with the
+ * compartment on each side named at the left edge. Keyed by that compartment: when the scene moves to
+ * another membrane the group is replaced, not moved. It is a change of context.
+ */
 function membraneLayer(membrane: SceneMembrane, scene: SvgScene): string {
-  const region = (label: string | undefined, y: number) => label ? `<text class="mm-region" x="14" y="${round(y)}">${escape(label)}</text>` : '';
-  return `<g class="mm-membrane" data-key="membrane:${escape(membrane.id)}">${renderMembranePrimitive({ x: 0, y: membrane.y, length: scene.width })}`
-    + `${region(membrane.outside?.label, 24)}${region(membrane.inside?.label, scene.height - 14)}</g>`;
+  const names = areaLabels(scene).filter(label => label.role !== 'region')
+    .map(label => `<text class="mm-region${label.role === 'membrane' ? ' mm-region--membrane' : ''}" x="${label.x}" y="${round(label.y)}">${escape(label.text)}</text>`).join('');
+  return `<g class="mm-membrane" data-key="membrane:${escape(membrane.id)}">${renderMembranePrimitive({ x: 0, y: membrane.y, length: scene.width })}${names}</g>`;
+}
+
+/** A compartment as a delimited region: a boundary across the canvas with the compartment named inside it. */
+function regionLayer(region: SceneRegion, scene: SvgScene): string {
+  const [w, top, rise] = [scene.width, region.y, 14];
+  // A shallow arc, so it reads as the edge of something large rather than as a line across the figure.
+  const boundary = `M0 ${round(top + rise)}Q${round(w / 2)} ${round(top - rise)} ${w} ${round(top + rise)}`;
+  return `<g class="mm-region-area mm-region-area--${escape(region.kind)}" data-key="region:${escape(region.id)}">`
+    + `<path class="mm-region-area__fill" d="${boundary}V${scene.height}H0Z"/><path class="mm-region-area__edge" d="${boundary}"/>`
+    + areaLabels(scene).filter(label => label.role === 'region' && label.text === region.label).map(label => `<text class="mm-region" x="${label.x}" y="${round(label.y)}">${escape(label.text)}</text>`).join('') + '</g>';
 }
 
 // ---- Labels ----
@@ -552,6 +567,8 @@ ${primitiveCss}`;
  * from `molecularMotionCss` so a file exported from any other scene carries exactly the stylesheet it did.
  */
 export const membraneSceneCss = `.mm-region{fill:var(--mm-muted);font-size:calc(11px*var(--mm-text-scale,1));font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.mm-region--membrane{fill:var(--mm-ink)}
+.mm-region-area__fill{fill:var(--mm-accent);opacity:.07}.mm-region-area__edge{fill:none;stroke:var(--mm-muted);stroke-width:1.6;stroke-dasharray:7 6;opacity:.75}
 .mm-modification--tag circle{stroke:#334155;stroke-width:1.1}.mm-modification--tag text{text-anchor:middle;fill:#17213b;font:700 8.5px Inter,system-ui}`;
 /** Whether a scene draws anything `membraneSceneCss` styles. */
-export const usesMembraneSceneCss = (scene: SvgScene) => scene.membranes.length > 0 || scene.actors.some(actor => actor.tags?.length);
+export const usesMembraneSceneCss = (scene: SvgScene) => scene.membranes.length > 0 || scene.regions.length > 0 || scene.actors.some(actor => actor.tags?.length);

@@ -33,9 +33,41 @@ A profile is appearance only. It cannot say which side of a membrane a tag goes 
 
 An empty `modificationProfiles` catalog still selects the legacy badge for every kind.
 
+## One bilayer, and the membrane the scene is at
+
+A scene has one bilayer. When the document declares several membrane compartments, the bilayer stands for the one the scene is at: the one its present spanning actors are in. It carries that compartment's name, and `scene.membranes[0]` its id.
+
+When those actors are moved to another membrane compartment with `translocate`, the same bilayer is relabelled and re-keyed (ER membrane → Golgi membrane in cGAS–STING). **This is a change of context, not a journey**: nothing travels between two organelles, no actor moves, and the two membranes are never on screen together. An actor moved to a compartment of kind `membrane` stays drawn spanning it; moved to any other kind it would be drawn soluble.
+
+`translocate … includeBound: true` gives every bound partner the same compartment, which for a membrane is wrong for a soluble partner: the renderer no longer knows which side it is on. Move the spanning copies one by one and leave their partners in their own compartment.
+
+The membrane's name is written where no spanning actor stands: left above the bilayer, else right, else along the top (`SceneMembrane.labelAt`). `areaLabels(scene)` gives every name written on the canvas; callouts stay off them.
+
+## Regions
+
+A compartment can be drawn as a delimited, labelled region with no membrane of its own (`scene.regions`). A compartment of kind `nucleus` gets one when the document also declares another compartment beside it, so that `translocate` between the two is a visible change of place. A document whose only such compartment is the nucleus has no region: the whole canvas is the nucleus, as before.
+
+The region is a band across the bottom with a shallow boundary and its name inside. It has no envelope, pores or inner structure, and it comes from the compartment's existing `kind`: nothing is added to the schema. Free actors in that compartment wait inside it, and so do upcoming ones.
+
+## Stacking
+
+A membrane alone sits in the middle of the canvas. When the document also declares a nucleic acid or a region, things stack from what the document declares, never from who is on screen, so nothing shifts when an actor is hidden:
+
+1. the membrane near the top, with room above for its name;
+2. the inner domains of what spans it;
+3. the nucleic acid, with room above it for what rests on it;
+4. the region.
+
+Free actors and molecules wait between the inner domains and whatever closes their stretch below, in the nearest place along their row that is clear of every body already there. Each band has its own row of slots: an actor that spans the membrane does not move aside because a soluble one became free.
+
+## Contacts
+
+- Two actors that span the membrane meet along it and stay on its plane. Nothing tilts or lifts them to resolve a contact.
+- An actor bound to several partners at once is placed from all of them: where it would touch each one gives a contact point, and its body is brought against the partners from the centre of those points. No partner is special.
+
 ## Limits
 
-- One membrane per scene, horizontal, with the plasma-membrane reading of its sides. Organelle membranes (an ER membrane with a lumen) are not covered.
+- One bilayer per scene, horizontal. Two membranes are never shown together, and the far side of an organelle membrane (a lumen) has no compartment or name: sides are read as for a plasma membrane.
 - A spanning actor is single-pass with one domain per side. Other topologies would be a host choice, like `proteinVisuals`.
 - v5 does not declare topology. The side of a site is inferred from who binds it; a site nobody binds has no declared side.
 

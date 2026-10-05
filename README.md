@@ -31,11 +31,13 @@ npm install
 npm run dev
 ```
 
-The repository includes three mechanisms to exercise different parts of the language:
+The repository includes five mechanisms to exercise different parts of the language:
 
 - [PARP1-mediated single-strand break repair](examples/parp1-ssb-repair.yaml)
 - [Homologous recombination: from the break to an intact chromatid by strand invasion, synthesis on the sister chromatid and annealing (SDSA)](examples/homologous-recombination.yaml)
 - [EGFR activation by ligand-induced dimerization](examples/egfr-dimerization.yaml)
+- [p53–MDM2 negative feedback](examples/p53-mdm2-feedback.yaml)
+- [cGAS–STING sensing of cytosolic DNA](examples/cgas-sting.yaml)
 
 ## Why Molecular Motion?
 
