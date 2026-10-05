@@ -8,8 +8,7 @@ mechanism:
     loses its intron: the two exons become neighbours on the same molecule, which keeps its
     pre-mRNA coordinates. In the cytoplasm a ribosome rests across the exon–exon junction.
     Schematic: lengths are illustrative, the bubble does not travel, and capping, polyadenylation
-    and the peptide are not modelled. The viewer does not yet draw the mRNA leaving the nucleus:
-    the export is in the state of the last step, not in its picture.
+    and the peptide are not modelled.
 
 compartments: [nucleus, cytoplasm]
 

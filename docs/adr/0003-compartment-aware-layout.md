@@ -1,6 +1,6 @@
 # ADR 0003 — Compartment-aware actor layout
 
-- **Status:** accepted, ready for implementation. Decisions in §6. Nothing here is implemented yet.
+- **Status:** accepted and implemented. Decisions in §6; implementation notes in §8.
 - **Scope:** renderer and layout only. No schema change, no core change, no change to `translocate`.
 - **Out of scope:** `parent` and nested compartments; any ordering of compartments richer than the fallback of §4.1; changes to core validation; pairing loops across an excision junction; templated synthesis across a junction (RFC 0007 §10).
 - **Context:** [membrane scenes](../membrane-scenes.md) (bilayer, sides, regions, stacking), [ADR 0001](0001-nucleic-geometry-animation.md) (transition geometry), [ADR 0002](0002-drawing-excision.md) (coordinate map)
@@ -192,3 +192,15 @@ D3 to D8 are accepted as proposed. D1 and D2 were revised in review, and D9 was 
 
 1. **A second band of the same kind.** Two interior compartments drawn as bands are ordered by declaration (§4.1). Whether that is enough is left to the first document that needs it; a richer ordering is out of scope.
 2. **The diagnostic of §4.5** is a renderer diagnostic only. Whether the validator should one day warn when an actor is left in another compartment than what it rests on is a core question, and is not proposed.
+
+## 8. Implementation notes
+
+- **The reservation** is `packages/svg/src/layout-reservation.ts`: `layoutReservation(snapshots)` and `mechanismReservation(mechanism)`. It reads `snapshot.actors[id]` and the actor types of the definition, and nothing else. The viewer and the demo's figure export pass it to `buildSvgScene` as `reservation`.
+- **Three bands.** The fallback order is implemented as three bands: outside the membrane, the cell interior, the nucleus. Every interior compartment is drawn in the one interior band, as before; a band per interior compartment (§7.1) is not implemented, because no document needs it and it would redraw documents that have two today.
+- **A document with one band, or with no nucleic acid in any band, is laid out by the previous code path.** Lanes only take part when a document has more than one band and a molecule to put in one. cGAS–STING goes through the lane path and comes out identical, because the lane formula under a membrane is the previous stacking formula.
+- **Only the room above a lane is compressed** (§4.7), down to half, and only when the nucleus band has lanes. A band without lanes keeps its previous minimum.
+- **Under a membrane the nucleus band takes whatever height is left; without one, two bands share the canvas in proportion to what they hold.**
+- **Free actors of a band with lanes wait in the room above its first lane.**
+- **`SceneNucleicAcid.compartment`** carries the resolved compartment, and `SvgScene.compartmentConflicts` the diagnostics of §4.5 and §4.7 (`anchor` and `fit`).
+- **Not done: a name for the interior band without a membrane.** §4.1 says a band is named as the nucleus region is. With a membrane the interior is named, as before. Without one (gene expression) only the nucleus band carries its name; the stretch above it is the cytoplasm and is not labelled.
+- **The pre-existing scan of actions** that decides which side of a membrane a site faces is untouched.

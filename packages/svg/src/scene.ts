@@ -10,6 +10,7 @@ import {
 import { contactOutline, firstContact, transmembraneGeometry, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
 import { coordinateMap, coordinateMapOf, type ExcisedStretch } from './coordinate-map';
+import { layoutReservation, type LayoutReservation } from './layout-reservation';
 
 /** An actor definition seen as one instance: `id` is the instance id, `visual` the definition id. */
 type InstanceView = ActorDefinition & { visual: string };
@@ -34,6 +35,8 @@ export interface SceneNucleicAcid {
   type: 'dna' | 'rna';
   label: string;
   color?: string;
+  /** The molecule's resolved compartment, when it has one. Its lane is in that compartment's band (ADR 0003). */
+  compartment?: string;
   y: number;
   sites: SceneSite[];
   /** Coordinate length; x = width · coordinate / length, unless something was excised: then positions come from the coordinate map. */
@@ -233,7 +236,21 @@ export interface SvgScene {
    * (`CALLOUT_COST`). Empty when every callout is clear. A record for review and tests; nothing is drawn from it.
    */
   calloutConflicts: SceneCalloutConflict[];
+  /**
+   * Where the layout could not honour a compartment (ADR 0003 §4.5, §4.7). Empty when it could. A record
+   * for review and tests: nothing is drawn from it, nothing is moved because of it, and it is not validation.
+   */
+  compartmentConflicts: SceneCompartmentConflict[];
 }
+
+/**
+ * `anchor`: an actor is drawn on what it rests on or is docked to, which is in a band other than its own
+ * compartment's. The partner's position wins; the state is left as the document resolved it.
+ * `fit`: the lanes reserved for the canvas need more height than it has, even compressed.
+ */
+export type SceneCompartmentConflict =
+  | { kind: 'anchor'; actor: string; compartment: string; anchor: string; anchorCompartment: string }
+  | { kind: 'fit'; needed: number; available: number };
 
 export interface SceneOptions {
   /** Replace the narrow modification catalog; an empty map selects the exact legacy path. */
@@ -248,6 +265,12 @@ export interface SceneOptions {
   height?: number;
   /** Actors to show out of focus because they appear later (computed by the caller from the timeline). */
   ghosts?: readonly string[];
+  /**
+   * Lanes reserved across the whole mechanism (`mechanismReservation`), so bands and lanes are the same
+   * in every step (ADR 0003 §4.2). Without it they are reserved from this snapshot alone: the scene is
+   * right for its step, and the height of its bands may differ from another step's.
+   */
+  reservation?: LayoutReservation;
 }
 
 /** Helix geometry shared with the renderer: strand amplitude, wavelength and stroke widths. */
@@ -790,12 +813,79 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // A taller canvas gives the room above the membrane to its name and to the callouts of what spans it.
   const membraneY = stacked ? SPAN_REACH + 26 + Math.max(0, Math.round((height - 540) / 2)) : Math.round(height * .5);
   const stackedAcidY = membraneY + SPAN_REACH + 10 + OCCUPANT_ROOM + HELIX.amplitude + HELIX.tube / 2;
-  const regionTop = !nucleus ? height : stacked && nucleicDeclared ? Math.min(height - REGION_MIN, Math.round(stackedAcidY + HELIX.amplitude + HELIX.tube / 2 + 16)) : height - Math.max(REGION_MIN, Math.round(height * .3));
+  // ---- Bands and lanes (ADR 0003): regions first, then every actor in the region of its resolved compartment ----
+  // A band is a full-width stretch a compartment is drawn in. Their order is a layout fallback over
+  // `kind`, with no biological meaning: outside the membrane, the cell interior, the nucleus. Interior
+  // compartments share one band. `parent` is not read.
+  type Band = 'outside' | 'inside' | 'region';
+  const kindOf = new Map(declared.map(compartment => [compartment.id, compartment.kind]));
+  const bandOf = (compartment: string | undefined): Band => {
+    const kind = compartment ? kindOf.get(compartment) : undefined;
+    if (kind === 'extracellular' && membraneDeclared) return 'outside';
+    return nucleus && kind === nucleus.kind ? 'region' : 'inside';
+  };
+  // Lanes are capacity reserved from resolved states, never from actions: the mechanism's when the host
+  // gives them, else this snapshot's own, counting molecules that are not present so the fallback is stable.
+  const reservation = options.reservation ?? layoutReservation([snapshot], { absent: true });
+  const lanes: Record<Band, string[]> = { outside: [], inside: [], region: [] };
+  for (const actor of snapshot.definition.actors) {
+    if (!isNucleic(actor.type)) continue;
+    for (const [compartment, ids] of Object.entries(reservation.lanes)) {
+      const band = bandOf(compartment || undefined);
+      if (ids.includes(actor.id) && !lanes[band].includes(actor.id)) lanes[band].push(actor.id);
+    }
+  }
+  // With one band nothing is reserved: the whole canvas is that compartment and molecules stack as before.
+  const laned = (membraneDeclared || Boolean(nucleus)) && lanes.outside.length + lanes.inside.length + lanes.region.length > 0;
+  const HELIX_HALF = HELIX.amplitude + HELIX.tube / 2;
+  const LANE = { pitch: 120, pad: 16, floor: .5, free: 96 } as const;
+  /** Height a band needs for `count` lanes with `room` above the first for what rests on it. */
+  const laneNeed = (count: number, room: number) => room + 2 * HELIX_HALF + (count - 1) * LANE.pitch + LANE.pad;
+  const laneY = new Map<string, number>();
+  const fitConflicts: SceneCompartmentConflict[] = [];
+  let room: number = OCCUPANT_ROOM;
+  let regionTop = !nucleus ? height : stacked && nucleicDeclared ? Math.min(height - REGION_MIN, Math.round(stackedAcidY + HELIX.amplitude + HELIX.tube / 2 + 16)) : height - Math.max(REGION_MIN, Math.round(height * .3));
+  if (laned) {
+    const insideTop = membraneDeclared ? membraneY + SPAN_REACH + 10 : 0;
+    const needInside = (space: number) => lanes.inside.length ? laneNeed(lanes.inside.length, space) : membraneDeclared ? LANE.free : REGION_MIN;
+    const needRegion = (space: number) => !nucleus ? 0 : lanes.region.length ? laneNeed(lanes.region.length, space) : REGION_MIN;
+    const total = (space: number) => insideTop + needInside(space) + needRegion(space);
+    // The room above a lane is what gives: it is compressed down to a floor before anything overlaps (§4.7).
+    // A band without lanes keeps today's geometry, so only a document with lanes in the nucleus band can be squeezed.
+    const flexible = (lanes.inside.length ? 1 : 0) + (lanes.region.length ? 1 : 0);
+    if (nucleus && lanes.region.length && total(room) > height) {
+      room = Math.max(OCCUPANT_ROOM * LANE.floor, Math.floor((height - total(0)) / flexible));
+      if (total(room) > height) fitConflicts.push({ kind: 'fit', needed: total(room), available: height });
+    }
+    const slack = Math.max(0, height - total(room));
+    if (membraneDeclared) {
+      // Under the membrane: the spanning actors' inner domains, then the lanes; the nucleus band takes the rest.
+      lanes.inside.forEach((id, index) => laneY.set(`inside/${id}`, insideTop + room + HELIX_HALF + index * LANE.pitch));
+      if (nucleus) regionTop = Math.min(height - needRegion(room), insideTop + needInside(room));
+      const top = Math.round((membraneY - MEMBRANE_HALF) / 2);
+      lanes.outside.forEach((id, index) => laneY.set(`outside/${id}`, top + index * LANE.pitch));
+      if (lanes.outside.length && top + (lanes.outside.length - 1) * LANE.pitch + HELIX_HALF > membraneY - MEMBRANE_HALF) {
+        fitConflicts.push({ kind: 'fit', needed: laneNeed(lanes.outside.length, 0), available: membraneY - MEMBRANE_HALF });
+      }
+    } else {
+      // Two bands share the canvas in proportion to what they hold; the lanes of the upper one sit at its foot.
+      regionTop = Math.round(needInside(room) + slack * needInside(room) / (needInside(room) + needRegion(room)));
+      lanes.inside.forEach((id, index) => laneY.set(`inside/${id}`, regionTop - LANE.pad - HELIX_HALF - (lanes.inside.length - 1 - index) * LANE.pitch));
+    }
+    const spare = Math.max(0, height - regionTop - needRegion(room));
+    lanes.region.forEach((id, index) => laneY.set(`region/${id}`, Math.round(regionTop + spare / 2 + room + HELIX_HALF + index * LANE.pitch)));
+  }
+  /** Where a band's free actors wait when the band has lanes: in the room above its first lane. */
+  const laneRowY = (band: Band) => lanes[band].length ? Math.round(laneY.get(`${band}/${lanes[band][0]}`)! - HELIX_HALF - room / 2) : undefined;
   const regions: SceneRegion[] = nucleus ? [{ id: nucleus.id, label: nucleus.label ?? nucleus.id, kind: nucleus.kind, y: regionTop, height: height - regionTop }] : [];
   const region = regions[0];
   const stack = stacked && acidViews.length === 1 ? { top: stackedAcidY, gap: 120 } : acidViews.length > 1 ? { top: height * .56, gap: Math.min(150, height * .34 / (acidViews.length - 1)) } : { top: height * .74, gap: 120 };
   const nucleicAcids = acidViews.map((definition, index): SceneNucleicAcid => {
-    const y = definition.position?.y ?? stack.top + index * stack.gap;
+    // Its lane in the band of its resolved compartment. Nothing else about it depends on the compartment:
+    // its horizontal geometry, coordinate map and excisions are the same in any band.
+    const resolved = snapshot.actors[definition.id]!.compartment;
+    const lane = laned ? laneY.get(`${bandOf(resolved)}/${definition.id}`) : undefined;
+    const y = definition.position?.y ?? lane ?? stack.top + index * stack.gap;
     const length = nucleicLength(definition);
     const strandState = snapshot.actors[definition.id]!.nucleic;
     // One map per molecule (ADR 0002 §4): everything placed along it goes through it. With nothing
@@ -811,6 +901,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       type: definition.type as 'dna' | 'rna',
       label: definition.label ?? definition.id,
       ...(definition.color && { color: definition.color }),
+      ...(resolved && { compartment: resolved }),
       y,
       sites: (definition.sites ?? []).flatMap((site): SceneSite[] => {
         const reference = `${definition.id}.${site.id}`;
@@ -1118,14 +1209,18 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     const side = sideOfCompartment(snapshot.actors[definition.id]?.compartment);
     const inRegion = region && compartmentOf.get(snapshot.actors[definition.id]?.compartment ?? '')?.kind === region.kind;
     let y = !membrane ? freeRowY : membraneOf(definition) ? membrane.y : side === 'outside' ? Math.round(membrane.y * .36) : Math.round(membrane.y + (height - membrane.y) * .62);
-    if (inRegion) y = Math.round(region.y + region.height * .52);
+    if (inRegion) y = laneRowY('region') ?? Math.round(region.y + region.height * .52);
     else if (stacked && membrane && !membraneOf(definition) && side !== 'outside') {
-      // Between the inner domains and whatever closes the stretch below: a nucleic acid on screen, else the region.
-      const floor = nucleicAcids.length ? Math.min(...nucleicAcids.map(acid => acid.y)) - HELIX.amplitude - HELIX.tube / 2 : region?.y ?? height;
+      // Between the inner domains and whatever closes the stretch below: a nucleic acid on screen in this band, else the region.
+      const below = nucleicAcids.filter(acid => bandOf(acid.compartment) === 'inside');
+      const floor = below.length ? Math.min(...below.map(acid => acid.y)) - HELIX.amplitude - HELIX.tube / 2 : region?.y ?? height;
       y = Math.round((membrane.y + SPAN_REACH + floor) / 2);
+    } else if (laned && !membrane) {
+      // Without a membrane the interior band is everything above the region: in the room over its lanes, or its middle.
+      y = laneRowY('inside') ?? Math.round(regionTop / 2);
     }
     const actor = make(definition, definition.position ?? { x, y }, -1);
-    if (!definition.position && (stacked || inRegion) && !membraneOf(definition)) {
+    if (!definition.position && (stacked || inRegion || laned) && !membraneOf(definition)) {
       // Its slot may be taken by something that rests on the nucleic acid or hangs from the membrane:
       // the nearest place along the row that is clear of every body already there.
       // Clear with room to spare, so the callouts of both still have somewhere to go.
@@ -1296,14 +1391,15 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // will be cytosolic never waits on the extracellular side. One that spans the membrane waits on it.
   const waiting = new Map<string, number>();
   upcoming.forEach((definition, index) => {
-    if (membrane) {
+    // In a scene with more than one band they wait in the band of their resolved compartment (ADR 0003 §4.9).
+    if (membrane || region) {
       const waitsInRegion = region && compartmentOf.get(snapshot.actors[definition.id]?.compartment ?? definition.compartment ?? '')?.kind === region.kind;
       const band = membraneOf(definition) ? 'membrane' : waitsInRegion ? 'region' : sideOfCompartment(snapshot.actors[definition.id]?.compartment ?? definition.compartment) ?? 'inside';
       const turn = waiting.get(band) ?? 0;
       waiting.set(band, turn + 1);
-      const [top, bottom] = band === 'outside' ? [0, membrane.y - MEMBRANE_HALF] : band === 'region' ? [region!.y, height] : [membrane.y + MEMBRANE_HALF, region?.y ?? height];
+      const [top, bottom] = band === 'outside' ? [0, membrane!.y - MEMBRANE_HALF] : band === 'region' ? [region!.y, height] : [membrane ? membrane.y + MEMBRANE_HALF : 0, region?.y ?? height];
       // Staggered down the band; a fourth starts over instead of landing on the first.
-      const y = band === 'membrane' ? membrane.y : Math.round(top + (bottom - top) * (.28 + .24 * (turn % 3)));
+      const y = band === 'membrane' ? membrane!.y : Math.round(top + (bottom - top) * (.28 + .24 * (turn % 3)));
       const ghost = make(definition, { x: 0, y }, -1, true);
       // From the right edge inwards, the first place clear of what is there: present actors and earlier ghosts.
       const clear = (x: number) => [...placed.values()].every(other => Math.hypot(other.x - x, other.y - y) > (other.ghost ? other.radius * .62 : other.radius + 24) + ghost.radius * .62);
@@ -1349,6 +1445,16 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   }
 
   const actors = views.flatMap(definition => placed.get(definition.id) ?? []);
+  // An actor drawn on its anchor although its own compartment is drawn elsewhere (ADR 0003 §4.5). The
+  // partner's position wins and nothing is corrected: this only records the disagreement of the state.
+  const compartmentConflicts: SceneCompartmentConflict[] = [...fitConflicts];
+  for (const actor of actors) {
+    // What it is docked on or rests on, as an instance: the site of a reference is not a place of its own.
+    const anchor = actor.ghost ? undefined : attachedTo(actor.id)?.split('.')[0];
+    const [own, other] = [snapshot.actors[actor.id]?.compartment, anchor ? snapshot.actors[anchor]?.compartment : undefined];
+    if (!anchor || !own || !other || kindOf.get(own) === 'membrane' || kindOf.get(other) === 'membrane') continue;
+    if (bandOf(own) !== bandOf(other)) compartmentConflicts.push({ kind: 'anchor', actor: actor.id, compartment: own, anchor, anchorCompartment: other });
+  }
   // Copies are one molecule species on screen: one callout for all visible copies (renderer decision).
   for (const definition of snapshot.definition.actors) {
     if (definition.copies === undefined) continue;
@@ -1529,7 +1635,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions, pairings, footprints, membranes, regions, calloutConflicts,
+    nucleicAcids, actors, connections, lesions, pairings, footprints, membranes, regions, calloutConflicts, compartmentConflicts,
   };
 }
 

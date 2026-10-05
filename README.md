@@ -288,7 +288,8 @@ examples/     # complete mechanism definitions
 - [x] Pairing between nucleic-acid molecules: strand invasion, displaced strands, synthesis on another molecule ([RFC 0006](docs/rfcs/0006-nucleic-acid-pairing.md))
 - [x] Nucleic acids that begin partial, and internal excision with resealing, in the core ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md))
 - [x] Drawing an excised interval: the molecule closes about its centre, and the closure is animated ([ADR 0002](docs/adr/0002-drawing-excision.md))
-- [ ] Pairing loops across a junction, and visible movement between compartments
+- [x] Compartment-aware layout: an actor's resolved compartment decides the band it is drawn in, nucleic acids included ([ADR 0003](docs/adr/0003-compartment-aware-layout.md))
+- [ ] Pairing loops across a junction
 - [ ] Strand exchange between molecules: nuclease resolution of junctions, crossovers, flaps
 - [x] Actor copies, interaction graph with interfaces, and footprint occupancy on nucleic acids ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md))
 - [x] Per-step references, key events, and summaries
