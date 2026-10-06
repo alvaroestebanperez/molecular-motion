@@ -37,20 +37,20 @@
   },
   {
     "step": "ligation",
-    "full": "bd24eed3b771ba256156d1bdca990631bf4502ab1381e4c94dbed8b60342e73e",
-    "compact": "a3a6cfae193076f4c40a84d654d9ae3b7fd325b93fa85b601e74a7b1d3982504",
-    "ghosts": "bd24eed3b771ba256156d1bdca990631bf4502ab1381e4c94dbed8b60342e73e"
+    "full": "78cd6f3c76f775433635ecbf0a2fbd6d1ebf7c421ef91b811350b65664dbfc5d",
+    "compact": "3f80b4eb8384008cf9e93de00159049fc090df7448c02b7135e9072e9f315ef4",
+    "ghosts": "78cd6f3c76f775433635ecbf0a2fbd6d1ebf7c421ef91b811350b65664dbfc5d"
   },
   {
     "step": "nicking",
-    "full": "076ad76f71e2db14ecaacbbc2460c0dc4f499ed9a63dbcca366daaa5bbba5dd1",
-    "compact": "1f6fc2496ee7dfb14a796e10008b81bd5798e932b7a116ff22f71fae4252cfa9",
-    "ghosts": "076ad76f71e2db14ecaacbbc2460c0dc4f499ed9a63dbcca366daaa5bbba5dd1"
+    "full": "68e8fc91e475c42bea2b959636cf63f90d5daaaa3eab87f9a56a510382eb84d2",
+    "compact": "e8b71d94fe63df51d6e2ff16a3f86a0094f9de3b09a2ad44954fca50f529a8e1",
+    "ghosts": "68e8fc91e475c42bea2b959636cf63f90d5daaaa3eab87f9a56a510382eb84d2"
   },
   {
     "step": "resolution",
-    "full": "c63e021ff1e8f36d4f3c0442871d22bfde4b30c2fa6799457020c1baa49bc09d",
-    "compact": "face71fc16c914657722142c236c7823f74571378f6ec131ba4202a6c78725b0",
-    "ghosts": "c63e021ff1e8f36d4f3c0442871d22bfde4b30c2fa6799457020c1baa49bc09d"
+    "full": "f20c87d971c5ad90737c79313238b5b8ef4b38a8c44464aa3ea2cdc57c9da159",
+    "compact": "42866d3768923ab9f145950df7c71cdc2b74d93f438e335f44abd00f8337fcf3",
+    "ghosts": "f20c87d971c5ad90737c79313238b5b8ef4b38a8c44464aa3ea2cdc57c9da159"
   }
 ]

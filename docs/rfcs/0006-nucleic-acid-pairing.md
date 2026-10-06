@@ -225,11 +225,11 @@ The line the check draws: pairings cover every structure made by changing **who 
 - **Only the pairing strand moves.** Of the two paired strands, the one whose molecule is less unwound over the pairing leaves its axis and runs beside the other. On a tie, the strand of the molecule declared first travels. The unwound molecule is drawn exactly as it would be with nothing paired into it.
 - **The fragment stays where it is.** Only the travelling strand curves. Rigid movement of a fragment towards the other molecule is not modelled.
 - **Beside the partner** the travelling strand runs at one level on the partner's inner side, with base pairs drawn between the two. The other strand of the unwound molecule keeps its bowed shape, so the unpaired strand is clearly apart.
-- **Entry and exit.** Where the strand continues on its own molecule, it eases back onto that molecule's axis in one smooth curve. A free end ends beside the partner and carries its polarity label there. The 3′ end of a newly synthesised stretch is a free end.
+- **Entry and exit.** Where the strand continues on its own molecule, it eases back onto that molecule's axis in one smooth curve. A free end ends beside the partner and carries its polarity label there. The 3′ end of a newly synthesised stretch is a free end while the break it grew from is unsealed (§6.3); once that break is ligated the strand goes on.
 - **Growth.** Each strand pair is one keyed element (`pairing:<state key>`). When `extend` prolongs the pairing, the element is the same and the part already paired does not move. As with backbones (RFC 0004 §7), its path is redrawn between steps, not morphed.
 - **Nascent** nucleotides keep the RFC 0004 style on the travelling strand.
 - **Occupants** follow the strand they sit on, including a stretch drawn beside another molecule.
-- **On its own molecule,** a strand synthesised across a double-strand break is drawn through it, and the free 3′ end of a new stretch inside an unwound region is drawn as an end until it is annealed.
+- **On its own molecule,** a strand synthesised across a double-strand break is drawn through it, and the free 3′ end of a new stretch inside an unwound region is drawn as an end until it is annealed, or the break that owns that nick is ligated.
 - **Description** is structural: "Upper bottom strand 40–58 paired with Lower top strand 40–58; Lower bottom strand 40–58 unpaired".
 - A strand paired within its own molecule is not drawn (RFC 0004 keeps molecules linear).
 
