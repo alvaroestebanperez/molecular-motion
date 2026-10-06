@@ -215,7 +215,8 @@ After it, nucleotide 21 of the `top` strand of `chromosome` is bonded to nucleot
 - **One strand at a time.** The strand is the sites', or the action's `strand` when a site is on both or names none. The same strand at two points leaves each molecule with a patch of the other; different strands at two points swap the arms. The compiler does not choose, and pairing is never changed: between two points, what holds the strands together is the pairing the document already has.
 - **It cuts and joins at once**, and clears a break at either site. A `cleave` on each site in an earlier step narrates the cutting.
 - **Applied again at the same two sites, it undoes itself.**
-- **Other actions stay inside one molecule.** `resect` and `extend` stop at a join: to go on, name a site of the other molecule. `excise-interval` is refused over or beside a join, and `degrade` of a joined molecule is refused. `translocate` moves only the molecule it names.
+- **A cut is of a bond, and its ends may be on either molecule.** `cleave` at a site at a join cuts the bond that site names. `resect` then starts from the 5′ end the cut left and removes nucleotides of the molecule that end is in, which on `top` is the other molecule.
+- **No action crosses a join.** `resect` and `extend` stop there. To resect on, cut the bond at the join and resect from the site that names it; to extend on, name a site of the molecule the gap is in. `excise-interval` is refused over or beside a join, and `degrade` of a joined molecule is refused. `translocate` moves only the molecule it names.
 
 A point site at a join names the bond of the nucleotide before its coordinate on its own molecule, so `cleave` and `ligate` there act on that bond. A document cannot begin with a join.
 

@@ -4,7 +4,7 @@ import {
 import { coveredIntervals, defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
 import { addPairing, alignedSpan, alignmentRelates, brokenPairings, pairingConflicts, partnerOf, removePairings } from './pairings';
 import { actorIdOf, instanceDefinition } from './instances';
-import { bondInto, fivePrimeSide, joinedAcross, joinedBoundaries, joinedTo, joinsAt, nucleotidePresent, toggleJoins } from './joins';
+import { bondFrom, bondInto, fivePrimeSide, joinedAcross, joinedBoundaries, joinedTo, joinsAt, nucleotidePresent, toggleJoins } from './joins';
 import { addInterval, intervalAt, normalizeIntervals, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
   excisedOf, extantIntervals, extantLength, extantRun, insideExcised, isNucleicActor, junctionAt, lesionStrands, nucleicForm, nucleicLength, otherStrand,
@@ -12,7 +12,7 @@ import {
 } from './nucleic';
 import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
 import type {
-  ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId, StrandPoint, StrandSpan,
+  ActionSpec, ActorState, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId, StrandPoint, StrandSpan,
 } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
@@ -483,7 +483,9 @@ function runEdge(list: readonly Interval[], excised: readonly Interval[], at: nu
 function requireWithinMolecule(state: MechanismState, ctx: ApplyContext, acid: string, strand: StrandId, range: Interval, verb: 'resect' | 'extend'): void {
   const join = joinedBoundaries(state, acid).find(item => item.strand === strand && range.from < item.at && item.at < range.to);
   if (!join) return;
-  ctx.fail(`cannot ${verb} past ${acid} ${join.at} on the ${strand} strand: the strand continues in another molecule ("${join.with}"); ${verb} up to the join, then name a site of "${join.with}" to go on`);
+  // Going on differs: resection follows a cut bond, synthesis fills the gap a site of that molecule locates.
+  const onward = verb === 'resect' ? 'cut the bond at the join and resect from the site that names it' : `name a site of "${join.with}" to go on`;
+  ctx.fail(`cannot ${verb} past ${acid} ${join.at} on the ${strand} strand: the strand continues in another molecule ("${join.with}"); ${verb} up to the join, then ${onward}`);
 }
 const spanLabel = (span: StrandSpan) => `${span.acid} ${span.strand} strand ${span.from}–${span.to}`;
 const rangeLabel = (strand: StrandId, range: Interval) => `${strand} strand ${range.from}–${range.to}`;
@@ -502,29 +504,47 @@ export const resect = definePrimitive<ResectAction>({
     requireExtantSite(_state, ctx, action.target);
     const lesion = ctx.site(action.target).lesion;
     if (!lesion || !BREAKS.includes(lesion)) ctx.fail(`no strand break to resect at "${action.target}"`);
-    const { acid, site, actor, state, length } = strandTarget(action.target, ctx);
+    const { acid, site, actor } = strandTarget(action.target, ctx);
     const at = site.at!;
+    // The break is of one bond per strand: the one the site names (RFC 0008 §6.1). Resection starts at the
+    // 5′ end that cut left, the bond's destination, and removes nucleotides of the molecule that end is in.
+    // That is the site's own molecule unless a join put the end on another (§6.2).
+    const working = new Map<string, { actor: ActorState; state: Required<NucleicState>; length: number }>();
+    const on = (id: string) => {
+      if (!working.has(id)) {
+        const found = ctx.requirePresent(id);
+        working.set(id, { actor: found, state: readNucleicState(found), length: nucleicLength(instanceDefinition(ctx.definition, id)!) });
+      }
+      return working.get(id)!;
+    };
     for (const strand of lesionStrands(acid, site, lesion)) {
-      // The 5′ end at the break: on top it faces increasing coordinates, on bottom decreasing ones.
-      // Earlier resection has already moved it away from the break, so continue from where it is now.
+      // The bond's `to` boundary. On bottom the site's own boundary is it: the nucleotide before the
+      // coordinate is the destination. On top it is where the bond leaving the site's boundary arrives.
+      const lower = junctionAt(on(actor.id).state.excised, at).lower;
+      const origin: StrandPoint = strand === 'bottom' ? { acid: actor.id, strand, at }
+        : bondFrom(_state, { acid: actor.id, strand, at: lower }) ?? ctx.fail(`no 5′ end to resect on the ${strand} strand at "${action.target}"`);
+      const { state, length } = on(origin.acid);
+      // Earlier resection has already moved the end away from the break, so continue from where it is now.
       // It counts extant nucleotides (RFC 0007 §6.6), so what it removes may lie either side of an excised interval.
       const missing = missingOn(state, strand);
-      const end = runEdge(missing, state.excised, at, strand === 'top' ? 'right' : 'left');
+      const end = runEdge(missing, state.excised, origin.at, strand === 'top' ? 'right' : 'left');
       const range = extantRun(state.excised, end, action.length, strand === 'top' ? 'forward' : 'reverse');
       if (range.from < 0 || range.to > length) {
         const room = extantLength(state.excised, strand === 'top' ? { from: end, to: length } : { from: 0, to: end });
         ctx.fail(`resecting ${action.length} nt from the 5′ end on the ${strand} strand runs past the molecule end (${room} nt left)`);
       }
-      // It stays inside its molecule (RFC 0008 §6.2, D6): it may reach a join, or start from one, but not pass it.
-      requireWithinMolecule(_state, ctx, actor.id, strand, strand === 'top' ? { from: at, to: range.to } : { from: range.from, to: at }, 'resect');
+      // It stays inside the molecule the end is in (RFC 0008 §6.2, D6): it may reach a join, or start from one, but not pass it.
+      requireWithinMolecule(_state, ctx, origin.acid, strand, strand === 'top' ? { from: origin.at, to: range.to } : { from: range.from, to: origin.at }, 'resect');
       const removed = extantIntervals(state.excised, range);
-      if (removed.some(piece => overlapsInterval(state.open, piece))) ctx.fail(`cannot resect into an unwound region (${rangeLabel(strand, range)}); anneal it first`);
+      if (removed.some(piece => overlapsInterval(state.open, piece))) ctx.fail(`cannot resect into an unwound region (${origin.acid === actor.id ? '' : `${origin.acid} `}${rangeLabel(strand, range)}); anneal it first`);
       state.missing = withStrandIntervals(state.missing, strand, [...missing, ...removed]);
       state.nascent = withStrandIntervals(state.nascent, strand, subtractAll(strandIntervals(state.nascent, strand), removed));
     }
-    writeNucleicState(actor, state);
-    requireOccupantsFit(_state, ctx, actor.id);
-    requirePairingsHold(_state, ctx, actor.id);
+    for (const [id, molecule] of working) {
+      writeNucleicState(molecule.actor, molecule.state);
+      requireOccupantsFit(_state, ctx, id);
+      requirePairingsHold(_state, ctx, id);
+    }
   },
 });
 

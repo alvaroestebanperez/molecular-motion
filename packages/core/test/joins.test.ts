@@ -345,7 +345,8 @@ describe('sites at a join (RFC 0008 §6.1)', () => {
 
   it('ligate keeps its rule on the bond the site names: it refuses while an end of that bond is missing, on whichever molecule it is', () => {
     // dna.hj-left names dna.top[21] → sister.top[22]; sister.hj-left names sister.top[21] → dna.top[22].
-    const gapped: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'dna.hj-left' }, { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'sister.hj-left', length: 4 }];
+    // Resecting from dna.hj-left starts at the 5′ end its bond's cut left: sister.top[22], on the other molecule.
+    const gapped: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'dna.hj-left' }, { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 4 }];
     const snapshot = last([gapped]);
     expect(snapshot.actors.sister!.nucleic!.missing).toEqual([{ strand: 'top', from: 22, to: 26 }]);
     expect(bondAt(snapshot, snapshot.definition, { acid: 'dna', strand: 'top', at: 22 })).toBeUndefined();
@@ -467,7 +468,7 @@ describe('invalid reconnections (RFC 0008 §8)', () => {
   });
 
   it('the same holds for undoing: it seals two bonds as well', () => {
-    const resected: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'sister.hj-left', length: 4 }];
+    const resected: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'dna.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 4 }];
     expect(() => mechanism([[...resected, TOP_LEFT]])).toThrow(/nothing to join at "sister.hj-left": nucleotide 22 is missing on the top strand/);
   });
 
@@ -518,13 +519,15 @@ describe('the rest of the model at a join (RFC 0008 §6)', () => {
     const cut: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'dna.cut' }];
     expect(last([[...cut, { type: 'resect', target: 'dna.cut', length: 12 }]]).actors.dna!.nucleic!.missing).toEqual([{ strand: 'top', from: 10, to: 22 }]);
     expect(() => mechanism([[...cut, { type: 'resect', target: 'dna.cut', length: 13 }]]))
-      .toThrow(/cannot resect past dna 22 on the top strand: the strand continues in another molecule \("sister"\); resect up to the join, then name a site of "sister" to go on/);
-    // To go on, the author names a site of the other molecule: the covalent strand is dna.top 0…21 → sister.top 22…79.
-    const onward = last([[...cut, { type: 'resect', target: 'dna.cut', length: 12 }, { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'sister.hj-left', length: 6 }]]);
+      .toThrow(/cannot resect past dna 22 on the top strand: the strand continues in another molecule \("sister"\); resect up to the join, then cut the bond at the join and resect from the site that names it/);
+    // To go on, the author cuts the join's own bond, dna.top[21] → sister.top[22], which dna.hj-left names, and resects from it:
+    // the 5′ end that cut leaves is sister.top[22]. The covalent strand was dna.top 0…21 → sister.top 22…79.
+    const onward = last([[...cut, { type: 'resect', target: 'dna.cut', length: 12 }, { type: 'cleave', target: 'dna.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 6 }]]);
     expect(onward.actors.sister!.nucleic!.missing).toEqual([{ strand: 'top', from: 22, to: 28 }]);
     expect(onward.actors.dna!.nucleic!.missing).toEqual([{ strand: 'top', from: 10, to: 22 }]);
     // A gap that reaches the join from both sides is still two strands: resection does not run through it.
-    const both: ActionNode[] = [...cut, { type: 'resect', target: 'dna.cut', length: 12 }, { type: 'cleave', target: 'dna.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 4 }];
+    // dna.top[22] is the 5′ end of the other bond of the pair, sister.top[21] → dna.top[22], which sister.hj-left names.
+    const both: ActionNode[] = [...cut, { type: 'resect', target: 'dna.cut', length: 12 }, { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'sister.hj-left', length: 4 }];
     expect(last([both]).actors.dna!.nucleic!.missing).toEqual([{ strand: 'top', from: 10, to: 26 }]);
     expect(() => mechanism([[...both, { type: 'resect', target: 'dna.cut', length: 1 }]])).toThrow(/cannot resect past dna 22 on the top strand/);
     // On bottom the 5′ end faces decreasing coordinates.
@@ -533,6 +536,64 @@ describe('the rest of the model at a join (RFC 0008 §6)', () => {
     expect(() => mechanism([[...below, { type: 'resect', target: 'dna.low', length: 13 }]])).toThrow(/cannot resect past dna 58 on the bottom strand: the strand continues in another molecule \("sister"\)/);
     // A join on the other strand is not in the way.
     expect(() => mechanism([[BOTTOM_LEFT, { type: 'cleave', target: 'dna.cut' }, { type: 'resect', target: 'dna.cut', length: 20 }]])).not.toThrow();
+  });
+
+  describe('the cut and the resection follow the bond, not the site\'s molecule (§6.1, §6.2)', () => {
+    const bond = (snapshot: MechanismSnapshot, acid: string, strand: 'top' | 'bottom', at: number) => {
+      const found = bondAt(snapshot, snapshot.definition, { acid, strand, at })!;
+      return `${found.from.acid}.${found.from.strand}[${found.from.index}] → ${found.to.acid}.${found.to.strand}[${found.to.index}]`;
+    };
+    const missing = (snapshot: MechanismSnapshot, acid: string) => snapshot.actors[acid]!.nucleic?.missing ?? [];
+    /** Cut the bond a site names, read it, then resect 4 nucleotides from the same site. */
+    const cutAndResect = (joined: ActionNode[], site: string, strand: 'top' | 'bottom') => {
+      const [acid] = site.split('.') as [string];
+      const cut = last([[...joined, { type: 'cleave', target: site }]]);
+      const resected = last([[...joined, { type: 'cleave', target: site }, { type: 'resect', target: site, length: 4 }]]);
+      return { bond: bond(cut, acid, strand, 22), dna: missing(resected, 'dna'), sister: missing(resected, 'sister') };
+    };
+
+    it('top, no join: the 5′ end is the next nucleotide of the same molecule', () => {
+      expect(cutAndResect([], 'dna.hj-left', 'top')).toEqual({ bond: 'dna.top[21] → dna.top[22]', dna: [{ strand: 'top', from: 22, to: 26 }], sister: [] });
+    });
+
+    it('top, with a join: the 5′ end is on the other molecule, and that is what is removed', () => {
+      expect(cutAndResect([TOP_LEFT], 'dna.hj-left', 'top')).toEqual({ bond: 'dna.top[21] → sister.top[22]', dna: [], sister: [{ strand: 'top', from: 22, to: 26 }] });
+      // The other bond of the pair is named by the other site, and its 5′ end is on this molecule.
+      expect(cutAndResect([TOP_LEFT], 'sister.hj-left', 'top')).toEqual({ bond: 'sister.top[21] → dna.top[22]', dna: [{ strand: 'top', from: 22, to: 26 }], sister: [] });
+    });
+
+    it('bottom, no join: the 5′ end is the nucleotide before the coordinate, and resection runs downwards', () => {
+      expect(cutAndResect([], 'dna.hj-left-bottom', 'bottom')).toEqual({ bond: 'dna.bottom[22] → dna.bottom[21]', dna: [{ strand: 'bottom', from: 18, to: 22 }], sister: [] });
+    });
+
+    it('bottom, with a join: the 3′ end is on the other molecule, the 5′ end and what is removed are on the site\'s own', () => {
+      expect(cutAndResect([BOTTOM_LEFT], 'dna.hj-left-bottom', 'bottom')).toEqual({ bond: 'sister.bottom[22] → dna.bottom[21]', dna: [{ strand: 'bottom', from: 18, to: 22 }], sister: [] });
+      expect(cutAndResect([BOTTOM_LEFT], 'sister.hj-left-bottom', 'bottom')).toEqual({ bond: 'dna.bottom[22] → sister.bottom[21]', dna: [], sister: [{ strand: 'bottom', from: 18, to: 22 }] });
+    });
+
+    it('a break of both strands at a join resects each strand in the molecule its 5′ end is in', () => {
+      const snapshot = last([[reconnect('far'), { type: 'cleave', target: 'dna.both', lesion: 'double-strand-break' }, { type: 'resect', target: 'dna.both', length: 4 }]]);
+      expect(missing(snapshot, 'sister')).toEqual([{ strand: 'top', from: 30, to: 34 }]);
+      expect(missing(snapshot, 'dna')).toEqual([{ strand: 'bottom', from: 26, to: 30 }]);
+    });
+
+    it('once the molecule is resolved, resection still does not cross a join: it fails before doing so', () => {
+      // From dna.hj-left the material is the sister's top strand from 22. A second join on it, at 58, is not passed.
+      const two: ActionNode[] = [TOP_LEFT, TOP_RIGHT, { type: 'cleave', target: 'dna.hj-left' }];
+      expect(missing(last([[...two, { type: 'resect', target: 'dna.hj-left', length: 36 }]]), 'sister')).toEqual([{ strand: 'top', from: 22, to: 58 }]);
+      expect(() => mechanism([[...two, { type: 'resect', target: 'dna.hj-left', length: 37 }]])).toThrow(/cannot resect past sister 58 on the top strand: the strand continues in another molecule \("dna"\)/);
+    });
+
+    it('no nucleotide changes molecule or coordinate, and a resected join cannot be undone until the gap is filled', () => {
+      const gapped: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'dna.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 4 }];
+      const snapshot = last([gapped]);
+      expect(snapshot.joins).toEqual(last([[TOP_LEFT]]).joins);
+      expect(() => mechanism([[...gapped, TOP_LEFT]])).toThrow(/nothing to join at "sister.hj-left": nucleotide 22 is missing on the top strand/);
+      expect(() => mechanism([[...gapped, { type: 'degrade', actor: 'sister' }]])).toThrow(/covalently joined/);
+      // Filling the gap restores it: the gap is the sister's, so a site of the sister locates it, and the 3′ end is found covalently.
+      const restored = last([[...gapped, { type: 'extend', target: 'sister.hj-left', length: 4 }, { type: 'ligate', target: 'dna.hj-left' }, TOP_LEFT]]);
+      expect(restored).not.toHaveProperty('joins');
+    });
   });
 
   it('excise-interval fails over or beside a join (§6.2)', () => {
@@ -550,7 +611,7 @@ describe('the rest of the model at a join (RFC 0008 §6)', () => {
 
   it('extend across a join names the other molecule\'s site: the 3′-terminal nucleotide is found covalently (§6.2)', () => {
     // dna.top 0…21 → sister.top 22…79, with sister.top 22–30 removed: the 3′ end is dna.top[21], the gap is the sister's.
-    const gapped: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'sister.hj-left', length: 8 }];
+    const gapped: ActionNode[] = [TOP_LEFT, { type: 'cleave', target: 'dna.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 8 }];
     expect(strands(last([gapped]), 'dna')[0]).toBe('5′ dna.top 0…21 3′');
     const snapshot = last([[...gapped, { type: 'extend', target: 'sister.hj-left', length: 8 }]]);
     expect(snapshot.actors.sister!.nucleic).toEqual({ missing: [], nascent: [{ strand: 'top', from: 22, to: 30 }], open: [] });
@@ -567,7 +628,7 @@ describe('the rest of the model at a join (RFC 0008 §6)', () => {
     // dna 30 is opposite short 10. The 3′ end dna.top[29] is paired with the template; the gap is short.top 10–20.
     const snapshot = last([[
       { type: 'reconnect-strands', target: 'dna.far', with: 'short.join' },
-      { type: 'cleave', target: 'short.join' }, { type: 'resect', target: 'short.join', length: 10 },
+      { type: 'cleave', target: 'dna.far' }, { type: 'resect', target: 'dna.far', length: 10 },
       { type: 'unwind', target: 'template.bubble' }, { type: 'unwind', target: 'dna.far', length: 20 },
       { type: 'pair', target: 'dna', strand: 'top', span: [20, 30], with: 'template', alignment: 'dna-template' },
       { type: 'extend', target: 'short.join', length: 10 },
@@ -580,7 +641,7 @@ describe('the rest of the model at a join (RFC 0008 §6)', () => {
   it('extend fills a gap of its own molecule and stops at a join inside it', () => {
     const gap: ActionNode[] = [
       TOP_LEFT, { type: 'cleave', target: 'dna.cut' }, { type: 'resect', target: 'dna.cut', length: 12 },
-      { type: 'cleave', target: 'dna.hj-left' }, { type: 'resect', target: 'dna.hj-left', length: 4 },
+      { type: 'cleave', target: 'sister.hj-left' }, { type: 'resect', target: 'sister.hj-left', length: 4 },
     ];
     expect(() => mechanism([[...gap, { type: 'extend', target: 'dna.cut', length: 16 }]])).toThrow(/cannot extend past dna 22 on the top strand: the strand continues in another molecule \("sister"\)/);
     expect(last([[...gap, { type: 'extend', target: 'dna.cut', length: 12 }]]).actors.dna!.nucleic).toEqual({ missing: [{ strand: 'top', from: 22, to: 26 }], nascent: [{ strand: 'top', from: 10, to: 22 }], open: [] });
