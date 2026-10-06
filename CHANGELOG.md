@@ -6,6 +6,13 @@ Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a min
 
 ## Unreleased
 
+- **`schemaVersion: 7`: covalent continuity between molecules** ([RFC 0008](docs/rfcs/0008-covalent-continuity.md)), in `@molecular-motion/core` only. Documents with `schemaVersion` 1 to 6 are migrated automatically, and produce the snapshots they produced before.
+  - New primitive `reconnect-strands`: at two point sites that an alignment puts opposite each other, one strand of each of two molecules continues as the other. It clears a break at either site, and applied again at the same sites it undoes itself. With it a double Holliday junction can be resolved as a crossover or as a non-crossover.
+  - New state `joins` in a snapshot: directed covalent bonds between strands of different molecules. It is absent while there are none. No nucleotide moves and no coordinate is renumbered.
+  - New derived readings, exported from core: `covalentSuccessor`, `covalentPredecessor`, `covalentStrands`, `productsOf`, `joinedTo`, `bondAt` and `nucleotidePresent`.
+  - `resect` and `extend` stop at a join, `excise-interval` is refused over or beside one, and `degrade` of a joined molecule is refused. `translocate` is unchanged.
+  - `migrateV6` is exported, and the schema of version 6 is archived as `schema.v6.json`.
+  - Joined strands have no drawing yet: `@molecular-motion/svg` and `@molecular-motion/react` render a document with joins as if no join existed.
 - The JSON Schemas are published at `https://molecular-motion.alvaroesteban.dev/schema/v<n>.json`, and every schema names that address as its `$id`. The previous `$id` pointed to a domain that served nothing. `SCHEMA_BASE_URL` is exported from core.
 
 ## 0.2.0
