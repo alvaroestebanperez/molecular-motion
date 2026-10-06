@@ -48,7 +48,7 @@ describe('schema v6 (RFC 0007 §11)', () => {
     expect(migrateV5(v5)).toEqual({ ...v5, schemaVersion: 6 });
     const v6 = { schemaVersion: 6 };
     expect(migrateV5(v6)).toBe(v6);
-    expect(parseMechanism({ ...document([[show]]), schemaVersion: 5 }).schemaVersion).toBe(6);
+    expect(parseMechanism({ ...document([[show]]), schemaVersion: 5 }).schemaVersion).toBe(7);
   });
 
   it('declares the initial strand state and excise-interval in the generated schema, and keeps the base-excision alias', () => {
@@ -365,9 +365,9 @@ describe('v5 documents (RFC 0007 I9)', () => {
     expect(Object.keys(nucleic(snapshot)!)).toEqual(['missing', 'nascent', 'open']);
   });
 
-  it.each(EXAMPLES)('frozen v5 %s migrates to v6 and no snapshot or timeline change mentions excised', name => {
+  it.each(EXAMPLES)('frozen v5 %s migrates to the current version and no snapshot or timeline change mentions excised', name => {
     const compiled = compileMechanism(parseMechanism(readFileSync(new URL(`./fixtures/v5/${name}.yaml`, import.meta.url), 'utf8')));
-    expect(compiled.definition.schemaVersion).toBe(6);
+    expect(compiled.definition.schemaVersion).toBe(7);
     const states = allStates(compiled);
     expect(JSON.stringify(states)).not.toContain('excised');
     for (const state of states) for (const actor of Object.values(state.actors) as Array<{ nucleic?: object }>) {

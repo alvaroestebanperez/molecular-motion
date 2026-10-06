@@ -6,7 +6,7 @@ import { MECHANISMS, projectToV1, readGolden, readV1Fixture } from './helpers';
 describe('v1 → v2 migration', () => {
   it.each(MECHANISMS)('%s: migrated v1 document reproduces the v1 engine exactly', name => {
     const definition = parseMechanism(readV1Fixture(name));
-    expect(definition.schemaVersion).toBe(6);
+    expect(definition.schemaVersion).toBe(7);
     expect(projectToV1(compileMechanism(definition))).toEqual(readGolden(name));
   });
 

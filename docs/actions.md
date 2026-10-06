@@ -4,7 +4,7 @@
 
 Every action a step can contain, as the compiler accepts it. For the rest of a document, see [the language](language.md).
 
-**Primitives** define every change of state: [`bind`](#bind) · [`unbind`](#unbind) · [`set-state`](#set-state) · [`modify`](#modify) · [`translocate`](#translocate) · [`synthesize`](#synthesize) · [`degrade`](#degrade) · [`cleave`](#cleave) · [`ligate`](#ligate) · [`resect`](#resect) · [`extend`](#extend) · [`unwind`](#unwind) · [`anneal`](#anneal) · [`occupy`](#occupy) · [`coat`](#coat) · [`vacate`](#vacate) · [`pair`](#pair) · [`unpair`](#unpair) · [`excise-interval`](#excise-interval)
+**Primitives** define every change of state: [`bind`](#bind) · [`unbind`](#unbind) · [`set-state`](#set-state) · [`modify`](#modify) · [`translocate`](#translocate) · [`synthesize`](#synthesize) · [`degrade`](#degrade) · [`cleave`](#cleave) · [`ligate`](#ligate) · [`resect`](#resect) · [`extend`](#extend) · [`unwind`](#unwind) · [`anneal`](#anneal) · [`occupy`](#occupy) · [`coat`](#coat) · [`vacate`](#vacate) · [`pair`](#pair) · [`unpair`](#unpair) · [`excise-interval`](#excise-interval) · [`reconnect-strands`](#reconnect-strands)
 
 **Aliases** are biological verbs that expand to a primitive and keep their own wording in captions: [`recruit`](#recruit) · [`invade`](#invade) · [`show`](#show) · [`hide`](#hide) · [`activate`](#activate) · [`inactivate`](#inactivate) · [`inhibit`](#inhibit) · [`phosphorylate`](#phosphorylate) · [`dephosphorylate`](#dephosphorylate) · [`ubiquitinate`](#ubiquitinate) · [`parylate`](#parylate) · [`polymerize`](#polymerize) · [`damage`](#damage) · [`excise`](#excise) · [`fill-gap`](#fill-gap) · [`repair`](#repair)
 
@@ -244,6 +244,18 @@ In captions: "excises".
 |---|---|---|---|
 | `target` | yes | `actor` or `actor.site` | The nucleic acid, or one of its sites with a span. |
 | `span` |  | `[from, to]` | Interval to remove, overriding the site. It must be internal: it reaches neither end of the molecule. |
+
+### `reconnect-strands`
+
+Reconnect one strand of two nucleic acids at corresponding points, so each continues 5′→3′ as the other. It cuts and joins in one step and clears a break at either site. No nucleotide moves or is renumbered, and no pairing changes. Applied again at the same two sites it undoes itself.
+
+In captions: "reconnects with".
+
+| Field | Required | Value | Notes |
+|---|---|---|---|
+| `target` | yes | `actor.site` | Site with a point coordinate (at) on one molecule. |
+| `with` | yes | `actor.site` | Site with a point coordinate (at) on the other molecule, which an alignment of orientation same puts opposite the target. |
+| `strand` |  | `top`, `bottom` | Strand to reconnect, the same on both molecules. Needed when a site is on both strands or names none. |
 
 ## Aliases
 

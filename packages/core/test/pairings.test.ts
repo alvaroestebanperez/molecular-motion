@@ -44,7 +44,7 @@ describe('schema v5 and alignments (RFC 0006 §4)', () => {
     const v5 = { schemaVersion: 5 };
     expect(migrateV4(v5)).toBe(v5);
     const legacy = compileMechanism({ ...document([[{ type: 'bind', actor: 'nuclease', target: 'sister' }]], []), schemaVersion: 4 });
-    expect(legacy.definition.schemaVersion).toBe(6);
+    expect(legacy.definition.schemaVersion).toBe(7);
     expect(legacy.definition.alignments).toEqual([]);
     expect(legacy.at(0).pairings).toEqual({});
   });
@@ -71,7 +71,7 @@ describe('schema v5 and alignments (RFC 0006 §4)', () => {
 
   it('declares alignments and the pairing actions in the generated schema', () => {
     const schema = toJsonSchema() as { properties: Record<string, unknown>; $defs: { action: { oneOf: Array<{ properties: { type: { const: string } } }> } } };
-    expect(schema.properties.schemaVersion).toEqual({ const: 6 });
+    expect(schema.properties.schemaVersion).toEqual({ const: 7 });
     expect(schema.properties.alignments).toBeDefined();
     expect(schema.$defs.action.oneOf.map(action => action.properties.type.const)).toEqual(expect.arrayContaining(['pair', 'unpair', 'invade']));
   });

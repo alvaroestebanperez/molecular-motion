@@ -53,6 +53,6 @@ describe('v3 → v4 migration (RFC 0005 §8)', () => {
     expect(migrateV3(v3)).toEqual({ ...v3, schemaVersion: 4 });
     const v4 = { schemaVersion: 4 };
     expect(migrateV3(v4)).toBe(v4);
-    expect(parseMechanism({ ...doc([{ id: 'a', type: 'protein' }]), schemaVersion: 3 }).schemaVersion).toBe(6);
+    expect(parseMechanism({ ...doc([{ id: 'a', type: 'protein' }]), schemaVersion: 3 }).schemaVersion).toBe(7);
   });
 });

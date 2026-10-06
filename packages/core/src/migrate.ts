@@ -73,6 +73,15 @@ export function migrateV5(document: unknown): unknown {
 }
 
 /**
+ * Convert a schemaVersion 6 document to schemaVersion 7 (RFC 0008). Joins and `reconnect-strands`
+ * are new and optional, so only the version moves. Best effort on malformed input.
+ */
+export function migrateV6(document: unknown): unknown {
+  if (!isObject(document) || document.schemaVersion !== 6) return document;
+  return { ...document, schemaVersion: 7 };
+}
+
+/**
  * Convert a schemaVersion 2 document to schemaVersion 3 (RFC 0004). Sites on nucleic acids trade
  * their layout keyword (or its absence, which meant `center`) for an interbase coordinate on the
  * implicit 100-unit molecule; a `Point` position stays a layout override without a coordinate.
