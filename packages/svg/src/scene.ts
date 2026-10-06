@@ -321,12 +321,43 @@ function relaxation(x: number, ranges: readonly { x0: number; x1: number; abrupt
   return weight;
 }
 
+const BREAKS: readonly (LesionType | undefined)[] = ['nick', 'single-strand-break', 'double-strand-break'];
+
+/**
+ * True while the nick at boundary `at` of `strand`, where newly made nucleotides meet the strand that was
+ * already there, is still unsealed. Three facts are kept apart here: `nascent` records where nucleotides
+ * came from, a break lesion records an unsealed nick, and covalent topology records continuity. None
+ * stands in for another. Such a nick is no lesion of its own: the break the synthesis started from
+ * carries it until `ligate` (RFC 0006 §6.3). So it is open only while a point site with a break on this
+ * strand is at the boundary, or is reached from it along the run of `nascent` nucleotides and across any
+ * junction of an excised interval: the walk `ligate` makes from the site to find the ends it seals.
+ */
+export function synthesisNickOpen(acid: Pick<SceneNucleicAcid, 'sites' | 'nascent' | 'excised'>, strand: StrandId, at: number): boolean {
+  const NEAR = 1e-3;
+  const nascent = (acid.nascent ?? []).filter(range => range.strand === strand);
+  const excised = acid.excised ?? [];
+  const edge = (from: number, side: 'left' | 'right') => {
+    for (let reached = from, guard = nascent.length + excised.length; guard >= 0; guard -= 1) {
+      const next = side === 'left'
+        ? nascent.find(range => range.from < reached - NEAR && range.to >= reached - NEAR)?.from ?? excised.find(item => Math.abs(item.to - reached) < NEAR)?.from
+        : nascent.find(range => range.from <= reached + NEAR && range.to > reached + NEAR)?.to ?? excised.find(item => Math.abs(item.from - reached) < NEAR)?.to;
+      if (next === undefined) return reached;
+      reached = next;
+    }
+    return from;
+  };
+  return acid.sites.some(site => site.at && site.at.from === site.at.to && BREAKS.includes(site.lesion) && (site.lesionStrands ?? ['top']).includes(strand)
+    && (Math.abs(edge(site.at.from, 'left') - at) < NEAR || Math.abs(edge(site.at.from, 'right') - at) < NEAR));
+}
+
 /**
  * Free 3′ ends of newly synthesised stretches inside an unwound region, as `[strand, x]`. The new strand
  * is paired with nothing there, so it is not joined to what lies past its end: it is drawn as an end
- * until the region is annealed (RFC 0006 §10). Past the end the strand must be there, on this molecule.
+ * until the region is annealed (RFC 0006 §10). Past the end the strand must be there, on this molecule,
+ * and the nick between the two must still be unsealed: once the break that owns it is ligated, the end of
+ * a `nascent` range is only where new nucleotides stop, and the strand runs on.
  */
-export function freeStrandEnds(acid: Pick<SceneNucleicAcid, 'missing' | 'nascent' | 'open' | 'away'>, width: number): [0 | 1, number][] {
+export function freeStrandEnds(acid: Pick<SceneNucleicAcid, 'sites' | 'missing' | 'nascent' | 'open' | 'away' | 'excised'>, width: number): [0 | 1, number][] {
   if (!acid.nascent || !acid.open) return [];
   const within = (list: readonly SceneStrandRange[] | undefined, strand: 0 | 1, x: number) => (list ?? []).some(range => strandIndex(range.strand) === strand && x > range.x0 && x < range.x1);
   return acid.nascent.flatMap((range): [0 | 1, number][] => {
@@ -334,7 +365,8 @@ export function freeStrandEnds(acid: Pick<SceneNucleicAcid, 'missing' | 'nascent
     const x = strand === 0 ? range.x1 : range.x0;
     const [inside, beyond] = strand === 0 ? [x - 1, x + 1] : [x + 1, x - 1];
     const unwound = acid.open!.some(region => x >= region.x0 && x <= region.x1);
-    return unwound && beyond > 0 && beyond < width && !within(acid.missing, strand, beyond) && !within(acid.away, strand, beyond) && !within(acid.away, strand, inside) ? [[strand, x]] : [];
+    return unwound && beyond > 0 && beyond < width && !within(acid.missing, strand, beyond) && !within(acid.away, strand, beyond) && !within(acid.away, strand, inside)
+      && synthesisNickOpen(acid, range.strand, strand === 0 ? range.to : range.from) ? [[strand, x]] : [];
   });
 }
 
@@ -487,8 +519,9 @@ export function pairingGeometry(
 /**
  * Record on each molecule the stretches of its strands that are drawn beside another molecule, and
  * whether the strand goes on along its own molecule past each end of them. Past an end it goes on when
- * the next nucleotide is there, on this molecule's line, and is not where synthesis stopped: the 3′ end
- * of a new stretch is a free end. Read from strand ranges only, so it serves frames as well as steps.
+ * the next nucleotide is there, on this molecule's line, and is not where synthesis stopped at a nick
+ * that is still unsealed (`synthesisNickOpen`): only then is the 3′ end of a new stretch a free end.
+ * Read from strand ranges and the molecule's own sites only, so it serves frames as well as steps.
  */
 export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneStrandSpan[], width: number): void {
   const NEAR = 1e-3;
@@ -505,7 +538,7 @@ export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneSt
     const top = traveller.strand === 'top';
     const goesOn = (inside: number, outside: number, threePrime: boolean) => outside >= 0 && outside < length
       && !on(acid.missing, outside) && !on(others, outside)
-      && !(threePrime && on(acid.nascent, inside) && !on(acid.nascent, outside));
+      && !(threePrime && on(acid.nascent, inside) && !on(acid.nascent, outside) && synthesisNickOpen(acid, traveller.strand, (inside + outside) / 2));
     // Where a join claims the boundary, the strand is continued by a link (ADR 0004 §5.3). The range's lower
     // end is the nucleotide on the higher side of its boundary, and the other way round.
     const claimed = (at: number, side: 0 | 1): JoinedEnd | undefined => {
