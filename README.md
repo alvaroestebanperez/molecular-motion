@@ -159,7 +159,7 @@ Strands of two nucleic acids can base-pair. A top-level `alignments` list declar
 
 A nucleic acid may begin with only part of itself present: `initial.nucleic` takes the strand state of a snapshot (`missing`, `nascent`, `open`, `excised`), so a transcript can start as its first nucleotides and grow with `extend`. `excise-interval` removes an internal interval and makes its flanks covalent neighbours, as in splicing or a V(D)J coding joint. Coordinates are never renumbered, so sites and alignments keep their meaning ([RFC 0007](docs/rfcs/0007-initial-extent-and-excision.md), schema v6). The viewer draws the molecule closed, with its flanks joined at a junction mark ([ADR 0002](docs/adr/0002-drawing-excision.md)).
 
-Two molecules can exchange what follows on one strand: `reconnect-strands` takes a point site on each, opposite each other under an alignment, and from there each strand continues as the other. Nothing moves between molecules and nothing is renumbered; covalent strands and the physical products are derived from the joins and the pairing, and are not actors. The same strand at two junctions gives a non-crossover and different strands a crossover ([RFC 0008](docs/rfcs/0008-covalent-continuity.md), schema v7). Joined strands are not drawn yet: the renderer shows such a document as if no join existed.
+Two molecules can exchange what follows on one strand: `reconnect-strands` takes a point site on each, opposite each other under an alignment, and from there each strand continues as the other. Nothing moves between molecules and nothing is renumbered; covalent strands and the physical products are derived from the joins and the pairing, and are not actors. The same strand at two junctions gives a non-crossover and different strands a crossover ([RFC 0008](docs/rfcs/0008-covalent-continuity.md), schema v7). The viewer keeps every molecule on its own row and draws each join as a link from the end of one stretch to the start of the next, so the two outcomes are different figures ([ADR 0004](docs/adr/0004-drawing-covalent-joins.md)).
 
 ## React
 
@@ -341,7 +341,8 @@ examples/     # complete mechanism definitions
 - [x] Compartment-aware layout: an actor's resolved compartment decides the band it is drawn in, nucleic acids included ([ADR 0003](docs/adr/0003-compartment-aware-layout.md))
 - [ ] Pairing loops across a junction
 - [x] Covalent continuity between molecules, in the core: reciprocal reconnection of strands, so a junction can be resolved as a crossover or a non-crossover ([RFC 0008](docs/rfcs/0008-covalent-continuity.md))
-- [ ] Drawing joined strands and the products of a reconnection; flaps and other joins without a reciprocal
+- [x] Drawing joined strands: a link for every covalent bond between two molecules, and a cross-fade when one appears ([ADR 0004](docs/adr/0004-drawing-covalent-joins.md))
+- [ ] A colour per molecule of origin and a layout of the products of a reconnection; routing of links that crowd; flaps and other joins without a reciprocal
 - [x] Actor copies, interaction graph with interfaces, and footprint occupancy on nucleic acids ([RFC 0005](docs/rfcs/0005-assemblies-and-occupancy.md))
 - [x] Per-step references, key events, and summaries
 - [x] Review-figure SVG language: helix with depth, molecular surfaces, lesion states, PAR chains, callouts

@@ -5,7 +5,7 @@ import { hashString } from './primitives/shared';
 import { insideParticle } from './primitives/protein-geometry';
 import {
   actorInstances, anonymousAttachment, lesionStrands, partnerOf, partnersOf, primaryPartner, nucleicLength, siteInterval, type Activity, type ActorDefinition, type ActorSite, type ActorType, type LesionType, type MechanismSnapshot,
-  type Modification, type Point, type SiteStrand, type StrandId, nucleicForm,
+  type Modification, type Point, type SiteStrand, type StrandId, type StrandPoint, nucleicForm,
 } from '@molecular-motion/core';
 import { contactOutline, firstContact, transmembraneGeometry, proteinGeometry, proteinOutlineWidth, smallMoleculeAtoms, type ContactShape, type FirstContact, type ProteinSphere, type SmallMoleculeTopology } from './primitives';
 import { SMALL_MOLECULE_TOPOLOGIES } from './vocabulary';
@@ -59,8 +59,26 @@ export interface SceneNucleicAcid {
    * Stretches of this molecule's strands drawn beside another molecule's strand instead (RFC 0006 §10).
    * `continues` says, for the lower and the higher end, whether the strand goes on along this molecule.
    */
-  away?: Array<SceneStrandRange & { continues: [boolean, boolean] }>;
+  away?: Array<SceneStrandRange & { continues: [boolean, boolean]; joined?: [JoinedEnd | undefined, JoinedEnd | undefined] }>;
+  /**
+   * Boundaries of this molecule's strands that a join claims (RFC 0008), present only when there are any.
+   * The row's backbone is not drawn through one: a link continues the strand instead (ADR 0004 §5.4).
+   * `exposed` says, for the nucleotide on the lower and on the higher side, whether its bond there is
+   * broken, so that it is an end. Only a frame of a transition gives one a `share` below 1.
+   */
+  joined?: Array<{ strand: StrandId; at: number; x: number; exposed: [boolean, boolean]; share?: number }>;
 }
+
+/** An end of a stretch drawn beside a partner that a join continues: how far the join has faded in, and whether its bond is broken. */
+export interface JoinedEnd { share: number; exposed: boolean }
+
+/**
+ * A covalent bond between strands of two molecules (RFC 0008 §4), as the renderer draws it: a link from
+ * the drawn end of the stretch that ends at `from` to the drawn start of the one that begins at `to`
+ * (ADR 0004 §5.1). `broken` when a site that names the bond carries a break: the link is then not
+ * drawn. Only a frame of a transition gives one a `share` below 1 (§6).
+ */
+export interface SceneJoin { key: string; from: StrandPoint; to: StrandPoint; broken?: true; share?: number }
 
 export interface SceneStrandSpan { acid: string; strand: StrandId; from: number; to: number }
 
@@ -225,6 +243,8 @@ export interface SvgScene {
   lesions: SceneLesion[];
   /** Base pairing between molecules; empty for a document without pairings. */
   pairings: ScenePairing[];
+  /** Covalent joins between molecules (RFC 0008), each drawn as a link; absent for a document without joins. */
+  joins?: SceneJoin[];
   /** Occupancies held away from where their instance is drawn; empty for most documents. */
   footprints: SceneFootprint[];
   /** The membrane of the scene, when the document declares a compartment of kind `membrane`; empty for most documents. */
@@ -374,7 +394,12 @@ export interface PairingGeometry {
   nascent: Point[][];
   /** Free ends of the travelling strand, to be labelled with their polarity. */
   ends: Array<Point & { label: '5′' | '3′' }>;
+  /** How many points at each end of `points` a ramp to the strand's own row takes up, whether or not one is drawn there. */
+  rampPoints: number;
 }
+
+/** Joins: how far a stretch on its own row stops before a boundary a join claims, in px (ADR 0004 §5.4). */
+export const JOIN = { inset: 14 } as const;
 
 /**
  * Geometry of one stretch of pairing (RFC 0006 §10), from strand state and coordinates alone. The
@@ -382,7 +407,11 @@ export interface PairingGeometry {
  * own molecule it eases back onto that molecule's axis, so entry and exit are one smooth curve; a free
  * end simply ends beside the partner.
  */
-export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>, { traveller, host }: Pick<ScenePairingSegment, 'traveller' | 'host'>, travel = 1): PairingGeometry | undefined {
+export function pairingGeometry(
+  scene: Pick<SvgScene, 'width' | 'nucleicAcids'>, { traveller, host }: Pick<ScenePairingSegment, 'traveller' | 'host'>, travel = 1,
+  /** `own-row` draws the ramps a join has replaced: only the cross-fade of ADR 0004 §6 asks for them. */
+  ramps: 'continuation' | 'own-row' = 'continuation',
+): PairingGeometry | undefined {
   const own = scene.nucleicAcids.find(acid => acid.id === traveller.acid);
   const other = scene.nucleicAcids.find(acid => acid.id === host.acid);
   if (!own || !other) return undefined;
@@ -400,7 +429,10 @@ export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>,
   const reach = ownReach(traveller.from, traveller.to);
   const ramp = Math.min(PAIRING.ramp, reach * .4);
   const stretch = own.away?.find(range => range.strand === traveller.strand && range.from === traveller.from && range.to === traveller.to);
-  const continues = { from: stretch?.continues[0] ?? false, to: stretch?.continues[1] ?? false };
+  // An end that a join continues has no ramp to its own row: the ramp would be a second continuation of
+  // that end, towards a nucleotide it is no longer bonded to (ADR 0004 §5.3). A link takes it from there.
+  const joined = ramps === 'continuation' ? stretch?.joined : undefined;
+  const continues = { from: (stretch?.continues[0] ?? false) && !joined?.[0], to: (stretch?.continues[1] ?? false) && !joined?.[1] };
   // Beside the partner the strand keeps one level: it does not follow the partner's own easing at the
   // edges of its bubble, so a free end stays straight and clearly inside.
   const [hostFrom, hostTo] = [otherX(host.from), otherX(host.to)];
@@ -442,11 +474,14 @@ export function pairingGeometry(scene: Pick<SvgScene, 'width' | 'nucleicAcids'>,
     const length = Math.hypot(tip.x - inner.x, tip.y - inner.y) || 1;
     return { x: tip.x - (tip.x - inner.x) / length * 26, y: tip.y - side * 18, label };
   };
+  // An end that a join continues is an end only while that bond is broken (ADR 0004 §5.7).
+  const free = (index: 0 | 1) => !(index ? continues.to : continues.from) && (!joined?.[index] || joined[index]!.exposed);
   const ends = own.polarity ? [
-    ...(continues.from ? [] : [end(points[0]!, points[1]!, labels.from)]),
-    ...(continues.to ? [] : [end(points.at(-1)!, points.at(-2)!, labels.to)]),
+    ...(free(0) ? [end(points[0]!, points[1]!, labels.from)] : []),
+    ...(free(1) ? [end(points.at(-1)!, points.at(-2)!, labels.to)] : []),
   ] : [];
-  return { points, rungs, nascent, ends };
+  const steps = points.length - 1;
+  return { points, rungs, nascent, ends, rampPoints: reach > 0 ? Math.min(steps, Math.ceil(steps * ramp / reach)) : 0 };
 }
 
 /**
@@ -471,11 +506,94 @@ export function markAway(acids: SceneNucleicAcid[], travellers: readonly SceneSt
     const goesOn = (inside: number, outside: number, threePrime: boolean) => outside >= 0 && outside < length
       && !on(acid.missing, outside) && !on(others, outside)
       && !(threePrime && on(acid.nascent, inside) && !on(acid.nascent, outside));
+    // Where a join claims the boundary, the strand is continued by a link (ADR 0004 §5.3). The range's lower
+    // end is the nucleotide on the higher side of its boundary, and the other way round.
+    const claimed = (at: number, side: 0 | 1): JoinedEnd | undefined => {
+      const boundary = acid.joined?.find(item => item.strand === traveller.strand && Math.abs(item.at - at) < NEAR);
+      return boundary && { share: boundary.share ?? 1, exposed: boundary.exposed[side] };
+    };
+    const joined: [JoinedEnd | undefined, JoinedEnd | undefined] = [claimed(traveller.from, 1), claimed(traveller.to, 0)];
     acid.away = [...acid.away ?? [], {
       strand: traveller.strand, from: traveller.from, to: traveller.to, x0: map ? map.place(traveller.from) : traveller.from * scale, x1: map ? map.place(traveller.to) : traveller.to * scale,
       continues: [goesOn(traveller.from + NEAR, traveller.from - NEAR, !top), goesOn(traveller.to - NEAR, traveller.to + NEAR, top)],
+      ...((joined[0] || joined[1]) && { joined }),
     }];
   }
+}
+
+const samePoint = (a: StrandPoint, b: StrandPoint) => a.acid === b.acid && a.strand === b.strand && a.at === b.at;
+
+/**
+ * Record on each molecule the boundaries its joins claim (ADR 0004 §5.4), from the joins alone, so it
+ * serves frames as well as steps. A boundary has two nucleotides, each in one bond: on `top` the lower
+ * one is the source of the join that leaves the boundary and the higher one the destination of the join
+ * that arrives at it; on `bottom` the other way round (RFC 0008 §4.1).
+ */
+export function markJoined(acids: SceneNucleicAcid[], joins: readonly SceneJoin[], width: number): void {
+  for (const acid of acids) {
+    delete acid.joined;
+    const points = joins.flatMap(join => [join.from, join.to]).filter(point => point.acid === acid.id);
+    const boundaries = points.filter((point, index) => points.findIndex(other => samePoint(other, point)) === index);
+    if (!boundaries.length) continue;
+    const map = coordinateMapOf(acid, width);
+    acid.joined = boundaries.map(point => {
+      const leaving = joins.find(join => samePoint(join.from, point));
+      const arriving = joins.find(join => samePoint(join.to, point));
+      const [lower, higher] = point.strand === 'top' ? [leaving, arriving] : [arriving, leaving];
+      const share = Math.max(leaving?.share ?? (leaving ? 1 : 0), arriving?.share ?? (arriving ? 1 : 0));
+      return {
+        strand: point.strand, at: point.at, x: map.place(point.at), exposed: [Boolean(lower?.broken), Boolean(higher?.broken)] as [boolean, boolean],
+        ...(share < 1 && { share }),
+      };
+    }).sort((a, b) => (a.strand === b.strand ? a.at - b.at : a.strand === 'top' ? -1 : 1));
+  }
+}
+
+export interface JoinGeometry {
+  /** Where the source stretch ends and the destination stretch begins. */
+  from: Point; to: Point;
+  /** Control points of the curve between them: each leaves its stretch along the stretch's own direction. */
+  controls: [Point, Point];
+}
+
+/**
+ * Geometry of the link that draws a join (ADR 0004 §5.1–5.2). Each end is where its own material is
+ * drawn: on its molecule's row, through that molecule's coordinate map and stopped short of the
+ * boundary; or, for a stretch drawn beside a pairing partner, at the end of that displaced stretch.
+ * Nothing here knows what the join is for.
+ */
+export function joinGeometry(
+  scene: Pick<SvgScene, 'width' | 'nucleicAcids'> & { pairings: ReadonlyArray<{ segments: ReadonlyArray<Pick<ScenePairingSegment, 'traveller' | 'host'> & { travel?: number }> }> },
+  join: Pick<SceneJoin, 'from' | 'to'>,
+): JoinGeometry | undefined {
+  const { width } = scene;
+  const end = (point: StrandPoint, role: 'source' | 'destination'): { at: Point; out: Point } | undefined => {
+    const acid = scene.nucleicAcids.find(item => item.id === point.acid);
+    if (!acid) return undefined;
+    // The source is the nucleotide on the 5′ side of its boundary, the destination the one on the 3′ side.
+    const lowerSide = (role === 'source') === (point.strand === 'top');
+    const index = lowerSide ? point.at - 1 : point.at;
+    const away = acid.away?.find(range => range.strand === point.strand && range.from <= index && index < range.to);
+    if (away) {
+      const segment = scene.pairings.flatMap(pairing => pairing.segments)
+        .find(({ traveller }) => traveller.acid === acid.id && traveller.strand === away.strand && traveller.from === away.from && traveller.to === away.to);
+      const points = segment && pairingGeometry(scene, segment, segment.travel ?? 1)?.points;
+      if (!points || points.length < 2) return undefined;
+      const [tip, inner] = lowerSide ? [points.at(-1)!, points.at(-2)!] : [points[0]!, points[1]!];
+      const length = Math.hypot(tip.x - inner.x, tip.y - inner.y) || 1;
+      return { at: tip, out: { x: (tip.x - inner.x) / length, y: (tip.y - inner.y) / length } };
+    }
+    const x = coordinateMapOf(acid, width).place(point.at) + (lowerSide ? -JOIN.inset : JOIN.inset);
+    return { at: { x, y: helixY(acid, strandIndex(point.strand), x, width) }, out: { x: lowerSide ? 1 : -1, y: 0 } };
+  };
+  const [from, to] = [end(join.from, 'source'), end(join.to, 'destination')];
+  if (!from || !to) return undefined;
+  // Short handles: the link leaves each stretch along it and turns at once, without swinging past its ends.
+  const reach = Math.max(12, Math.min(36, Math.hypot(to.at.x - from.at.x, to.at.y - from.at.y) * .3));
+  return {
+    from: from.at, to: to.at,
+    controls: [{ x: from.at.x + from.out.x * reach, y: from.at.y + from.out.y * reach }, { x: to.at.x + to.out.x * reach, y: to.at.y + to.out.y * reach }],
+  };
 }
 
 /** Callout text: the label, with the number of visible copies when it speaks for a group. */
@@ -936,6 +1054,19 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
   // Pairing between molecules, from `state.pairings` and strand state only. Of the two paired strands,
   // the one whose molecule is less unwound there travels to the other; on a tie the molecule declared
   // first travels. A strand paired within its own molecule is not drawn (RFC 0004 keeps RNA and DNA linear).
+  // Covalent joins between molecules on screen (RFC 0008), read from state alone: each becomes a link
+  // (ADR 0004). A bond is broken when the point site that names it carries a break on that strand: on
+  // `top` that site is at the join's `from`, on `bottom` at its `to` (RFC 0008 §6.1).
+  const isBreak = (lesion: LesionType | undefined) => lesion === 'single-strand-break' || lesion === 'nick' || lesion === 'double-strand-break';
+  const joins: SceneJoin[] = Object.values(snapshot.joins ?? {}).flat()
+    .filter(join => acidIndex.has(join.from.acid) && acidIndex.has(join.to.acid))
+    .map(({ from, to }) => {
+      const named = from.strand === 'top' ? from : to;
+      const broken = acidIndex.get(named.acid)!.sites.some(site => site.at && site.at.from === site.at.to && site.at.from === named.at
+        && isBreak(site.lesion) && (site.lesionStrands ?? ['top']).includes(named.strand));
+      return { key: `${from.acid}.${from.strand}@${from.at}>${to.acid}.${to.strand}@${to.at}`, from: { ...from }, to: { ...to }, ...(broken && { broken: true as const }) };
+    });
+  if (joins.length) markJoined(nucleicAcids, joins, width);
   const order = new Map(nucleicAcids.map((acid, index) => [acid.id, index]));
   const openShare = (span: SceneStrandSpan) => (snapshot.actors[span.acid]?.nucleic?.open ?? [])
     .reduce((sum, region) => sum + Math.max(0, Math.min(region.to, span.to) - Math.max(region.from, span.from)), 0) / (span.to - span.from);
@@ -948,7 +1079,21 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
       const facing: SceneStrandSpan = { ...host, strand: host.strand === 'top' ? 'bottom' : 'top' };
       const unpaired = partnerOf(snapshot, snapshot.definition, facing).filter(item => item.partner === 'unpaired')
         .map(item => ({ acid: facing.acid, strand: facing.strand, from: item.from, to: item.to }));
-      return [{ traveller: { ...traveller }, host: { ...host }, unpaired }];
+      // A stretch ends at every boundary a join claims (ADR 0004 §5.1), so a travelling strand that a join
+      // cuts is two stretches, each with its part of the partner.
+      const cuts = (acidIndex.get(traveller.acid)?.joined ?? []).filter(item => item.strand === traveller.strand && item.at > traveller.from && item.at < traveller.to).map(item => item.at);
+      if (!cuts.length) return [{ traveller: { ...traveller }, host: { ...host }, unpaired }];
+      const edges = [traveller.from, ...cuts, traveller.to];
+      const mirrored = traveller.strand === host.strand;
+      return edges.slice(0, -1).map((from, index): ScenePairingSegment => {
+        const to = edges[index + 1]!;
+        const [i0, i1] = [from - traveller.from, to - traveller.from];
+        return {
+          traveller: { ...traveller, from, to },
+          host: mirrored ? { ...host, from: host.to - i1, to: host.to - i0 } : { ...host, from: host.from + i0, to: host.from + i1 },
+          unpaired: index ? [] : unpaired,
+        };
+      });
     });
     return segments.length ? [{ key, segments }] : [];
   });
@@ -1635,7 +1780,7 @@ export function buildSvgScene(snapshot: MechanismSnapshot, options: SceneOptions
     width, height,
     title: snapshot.step.title,
     description: snapshot.step.description ?? '',
-    nucleicAcids, actors, connections, lesions, pairings, footprints, membranes, regions, calloutConflicts, compartmentConflicts,
+    nucleicAcids, actors, connections, lesions, pairings, ...(joins.length && { joins }), footprints, membranes, regions, calloutConflicts, compartmentConflicts,
   };
 }
 

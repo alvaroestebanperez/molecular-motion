@@ -8,7 +8,7 @@ import { EXAMPLES, MECHANISMS, semanticProjection } from './helpers';
  * Legacy semantic baseline (RFC 0005 §8, RFC 0006 §12, RFC 0007 §11, RFC 0008 §11): what each step *means* for frozen
  * v2 to v7 documents. v4 also locks the interaction graph and occupancy, v5 the pairings and v7 the joins, which their
  * documents author. v6 adds a document that begins partial and excises an interval. v7 adds one that reconnects strands
- * between two molecules; it has no render baseline, since joined strands have no agreed drawing yet. Renders are locked
+ * between two molecules; its render baseline is in the svg package (ADR 0004). Renders are locked
  * separately by SHA-256 in the svg package. UPDATE_GOLDEN=1 regenerates; only for an intended, reviewed change of meaning.
  */
 const FIXTURES = {

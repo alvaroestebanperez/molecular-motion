@@ -12,7 +12,13 @@ Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a min
   - New derived readings, exported from core: `covalentSuccessor`, `covalentPredecessor`, `covalentStrands`, `productsOf`, `joinedTo`, `bondAt` and `nucleotidePresent`.
   - `resect` and `extend` stop at a join, `excise-interval` is refused over or beside one, and `degrade` of a joined molecule is refused. `translocate` is unchanged.
   - `migrateV6` is exported, and the schema of version 6 is archived as `schema.v6.json`.
-  - Joined strands have no drawing yet: `@molecular-motion/svg` and `@molecular-motion/react` render a document with joins as if no join existed.
+- **Joined strands are drawn** ([ADR 0004](docs/adr/0004-drawing-covalent-joins.md)), in `@molecular-motion/svg` and `@molecular-motion/react`. A document without joins renders exactly as before.
+  - Every molecule stays on its own row, and a link draws each covalent bond between two molecules, in place of the backbone that used to run through that boundary. A crossover and a non-crossover are now different figures.
+  - A strand drawn beside a pairing partner that a join continues ends at the link, and no longer eases back to its own row.
+  - A break at a joined bond removes its link, and labels the two ends it exposes with their 5′ and 3′, each where its own molecule is drawn.
+  - A step that adds or removes a join cross-fades between the two drawings. `describeScene` says which strand continues as which.
+  - A scene carries `joins`, and the markup a `joins` layer, only when there are any. `nucleicLayerMarkup` also returns `joins`.
+  - Not done: a colour per molecule of origin, any layout of the products, and routing of links that cross or crowd.
 - The JSON Schemas are published at `https://molecular-motion.alvaroesteban.dev/schema/v<n>.json`, and every schema names that address as its `$id`. The previous `$id` pointed to a domain that served nothing. `SCHEMA_BASE_URL` is exported from core.
 
 ## 0.2.0

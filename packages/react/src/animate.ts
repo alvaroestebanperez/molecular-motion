@@ -7,7 +7,7 @@ import { interpolateGeometry, nucleicLayerMarkup, type GeometryFrame } from '@mo
  */
 
 /** Layers the animator owns while a transition runs; `patchSvg` leaves them alone meanwhile. */
-export const NUCLEIC_LAYERS = ['acids', 'pairings'] as const;
+export const NUCLEIC_LAYERS = ['acids', 'pairings', 'joins'] as const;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const layerOf = (svg: Element, name: string) => Array.from(svg.children).find(child => child.getAttribute('data-layer') === name);
@@ -45,11 +45,12 @@ export function applyGeometryFrame(svg: Element, frame: GeometryFrame, idPrefix:
     const source = layerOf(parsed, name)!;
     let target = layerOf(svg, name);
     if (!target) {
-      // A layer only some steps have (pairings): put it where a clean render has it, right after the molecules.
+      // A layer only some steps have (pairings, joins): put it where a clean render has it, right after the
+      // nearest nucleic layer that comes before it.
       if (!source.children.length) continue;
       target = document.importNode(source, false);
-      const acids = layerOf(svg, 'acids');
-      svg.insertBefore(target, acids ? acids.nextSibling : svg.firstChild);
+      const before = NUCLEIC_LAYERS.slice(0, NUCLEIC_LAYERS.indexOf(name)).map(other => layerOf(svg, other)).filter(Boolean).at(-1);
+      svg.insertBefore(target, before ? before.nextSibling : svg.firstChild);
     }
     syncChildren(target, source);
   }
