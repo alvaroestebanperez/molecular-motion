@@ -1,6 +1,6 @@
 # ADR 0004 — Drawing covalent joins between molecules
 
-- **Status:** accepted, ready for implementation. Decisions in §9. Nothing here is implemented yet.
+- **Status:** accepted and implemented. Decisions in §9; implementation notes in §11.
 - **Scope:** renderer and viewer only. No schema change, no core change.
 - **Out of scope:** per-material strand colour; any identity, layout or naming of products; anything specific to crossovers, Holliday junctions or recombinases; occupancy across a join; layout polish for circular strands; unrelated renderer or layout fixes; package versions, changelog and tags.
 - **Context:** [RFC 0008](../rfcs/0008-covalent-continuity.md) (joins, `covalentSuccessor`, `bondAt`), [RFC 0006](../rfcs/0006-nucleic-acid-pairing.md) §10 (strands drawn beside a partner), [ADR 0001](0001-nucleic-geometry-animation.md) (transition geometry), [ADR 0002](0002-drawing-excision.md) (coordinate map)
@@ -240,3 +240,16 @@ Schema v7 can be published when all of these hold:
 1. **Per-material colour.** With every strand one colour, a reader follows a reconnection through the links but cannot see at a glance which stretch came from which molecule. It is not needed for the figure to be true, and is left for later.
 2. **Crowding.** A link between `bottom` strands of two rows crosses the lower row's `top` strand, and several joins close together overlap. No layout is proposed for it.
 3. **A join without its reciprocal** is admitted by the state and never written in v7. The rules here are per directed join, so they may happen to draw one. **This ADR does not guarantee presentation quality for it**: it is not designed, not a fixture and not tested.
+
+## 11. Implementation notes
+
+- **The scene** carries `joins`, one `SceneJoin` per directed join whose two molecules are on screen, with a `broken` flag read from the lesion at the site that names the bond. `markJoined` records on each molecule the boundaries its joins claim, from the joins alone, so it serves the frames of a transition as well as a step. Both are absent when there is no join.
+- **The link** is `joinGeometry` in `packages/svg/src/scene.ts`: one cubic curve between two ends, each either on its row at a fixed inset of 14 px from the boundary, or at the end of the displaced stretch that `pairingGeometry` draws. It takes a join and the scene, and reads no action.
+- **The ramp** is suppressed inside `pairingGeometry`, which is the one helper of §5.3: a stretch end that a join claims does not ease back to its own row. Its second argument for ramps exists only so that the cross-fade can draw the ramp that is fading out.
+- **A pairing stretch is split at a joined boundary** of the travelling strand, so that each side of the boundary is a stretch with an end of its own.
+- **The cross-fade** is one number per directed join, `share`. The link is drawn at that opacity, and the continuation it replaces (the row's backbone through the boundary, or the ramp) at the complement. Opacities of the cross-fade are written to two decimals, so that the two always sum to one.
+- **Order.** The `joins` layer comes after `pairings` and before `connections`. The viewer's animator treats it as a third nucleic layer and creates it during a transition where a clean render has it.
+- **End labels at a broken join** come from the row's ordinary fragment labels, which already follow covalent polarity: the join only says whether the end beside the boundary is exposed. Nothing reads the direction of the join to choose a label.
+- **The link's shape is not tuned** for links that cross each other or other strands (§10.2). Between two full rows the two links of a reciprocal pair cross in a narrow figure; at a junction beside a pairing they are short and separate.
+- **Baselines.** One render baseline was added, for the v7 double Holliday junction fixture. No existing baseline changed.
+
