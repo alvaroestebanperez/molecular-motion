@@ -1,10 +1,9 @@
 # RFC 0008 — Covalent continuity between molecules
 
-- **Status:** accepted, ready for implementation. Decisions in §9; the ones that changed in review are marked. §4 defines the join formally.
+- **Status:** Implemented in the core as accepted (§9); the decisions that changed in review are marked. §4 defines the join formally. The renderer is not part of it (§14).
 - **Builds on:** [RFC 0004](0004-nucleic-acid-geometry.md) (coordinates, strand state), [RFC 0006](0006-nucleic-acid-pairing.md) (alignments, pairing), [RFC 0007](0007-initial-extent-and-excision.md) (coordinate order is not covalent adjacency)
 - **Roadmap item:** *Strand exchange between molecules: nuclease resolution of junctions, crossovers, flaps*
-- **Schema:** proposes `schemaVersion: 7`
-- **Not implemented.** Nothing in this RFC exists in the code.
+- **Schema:** `schemaVersion: 7`
 
 ## 1. Problem
 
@@ -537,9 +536,25 @@ Sources. The quotations of site-specific recombination are from the abstracts in
 - Szostak JW, Orr-Weaver TL, Rothstein RJ, Stahl FW (1983). The double-strand-break repair model for recombination. *Cell* 33(1):25–35. doi:10.1016/0092-8674(83)90331-8. PMID 6380756. Its abstract does not state the crossover rule; the article was not opened.
 - Reactome, *Resolution of D-loop Structures through Holliday Junction Intermediates*, R-HSA-5693568.
 
-## 14. Implementation outline (not started)
+## 14. Implementation outline (implemented in the core)
 
 1. Core: `joins` state, the derived covalent neighbour, covalent strand and products, and `reconnect-strands` with the checks of §6.6 and §8.
 2. Core: the rules of §6.2 and §6.4 in `resect`, `extend`, `excise-interval` and `degrade`.
 3. Schema v7, `migrateV6`, fixtures and baselines.
 4. Renderer: out of scope here. Until an ADR decides how joined strands are drawn, a document with joins has no agreed drawing.
+
+### 14.1 Implementation notes
+
+Steps 1–3 are implemented. Where the text above leaves something open, the code decides as follows:
+
+- **The strand must be unambiguous.** Without the action's `strand`, both sites must name one strand, and the same one; a site of a single-stranded molecule counts as `top`. With it, a site that names the other strand is rejected. A join is always between strands of the same name (X2).
+- **Which checks are static.** That the two sites are point sites of two different nucleic acids, that an alignment relates them, that not all of those are mirrored, and the strand, are checked on the document. That the coordinates correspond is checked at the action, as §6.6 says.
+- **A break that also cuts the other strand is not half cleared.** A site that carries a `double-strand-break`, or any break of a `strand: both` site, makes `reconnect-strands` fail: one lesion per site cannot say "sealed on this strand, still cut on the other" (X11). A break of the other strand alone is left as it is.
+- **Undoing needs the same four nucleotides.** It seals two bonds as making the joins does, so "nothing to join there" (§8) applies to it too.
+- **"Already joined" is any other join at either boundary**, not only one with a third molecule: the same two molecules at another coordinate, through a second alignment, would break X3 as well.
+- **"Pass a join" means a join strictly inside the range.** `resect` and `extend` may end at a join or begin at one. A gap that reaches a join from both sides is still two strands, and neither action runs through it. `extend` refusing to fill across a join is not in §8; it follows from D6.
+- **`extend` across a join** takes the 3′-terminal nucleotide from the other molecule only if it is present, and prolongs that nucleotide's pairing on the coordinates of the molecule it fills, translated through the join. The alignment between that molecule and the template must still cover the new stretch.
+- **`ligate` at a join** applies its rule to the bond the site names (§6.1): the end on the site's own side is read on its molecule, the other end on the molecule the join reaches.
+- **Normal form (X4).** The key is that of `pairings` (`dna.top~sister.top`); within a key joins are sorted by the coordinate they leave from, then by molecule.
+- **Derived readings.** `covalentStrands` returns stretches in 5′→3′ order and marks a strand with no ends as `circular` (§4.2). `reconnect-strands` does not look for circles and does not refuse one. `productsOf` returns each product as strand spans. Neither reads lesions (§4.2): a nick does not split a strand or a product. `joinedTo` returns only the molecules that share a join with the one asked about. `bondAt` is the bond a point names (§6.1).
+- **The renderer** draws a document with joins as if no join existed. The v7 fixture that reconnects strands has a semantic baseline and no render baseline.

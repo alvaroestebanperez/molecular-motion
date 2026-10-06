@@ -1,0 +1,895 @@
+[
+  {
+    "step": "break",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {},
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[0].actions[0]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "resection",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {},
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[1].actions[0]",
+        "type": "resect",
+        "primitive": "resect",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "invasion",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 40
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [],
+          "open": []
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[2].actions[0]",
+        "type": "unwind",
+        "primitive": "unwind",
+        "subject": "sister.window",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[2].actions[1]",
+        "type": "invade",
+        "primitive": "pair",
+        "subject": "dna",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "synthesis",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            }
+          ],
+          "open": [
+            {
+              "from": 40,
+              "to": 58
+            }
+          ]
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[3].actions[0]",
+        "type": "extend",
+        "primitive": "extend",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "second-end-capture",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ],
+      "dna.bottom~sister.top": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "bottom",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            }
+          ],
+          "open": [
+            {
+              "from": 40,
+              "to": 58
+            }
+          ]
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[4].actions[0]",
+        "type": "pair",
+        "primitive": "pair",
+        "subject": "dna",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "second-synthesis",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ],
+      "dna.bottom~sister.top": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {
+      "dna.break": "double-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[5].actions[0]",
+        "type": "extend",
+        "primitive": "extend",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "ligation",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ],
+      "dna.bottom~sister.top": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[6].actions[0]",
+        "type": "ligate",
+        "primitive": "ligate",
+        "subject": "dna.break",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "nicking",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ],
+      "dna.bottom~sister.top": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {
+      "dna.hj-left": "single-strand-break",
+      "sister.hj-left": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[7].actions[0]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "dna.hj-left",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[7].actions[1]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "sister.hj-left",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "resolution",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {
+      "dna.top~sister.bottom": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ],
+      "dna.bottom~sister.top": [
+        {
+          "ends": [
+            {
+              "acid": "dna",
+              "strand": "bottom",
+              "from": 22,
+              "to": 58
+            },
+            {
+              "acid": "sister",
+              "strand": "top",
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {
+      "dna.top~sister.top": [
+        {
+          "from": {
+            "acid": "dna",
+            "strand": "top",
+            "at": 22
+          },
+          "to": {
+            "acid": "sister",
+            "strand": "top",
+            "at": 22
+          }
+        },
+        {
+          "from": {
+            "acid": "sister",
+            "strand": "top",
+            "at": 22
+          },
+          "to": {
+            "acid": "dna",
+            "strand": "top",
+            "at": 22
+          }
+        }
+      ],
+      "dna.bottom~sister.bottom": [
+        {
+          "from": {
+            "acid": "dna",
+            "strand": "bottom",
+            "at": 58
+          },
+          "to": {
+            "acid": "sister",
+            "strand": "bottom",
+            "at": 58
+          }
+        },
+        {
+          "from": {
+            "acid": "sister",
+            "strand": "bottom",
+            "at": 58
+          },
+          "to": {
+            "acid": "dna",
+            "strand": "bottom",
+            "at": 58
+          }
+        }
+      ]
+    },
+    "actors": {
+      "dna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 40,
+              "to": 58
+            },
+            {
+              "strand": "bottom",
+              "from": 22,
+              "to": 40
+            }
+          ],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      },
+      "sister": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 22,
+              "to": 58
+            }
+          ]
+        }
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[8].actions[0]",
+        "type": "reconnect-strands",
+        "primitive": "reconnect-strands",
+        "subject": "dna.hj-left",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[8].actions[1]",
+        "type": "reconnect-strands",
+        "primitive": "reconnect-strands",
+        "subject": "dna.hj-right",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  }
+]

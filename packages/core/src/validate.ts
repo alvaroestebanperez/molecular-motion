@@ -3,7 +3,7 @@ import { normalizeCompartments } from './compartments';
 import { instanceIds, INSTANCE_SEPARATOR } from './instances';
 import { extantIntervals, normalizeNucleicState, nucleicForm, nucleicLength, strandIntervals } from './nucleic';
 import { overlapsInterval, subtractInterval, type Interval } from './intervals';
-import { migrateV1, migrateV2, migrateV3, migrateV4, migrateV5 } from './migrate';
+import { migrateV1, migrateV2, migrateV3, migrateV4, migrateV5, migrateV6 } from './migrate';
 import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
 import type { ActionSpec, ActorDefinition, AlignmentDefinition, MechanismDefinition, NucleicState } from './types';
 
@@ -31,15 +31,15 @@ interface References {
 }
 
 /**
- * Structural and referential validation. Accepts v1–v5 documents (migrated automatically) and
- * returns a normalised, deep-copied v6 definition. State-dependent checks happen later, during compilation.
+ * Structural and referential validation. Accepts v1–v6 documents (migrated automatically) and
+ * returns a normalised, deep-copied v7 definition. State-dependent checks happen later, during compilation.
  */
 export function validateMechanism(input: unknown, options: ValidateOptions = {}): MechanismDefinition {
   const registry = options.registry ?? builtinRegistry;
-  const value = migrateV5(migrateV4(migrateV3(migrateV2(migrateV1(input)))));
+  const value = migrateV6(migrateV5(migrateV4(migrateV3(migrateV2(migrateV1(input))))));
   const issues: string[] = [];
   if (!isObject(value)) throw new MechanismValidationError(['root must be an object']);
-  if (value.schemaVersion !== 6) issues.push('schemaVersion must be 1, 2, 3, 4, 5 or 6');
+  if (value.schemaVersion !== 7) issues.push('schemaVersion must be 1, 2, 3, 4, 5, 6 or 7');
   if (!isObject(value.mechanism)) issues.push('mechanism must be an object');
   else {
     requiredString(value.mechanism.id, 'mechanism.id', issues);

@@ -7,7 +7,7 @@ The design decisions behind the language are in the [RFCs](rfcs/); this page say
 ## A complete document
 
 ```yaml
-schemaVersion: 6
+schemaVersion: 7
 mechanism:
   id: nick-repair
   name: Repair of a nick
@@ -39,20 +39,20 @@ A document is validated when it is parsed, and compiled once: every step is fold
 
 ## Editor support
 
-The JSON Schema of the language is published at `https://molecular-motion.alvaroesteban.dev/schema/v6.json`, and is also in the core package as `schema.json`. An editor with a YAML language server completes and checks a document that names it in its first line:
+The JSON Schema of the language is published at `https://molecular-motion.alvaroesteban.dev/schema/v7.json`, and is also in the core package as `schema.json`. An editor with a YAML language server completes and checks a document that names it in its first line:
 
 ```yaml
-# yaml-language-server: $schema=https://molecular-motion.alvaroesteban.dev/schema/v6.json
-schemaVersion: 6
+# yaml-language-server: $schema=https://molecular-motion.alvaroesteban.dev/schema/v7.json
+schemaVersion: 7
 ```
 
-The schema of each earlier version is at the same address with its number, `v1.json` to `v5.json`.
+The schema of each earlier version is at the same address with its number, `v1.json` to `v6.json`.
 
 ## Top level
 
 | Field | Required | What it is |
 |---|---|---|
-| `schemaVersion` | yes | `6`. Documents written for versions 1 to 5 are accepted and migrated automatically. |
+| `schemaVersion` | yes | `7`. Documents written for versions 1 to 6 are accepted and migrated automatically. |
 | `mechanism` | yes | `id`, `name`, and optionally `description` and `references` (ids from the list below). |
 | `actors` | yes | The molecules that take part. At least one. |
 | `steps` | yes | What happens, in order. At least one. |
@@ -184,6 +184,42 @@ alignments:
 - `a` and `b` align two different ranges, which must be equally long.
 - `orientation`: `same` (default) pairs a strand with the other molecule's opposite strand. `opposite` pairs strands of the same name, mirrored.
 
+## Reconnection
+
+Two molecules can exchange what follows on one strand. `reconnect-strands` takes a point site on each, which an alignment of orientation `same` puts opposite each other, and from there each strand continues, 5′→3′, as the other:
+
+```yaml
+actors:
+  - id: chromosome
+    type: dna
+    nucleic: { length: 80 }
+    sites:
+      - { id: junction, at: 22, strand: top }
+  - id: sister
+    type: dna
+    nucleic: { length: 80 }
+    sites:
+      - { id: junction, at: 22, strand: top }
+alignments:
+  - { id: sister, between: [chromosome, sister], range: [0, 80] }
+steps:
+  - id: resolution
+    title: The junction is resolved
+    actions:
+      - { type: reconnect-strands, target: chromosome.junction, with: sister.junction }
+```
+
+After it, nucleotide 21 of the `top` strand of `chromosome` is bonded to nucleotide 22 of the `top` strand of `sister`, and nucleotide 21 of `sister` to nucleotide 22 of `chromosome`.
+
+- **Nothing moves and nothing is renumbered.** `chromosome` nucleotide 30 is still that. Sites, pairings, occupants and strand ranges mean what they meant, and the actors keep their own state: an actor is now a name for a set of nucleotides, and no longer one physical object.
+- **One strand at a time.** The strand is the sites', or the action's `strand` when a site is on both or names none. The same strand at two points leaves each molecule with a patch of the other; different strands at two points swap the arms. The compiler does not choose, and pairing is never changed: between two points, what holds the strands together is the pairing the document already has.
+- **It cuts and joins at once**, and clears a break at either site. A `cleave` on each site in an earlier step narrates the cutting.
+- **Applied again at the same two sites, it undoes itself.**
+- **A cut is of a bond, and its ends may be on either molecule.** `cleave` at a site at a join cuts the bond that site names. `resect` then starts from the 5′ end the cut left and removes nucleotides of the molecule that end is in, which on `top` is the other molecule.
+- **No action crosses a join.** `resect` and `extend` stop there. To resect on, cut the bond at the join and resect from the site that names it; to extend on, name a site of the molecule the gap is in. `excise-interval` is refused over or beside a join, and `degrade` of a joined molecule is refused. `translocate` moves only the molecule it names.
+
+A point site at a join names the bond of the nucleotide before its coordinate on its own molecule, so `cleave` and `ligate` there act on that bond. A document cannot begin with a join.
+
 ## Steps
 
 ```yaml
@@ -256,6 +292,7 @@ Compilation catches what is impossible in the state a step finds. Some examples:
 - ligating a site with no break, or one whose strand is still missing nucleotides;
 - two occupants covering the same nucleotide of the same strand;
 - pairing a strand that is already paired, or acting on a nucleotide that was excised;
+- reconnecting strands at sites that are not opposite each other, or degrading a molecule that is joined to another;
 - two parallel branches changing the same state.
 
 An action is checked against the state it finds, never against how that state came about.

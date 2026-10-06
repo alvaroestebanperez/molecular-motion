@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.alvaroesteban.dev/schema/v7.json",
+  "$id": "https://molecular-motion.alvaroesteban.dev/schema/v6.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
   "required": [
@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
-      "const": 7
+      "const": 6
     },
     "mechanism": {
       "type": "object",
@@ -1474,47 +1474,6 @@
               "minItems": 2,
               "maxItems": 2,
               "description": "Interval to remove, overriding the site. It must be internal: it reaches neither end of the molecule."
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "description": "Reconnect one strand of two nucleic acids at corresponding points, so each continues 5′→3′ as the other. It cuts and joins in one step and clears a break at either site. No nucleotide moves or is renumbered, and no pairing changes. Applied again at the same two sites it undoes itself.",
-          "required": [
-            "type",
-            "target",
-            "with"
-          ],
-          "properties": {
-            "type": {
-              "const": "reconnect-strands"
-            },
-            "duration": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Duration in milliseconds (presentation only)."
-            },
-            "by": {
-              "$ref": "#/$defs/instance",
-              "description": "Causal agent: enzyme, ligand, drug, or sensor."
-            },
-            "target": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
-              "description": "Site with a point coordinate (at) on one molecule."
-            },
-            "with": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9-]*(#[1-9][0-9]*)?\\.[a-z][a-z0-9-]*$",
-              "description": "Site with a point coordinate (at) on the other molecule, which an alignment of orientation same puts opposite the target."
-            },
-            "strand": {
-              "enum": [
-                "top",
-                "bottom"
-              ],
-              "description": "Strand to reconnect, the same on both molecules. Needed when a site is on both strands or names none."
             }
           },
           "additionalProperties": false

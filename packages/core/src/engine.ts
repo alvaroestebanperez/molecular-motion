@@ -92,7 +92,10 @@ export function compileMechanism(input: unknown, options: CompileOptions = {}): 
     const resolved = structuredClone(state);
     return deepFreeze({
       stepIndex, step, definition, actors: resolved.actors, sites: resolved.sites,
-      interactions: resolved.interactions, occupancy: resolved.occupancy, pairings: resolved.pairings, timeline, duration: end,
+      interactions: resolved.interactions, occupancy: resolved.occupancy, pairings: resolved.pairings,
+      // Absent while empty (RFC 0008 X9): a document that never reconnects has the snapshots it always had.
+      ...(resolved.joins && { joins: resolved.joins }),
+      timeline, duration: end,
     });
   });
 
@@ -167,6 +170,8 @@ function flatten(state: MechanismState): Map<string, unknown> {
   for (const occupancy of Object.values(state.occupancy)) out.set(`occupancy.${occupancy.id}`, occupancy);
   // One key per strand pair: a pairing that grows or shrinks stays the same key.
   for (const [key, pairings] of Object.entries(state.pairings)) out.set(`pairings.${key}`, pairings);
+  // Likewise for joins (RFC 0008 X4): two reconnections conflict only on the same pair of strands.
+  for (const [key, joins] of Object.entries(state.joins ?? {})) out.set(`joins.${key}`, joins);
   return out;
 }
 

@@ -16,7 +16,7 @@ snapshot.actors;                            // resolved state of every actor at 
 ```
 
 - `parseMechanism` reads YAML and is in its own entry, `@molecular-motion/core/yaml`: the main entry loads no YAML parser. A document that is already parsed goes straight to `compileMechanism` or `validateMechanism`.
-- `schemaVersion` 1 to 6 are accepted, and older documents are migrated automatically.
+- `schemaVersion` 1 to 7 are accepted, and older documents are migrated automatically.
 - `schema.json` is the JSON Schema of the current version, generated from the action registry.
 - Custom actions are registered with `builtinRegistry.extend([...])`.
 

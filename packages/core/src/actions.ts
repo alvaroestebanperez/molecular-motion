@@ -4,6 +4,7 @@ import {
 import { coveredIntervals, defaultStrand, occupantForm, placeOccupancy, requireOccupantsFit } from './occupancy';
 import { addPairing, alignedSpan, alignmentRelates, brokenPairings, pairingConflicts, partnerOf, removePairings } from './pairings';
 import { actorIdOf, instanceDefinition } from './instances';
+import { bondFrom, bondInto, fivePrimeSide, joinedAcross, joinedBoundaries, joinedTo, joinsAt, nucleotidePresent, toggleJoins } from './joins';
 import { addInterval, intervalAt, normalizeIntervals, overlapsInterval, subtractInterval, type Interval } from './intervals';
 import {
   excisedOf, extantIntervals, extantLength, extantRun, insideExcised, isNucleicActor, junctionAt, lesionStrands, nucleicForm, nucleicLength, otherStrand,
@@ -11,7 +12,7 @@ import {
 } from './nucleic';
 import { ActionRegistry, defineAlias, definePrimitive, field, type ApplyContext } from './registry';
 import type {
-  ActionSpec, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId, StrandSpan,
+  ActionSpec, ActorState, Activity, ActorDefinition, ActorSite, InteractionEnd, LesionType, MechanismDefinition, MechanismState, NucleicState, Orientation, SiteStrand, StrandId, StrandPoint, StrandSpan,
 } from './types';
 
 export const ACTIVITIES: readonly Activity[] = ['active', 'inactive', 'inhibited'];
@@ -334,6 +335,10 @@ export const degrade = definePrimitive<DegradeAction>({
   presentation: { verb: 'degrades', tone: 'inhibitory' },
   apply(state, action, ctx) {
     const actor = ctx.requirePresent(action.actor);
+    // The result cannot be represented (RFC 0008 §6.4, D7b): removing the molecule leaves bonds to nothing, and
+    // dropping its joins would restore coordinate adjacency on the survivor, a bond that never formed. So it fails.
+    const joined = joinedTo(state, actor.id);
+    if (joined.length) ctx.fail(`"${actor.id}" is covalently joined to ${joined.map(id => `"${id}"`).join(' and ')}; undo the reconnection first`);
     actor.present = false;
     actor.visible = false;
     releaseAll(state, actor.id);
@@ -378,8 +383,12 @@ export const ligate = definePrimitive<LigateAction>({
         // Partial synthesis moves the gap away from the break, so look past the nascent stretch on either side.
         const nascent = strandIntervals(state.nascent, strand);
         const left = runEdge(nascent, state.excised, located.site.at, 'left');
-        const right = runEdge(nascent, state.excised, located.site.at, 'right');
-        if (missingOn(state, strand).some(gap => gap.to === left || gap.from === right)) {
+        // At a join the site names a bond with another molecule (RFC 0008 §6.1): the nucleotide before its
+        // coordinate is its own, and the end it is sealed to lies past the boundary the join reaches there.
+        const across = joinedAcross(_state, { acid: located.acid.id, strand, at: located.site.at });
+        const far = across ? readNucleicState(ctx.actor(across.acid)) : state;
+        const right = runEdge(strandIntervals(far.nascent, strand), far.excised, across?.at ?? located.site.at, 'right');
+        if (missingOn(state, strand).some(gap => gap.to === left) || missingOn(far, strand).some(gap => gap.from === right)) {
           ctx.fail(`the ${strand} strand is missing nucleotides at "${action.target}"; fill the gap with extend before ligating`);
         }
       }
@@ -465,6 +474,19 @@ function runEdge(list: readonly Interval[], excised: readonly Interval[], at: nu
     edge = next;
   }
 }
+
+/**
+ * Strand-range actions read and write one molecule (RFC 0008 §6.2, X6): none follows a join into another.
+ * A range may end at a join or begin at one, but a join strictly inside it means the strand there
+ * continues in another molecule, and the action fails instead of writing across it.
+ */
+function requireWithinMolecule(state: MechanismState, ctx: ApplyContext, acid: string, strand: StrandId, range: Interval, verb: 'resect' | 'extend'): void {
+  const join = joinedBoundaries(state, acid).find(item => item.strand === strand && range.from < item.at && item.at < range.to);
+  if (!join) return;
+  // Going on differs: resection follows a cut bond, synthesis fills the gap a site of that molecule locates.
+  const onward = verb === 'resect' ? 'cut the bond at the join and resect from the site that names it' : `name a site of "${join.with}" to go on`;
+  ctx.fail(`cannot ${verb} past ${acid} ${join.at} on the ${strand} strand: the strand continues in another molecule ("${join.with}"); ${verb} up to the join, then ${onward}`);
+}
 const spanLabel = (span: StrandSpan) => `${span.acid} ${span.strand} strand ${span.from}–${span.to}`;
 const rangeLabel = (strand: StrandId, range: Interval) => `${strand} strand ${range.from}–${range.to}`;
 
@@ -482,27 +504,47 @@ export const resect = definePrimitive<ResectAction>({
     requireExtantSite(_state, ctx, action.target);
     const lesion = ctx.site(action.target).lesion;
     if (!lesion || !BREAKS.includes(lesion)) ctx.fail(`no strand break to resect at "${action.target}"`);
-    const { acid, site, actor, state, length } = strandTarget(action.target, ctx);
+    const { acid, site, actor } = strandTarget(action.target, ctx);
     const at = site.at!;
+    // The break is of one bond per strand: the one the site names (RFC 0008 §6.1). Resection starts at the
+    // 5′ end that cut left, the bond's destination, and removes nucleotides of the molecule that end is in.
+    // That is the site's own molecule unless a join put the end on another (§6.2).
+    const working = new Map<string, { actor: ActorState; state: Required<NucleicState>; length: number }>();
+    const on = (id: string) => {
+      if (!working.has(id)) {
+        const found = ctx.requirePresent(id);
+        working.set(id, { actor: found, state: readNucleicState(found), length: nucleicLength(instanceDefinition(ctx.definition, id)!) });
+      }
+      return working.get(id)!;
+    };
     for (const strand of lesionStrands(acid, site, lesion)) {
-      // The 5′ end at the break: on top it faces increasing coordinates, on bottom decreasing ones.
-      // Earlier resection has already moved it away from the break, so continue from where it is now.
+      // The bond's `to` boundary. On bottom the site's own boundary is it: the nucleotide before the
+      // coordinate is the destination. On top it is where the bond leaving the site's boundary arrives.
+      const lower = junctionAt(on(actor.id).state.excised, at).lower;
+      const origin: StrandPoint = strand === 'bottom' ? { acid: actor.id, strand, at }
+        : bondFrom(_state, { acid: actor.id, strand, at: lower }) ?? ctx.fail(`no 5′ end to resect on the ${strand} strand at "${action.target}"`);
+      const { state, length } = on(origin.acid);
+      // Earlier resection has already moved the end away from the break, so continue from where it is now.
       // It counts extant nucleotides (RFC 0007 §6.6), so what it removes may lie either side of an excised interval.
       const missing = missingOn(state, strand);
-      const end = runEdge(missing, state.excised, at, strand === 'top' ? 'right' : 'left');
+      const end = runEdge(missing, state.excised, origin.at, strand === 'top' ? 'right' : 'left');
       const range = extantRun(state.excised, end, action.length, strand === 'top' ? 'forward' : 'reverse');
       if (range.from < 0 || range.to > length) {
         const room = extantLength(state.excised, strand === 'top' ? { from: end, to: length } : { from: 0, to: end });
         ctx.fail(`resecting ${action.length} nt from the 5′ end on the ${strand} strand runs past the molecule end (${room} nt left)`);
       }
+      // It stays inside the molecule the end is in (RFC 0008 §6.2, D6): it may reach a join, or start from one, but not pass it.
+      requireWithinMolecule(_state, ctx, origin.acid, strand, strand === 'top' ? { from: origin.at, to: range.to } : { from: range.from, to: origin.at }, 'resect');
       const removed = extantIntervals(state.excised, range);
-      if (removed.some(piece => overlapsInterval(state.open, piece))) ctx.fail(`cannot resect into an unwound region (${rangeLabel(strand, range)}); anneal it first`);
+      if (removed.some(piece => overlapsInterval(state.open, piece))) ctx.fail(`cannot resect into an unwound region (${origin.acid === actor.id ? '' : `${origin.acid} `}${rangeLabel(strand, range)}); anneal it first`);
       state.missing = withStrandIntervals(state.missing, strand, [...missing, ...removed]);
       state.nascent = withStrandIntervals(state.nascent, strand, subtractAll(strandIntervals(state.nascent, strand), removed));
     }
-    writeNucleicState(actor, state);
-    requireOccupantsFit(_state, ctx, actor.id);
-    requirePairingsHold(_state, ctx, actor.id);
+    for (const [id, molecule] of working) {
+      writeNucleicState(molecule.actor, molecule.state);
+      requireOccupantsFit(_state, ctx, id);
+      requirePairingsHold(_state, ctx, id);
+    }
   },
 });
 
@@ -523,29 +565,39 @@ export const extend = definePrimitive<ExtendAction>({
     const at = site.at!;
     const duplex = nucleicForm(acid) === 'duplex';
     const nascentRun = (strand: StrandId) => strandIntervals(state.nascent, strand);
+    /**
+     * The 3′-terminal nucleotide that faces a gap: the gap's covalent neighbour (RFC 0008 §4.2). A junction puts
+     * it further away by coordinate (RFC 0007), and a join puts it on another molecule (RFC 0008 §6.2). `shift`
+     * turns its coordinate into this molecule's, across the join: 0 unless it is on another molecule.
+     */
+    const threePrimeEnd = (strand: StrandId, gap: Interval): (Interval & { acid: string; shift: number }) | undefined => {
+      const into: StrandPoint = { acid: actor.id, strand, at: strand === 'top' ? gap.from : gap.to };
+      const from = bondInto(_state, into);
+      if (!from) return undefined;
+      const nucleotide = fivePrimeSide(from);
+      // Only an end found through a join is asked whether it exists: on its own molecule the gap's edge says so already.
+      if (from.acid !== actor.id && !nucleotidePresent(_state, ctx.definition, nucleotide)) return undefined;
+      return { acid: from.acid, from: nucleotide.index, to: nucleotide.index + 1, shift: from.acid === actor.id ? 0 : into.at - from.at };
+    };
     // The 3′ end that faces a gap at the site, past anything already synthesised from it.
     const gapFrom = (strand: StrandId): Interval | undefined => {
       const missing = missingOn(state, strand);
       if (strand === 'top') {
         const end = runEdge(nascentRun('top'), state.excised, at, 'right');
         const gap = missing.find(item => item.from === end);
-        return gap && end > 0 ? gap : undefined;
+        return gap && end > 0 && threePrimeEnd(strand, gap) ? gap : undefined;
       }
       const end = runEdge(nascentRun('bottom'), state.excised, at, 'left');
       const gap = missing.find(item => item.to === end);
-      return gap && end < length ? gap : undefined;
+      return gap && end < length && threePrimeEnd(strand, gap) ? gap : undefined;
     };
     const strands: readonly StrandId[] = duplex ? ['top', 'bottom'] : ['top'];
     const candidates = strands.filter(strand => (!action.strand || action.strand === strand) && gapFrom(strand));
     if (!candidates.length) ctx.fail(`no 3′ end facing a gap${action.strand ? ` on the ${action.strand} strand` : ''} at "${action.target}"`);
     // The template is whatever the 3′-terminal nucleotide is paired with (RFC 0006 §6.1): nothing is searched for.
     const terminal = (strand: StrandId) => {
-      const gap = gapFrom(strand)!;
-      // The 3′-terminal nucleotide is the gap's covalent neighbour, which a junction puts further away by coordinate.
-      const nucleotide = strand === 'top'
-        ? (edge => ({ from: edge - 1, to: edge }))(junctionAt(state.excised, gap.from).lower)
-        : (edge => ({ from: edge, to: edge + 1 }))(junctionAt(state.excised, gap.to).upper);
-      return partnerOf(_state, ctx.definition, { acid: actor.id, strand, ...nucleotide })[0]!;
+      const { acid: on, shift, ...nucleotide } = threePrimeEnd(strand, gapFrom(strand)!)!;
+      return { ...partnerOf(_state, ctx.definition, { acid: on, strand, ...nucleotide })[0]!, on, shift };
     };
     if (ctx.site(action.target).lesion === 'double-strand-break') {
       // Across a break the 3′ end and its own molecule's template lie on different fragments (RFC 0004 §5).
@@ -553,7 +605,7 @@ export const extend = definePrimitive<ExtendAction>({
       const flank = (strand: StrandId, nucleotide: number) => !overlapsInterval(missingOn(state, strand), { from: nucleotide, to: nucleotide + 1 });
       const bridged = (strand: StrandId) => {
         const template = otherStrand(strand);
-        return terminal(strand).partner === 'cis' && flank(template, at - 1) && flank(template, at)
+        return terminal(strand).partner === 'cis' && terminal(strand).on === actor.id && flank(template, at - 1) && flank(template, at)
           && Boolean(intervalAt(nascentRun(template), at - 1) ?? intervalAt(nascentRun(template), at));
       };
       if (!candidates.some(strand => terminal(strand).partner === 'trans' || bridged(strand))) {
@@ -566,6 +618,8 @@ export const extend = definePrimitive<ExtendAction>({
     const gap = gapFrom(strand)!;
     if (action.length > gap.to - gap.from) ctx.fail(`extending ${action.length} nt overfills the ${gap.to - gap.from}-nt gap on the ${strand} strand`);
     const range = strand === 'top' ? { from: gap.from, to: gap.from + action.length } : { from: gap.to - action.length, to: gap.to };
+    // It fills a gap of its own molecule and stops at a join (RFC 0008 §6.2, D6): what lies past one continues another molecule's strand.
+    requireWithinMolecule(_state, ctx, actor.id, strand, range, 'extend');
     const end = terminal(strand);
     const fill = () => {
       state.missing = withStrandIntervals(state.missing, strand, subtractInterval(missingOn(state, strand), range));
@@ -574,7 +628,8 @@ export const extend = definePrimitive<ExtendAction>({
     if (end.partner === 'trans') {
       // Prolong the pairing that holds the 3′ end, along the same correspondence. No other partner is considered.
       const own: StrandSpan = { acid: actor.id, strand, ...range };
-      const template = continuePairing({ from: end.from, to: end.to }, end.with, own);
+      // Across a join the paired nucleotide is on another molecule: read at the coordinate it has on this one.
+      const template = continuePairing({ from: end.from + end.shift, to: end.to + end.shift }, end.with, own);
       const donorLength = nucleicLength(instanceDefinition(ctx.definition, template.acid)!);
       if (template.from < 0 || template.to > donorLength) ctx.fail(`extending ${action.length} nt runs past the end of the template (${spanLabel({ ...template, from: Math.max(template.from, 0), to: Math.min(template.to, donorLength) })})`);
       const aligned = ctx.definition.alignments.some(item => {
@@ -822,6 +877,9 @@ export const exciseInterval = definePrimitive<ExciseIntervalAction>({
     const nucleic = readNucleicState(actor);
     const strands: readonly StrandId[] = nucleicForm(acid) === 'duplex' ? ['top', 'bottom'] : ['top'];
     if (!extantLength(nucleic.excised, interval)) ctx.fail(`${where} was already excised: nothing left to excise there`);
+    // A join inside the interval would lose an end, and one at a boundary would be replaced by the junction (RFC 0008 §6.2).
+    const join = joinedBoundaries(state, acidId).find(item => from <= item.at && item.at <= to);
+    if (join) ctx.fail(`the ${join.strand} strand of "${acidId}" is joined to "${join.with}" at ${join.at}, ${join.at === from || join.at === to ? 'beside' : 'within'} ${where}; undo the reconnection first`);
     // The junction is one bond between exactly these two nucleotides; it never looks for the next surviving one.
     for (const flank of [from - 1, to]) {
       if (intervalAt(nucleic.excised, flank)) ctx.fail(`nothing to join at ${where}: nucleotide ${flank} was excised; excise one interval that covers both`);
@@ -866,6 +924,96 @@ export const exciseInterval = definePrimitive<ExciseIntervalAction>({
     }
     requireOccupantsFit(state, ctx, acidId);
     requirePairingsHold(state, ctx, acidId);
+  },
+});
+
+// ---- Covalent continuity between molecules (RFC 0008): two strands swap what follows ----
+
+/** Coordinate that `alignment` puts opposite boundary `at` of `acid` on `other`, if it covers it. A boundary maps as an empty span. */
+const alignedPoint = (alignment: MechanismDefinition['alignments'][number], acid: string, at: number, other: string) =>
+  alignedSpan(alignment, { acid, strand: 'top', from: at, to: at }, other)?.from;
+
+/** The one strand a site lies on; a single-stranded molecule has only `top`. Undefined for `both` or none. */
+const definiteStrand = (acid: ActorDefinition, site: ActorSite): StrandId | undefined =>
+  nucleicForm(acid) === 'single' ? 'top' : site.strand === 'top' || site.strand === 'bottom' ? site.strand : undefined;
+
+interface ReconnectStrandsAction extends ActionSpec { target: string; with: string; strand?: StrandId }
+export const reconnectStrands = definePrimitive<ReconnectStrandsAction>({
+  type: 'reconnect-strands',
+  description: 'Reconnect one strand of two nucleic acids at corresponding points, so each continues 5′→3′ as the other. It cuts and joins in one step and clears a break at either site. No nucleotide moves or is renumbered, and no pairing changes. Applied again at the same two sites it undoes itself.',
+  fields: {
+    target: field.site({ required: true, description: 'Site with a point coordinate (at) on one molecule.' }),
+    with: field.site({ required: true, description: 'Site with a point coordinate (at) on the other molecule, which an alignment of orientation same puts opposite the target.' }),
+    strand: field.enum(['top', 'bottom'], { description: 'Strand to reconnect, the same on both molecules. Needed when a site is on both strands or names none.' }),
+  },
+  presentation: { verb: 'reconnects with' },
+  validate(action, ctx) {
+    const ends = [action.target, action.with].map(reference => ({ reference, located: locate(reference, ctx.definition) }));
+    if (ends.some(end => !end.located)) return;
+    for (const { reference, located } of ends) {
+      if (!isNucleicActor(located!.acid) || located!.site.at === undefined) {
+        return ctx.issue(`"${reference}" is not a point site of a nucleic acid: reconnect-strands needs a site with a point coordinate (at) on each molecule`);
+      }
+    }
+    const [a, b] = ends.map(end => end.located!) as [NonNullable<ReturnType<typeof locate>>, NonNullable<ReturnType<typeof locate>>];
+    if (a.acid.id === b.acid.id) return ctx.issue(`"${action.target}" and "${action.with}" are on the same molecule: reconnection is between two molecules; a deletion is excise-interval`);
+    const related = ctx.definition.alignments.filter(item => alignmentRelates(item, a.acid.id, b.acid.id));
+    if (!related.length) ctx.issue(`no alignment relates "${a.acid.id}" and "${b.acid.id}"; declare one in alignments`);
+    // Under a mirrored alignment "what follows" points opposite ways on the two molecules (D12).
+    else if (related.every(item => item.orientation === 'opposite')) ctx.issue(`every alignment between "${a.acid.id}" and "${b.acid.id}" is mirrored (orientation: opposite): reconnection across a mirrored alignment is not supported`);
+    const strands = ends.map(end => definiteStrand(end.located!.acid, end.located!.site));
+    if (action.strand) {
+      ends.forEach(({ reference, located }, index) => {
+        if (nucleicForm(located!.acid) === 'single' && action.strand === 'bottom') ctx.issue(`"${located!.acid.id}" is single-stranded and has no bottom strand`);
+        else if (strands[index] && strands[index] !== action.strand) ctx.issue(`site "${reference}" is on the ${strands[index]} strand, not the ${action.strand} strand`);
+      });
+    } else {
+      const unnamed = ends.find((_, index) => !strands[index]);
+      if (unnamed) ctx.issue(`name the strand: one strand is reconnected at a time, and site "${unnamed.reference}" ${unnamed.located!.site.strand === 'both' ? 'is on both' : 'names none'}; set strand`);
+      else if (strands[0] !== strands[1]) ctx.issue(`"${action.target}" is on the ${strands[0]} strand and "${action.with}" on the ${strands[1]} strand: a join connects strands of the same name`);
+    }
+  },
+  apply(state, action, ctx) {
+    const ends = [action.target, action.with].map(reference => ({ reference, ...strandTarget(reference, ctx) }));
+    for (const end of ends) requireExtantSite(state, ctx, end.reference);
+    const [a, b] = ends as [typeof ends[number], typeof ends[number]];
+    const strand = action.strand ?? definiteStrand(a.acid, a.site)!;
+    const points = ends.map(end => ({ acid: end.acid.id, strand, at: end.site.at! })) as [StrandPoint, StrandPoint];
+    // X2: the two boundaries are ones an alignment of orientation `same` puts opposite each other.
+    const opposite = ctx.definition.alignments.filter(item => alignmentRelates(item, a.acid.id, b.acid.id) && alignedPoint(item, a.acid.id, a.site.at!, b.acid.id) === b.site.at);
+    if (!opposite.length) ctx.fail(`"${action.target}" (${a.acid.id} ${a.site.at}) and "${action.with}" (${b.acid.id} ${b.site.at}) are not opposite each other under any alignment`);
+    if (opposite.every(item => item.orientation === 'opposite')) {
+      ctx.fail(`"${action.target}" and "${action.with}" are opposite each other only under alignment "${opposite[0]!.id}", which is mirrored (orientation: opposite): reconnection across a mirrored alignment is not supported`);
+    }
+    // X3: a boundary leaves from at most one join and is reached by at most one. The same pair again is the undo (D5).
+    const reciprocal = (item: { from: StrandPoint; to: StrandPoint }) => [item.from, item.to].every(point => points.some(own => own.acid === point.acid && own.at === point.at));
+    points.forEach((point, index) => {
+      const other = joinsAt(state, point).find(item => !reciprocal(item));
+      if (!other) return;
+      const far = other.from.acid === point.acid ? other.to : other.from;
+      ctx.fail(`the ${strand} strand of "${point.acid}" is already joined to "${far.acid}" at "${ends[index]!.reference}" (${far.acid} ${far.at}); undo that reconnection first`);
+    });
+    // The four nucleotides around the point must be there (§6.6), to make the joins and to undo them alike:
+    // either way two bonds are sealed, and a bond to a nucleotide that is not there is not one.
+    for (const { reference, acid, site, state: nucleic, length } of ends) {
+      if (site.at! <= 0 || site.at! >= length) ctx.fail(`nothing to join at "${reference}": it is at the end of "${acid.id}"`);
+      for (const index of [site.at! - 1, site.at!]) {
+        if (intervalAt(nucleic.excised, index)) ctx.fail(`nothing to join at "${reference}": nucleotide ${index} was excised`);
+        if (intervalAt(missingOn(nucleic, strand), index)) ctx.fail(`nothing to join at "${reference}": nucleotide ${index} is missing on the ${strand} strand`);
+      }
+    }
+    // It is atomic (D3): the bond a break at either site interrupted no longer exists, so the break goes with it.
+    // A break that also cuts the other strand cannot be half cleared, so it fails rather than seal a strand it does not touch (X11).
+    for (const { reference, acid, site } of ends) {
+      const siteState = ctx.site(reference);
+      if (!siteState.lesion || !BREAKS.includes(siteState.lesion)) continue;
+      const cut = lesionStrands(acid, site, siteState.lesion);
+      if (!cut.includes(strand)) continue;
+      if (cut.length > 1) ctx.fail(`"${reference}" carries a ${siteState.lesion}, which also cuts the ${otherStrand(strand)} strand; one strand is reconnected at a time: seal it first, or use a site on the ${strand} strand`);
+      delete siteState.lesion;
+    }
+    // Pairing, occupancy, sites and strand ranges are untouched (X1, X7): material identity is what they address.
+    toggleJoins(state, points[0], points[1]);
   },
 });
 
@@ -948,6 +1096,7 @@ export const builtinActions = [
   occupy, coat, vacate,
   pair, unpair,
   exciseInterval,
+  reconnectStrands,
   recruit, invade,
   visibility('show', true, 'shows'),
   visibility('hide', false, 'hides'),

@@ -138,7 +138,7 @@ export interface MechanismStep {
 }
 
 export interface MechanismDefinition {
-  schemaVersion: 6;
+  schemaVersion: 7;
   mechanism: { id: string; name: string; description?: string; references?: string[] };
   references: ReferenceDefinition[];
   compartments: CompartmentDefinition[];
@@ -241,6 +241,17 @@ export interface StrandSpan { acid: string; strand: StrandId; from: number; to: 
  */
 export interface Pairing { ends: [StrandSpan, StrandSpan] }
 
+/** A boundary (RFC 0008 §4.1): the interbase position `at` on one strand of one molecule, between nucleotides `at − 1` and `at`. */
+export interface StrandPoint { acid: string; strand: StrandId; at: number }
+
+/**
+ * One covalent bond between two molecules, directed 5′→3′ (RFC 0008 §4.1): from the nucleotide on the
+ * 5′ side of `from` to the nucleotide on the 3′ side of `to`. Which nucleotide lies on which side of a
+ * boundary depends only on strand polarity: on `top` the 5′ side is `at − 1` and the 3′ side `at`, on
+ * `bottom` the reverse. It replaces the bond each of the two had with its own neighbour.
+ */
+export interface StrandJoin { from: StrandPoint; to: StrandPoint }
+
 export interface MechanismState {
   actors: Record<string, ActorState>;
   sites: Record<string, SiteState>;
@@ -250,6 +261,12 @@ export interface MechanismState {
   occupancy: Record<string, Occupancy>;
   /** Base pairing between strands (in trans), keyed by strand pair; lists are normalised. Cis pairing stays derived. */
   pairings: Record<string, Pairing[]>;
+  /**
+   * Covalent joins between strands of different molecules (RFC 0008 §4), keyed by strand pair as
+   * `pairings` is; lists are normalised. Absent while there are none, so earlier snapshots are
+   * unchanged. Covalent adjacency, strands and products are derived from it, never stored.
+   */
+  joins?: Record<string, StrandJoin[]>;
 }
 
 export interface Presentation { verb: string; tone?: 'activating' | 'inhibitory' | 'neutral' }

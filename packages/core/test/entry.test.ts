@@ -43,13 +43,13 @@ describe('entries of @molecular-motion/core', () => {
 
   it('the main entry does not export parseMechanism, and still validates and compiles a parsed document', () => {
     expect(core).not.toHaveProperty('parseMechanism');
-    const document = { schemaVersion: 6, mechanism: { id: 'x', name: 'X' }, actors: [{ id: 'a', type: 'protein' }], steps: [{ id: 's', title: 'S', actions: [{ type: 'show', actor: 'a' }] }] };
-    expect(core.validateMechanism(document).schemaVersion).toBe(6);
+    const document = { schemaVersion: 7, mechanism: { id: 'x', name: 'X' }, actors: [{ id: 'a', type: 'protein' }], steps: [{ id: 's', title: 'S', actions: [{ type: 'show', actor: 'a' }] }] };
+    expect(core.validateMechanism(document).schemaVersion).toBe(7);
     expect(core.compileMechanism(document).length).toBe(1);
   });
 
   it('parseMechanism reads YAML and JSON text, and validates a document it is handed', () => {
-    const yaml = 'schemaVersion: 6\nmechanism: { id: x, name: X }\nactors:\n  - { id: a, type: protein }\nsteps:\n  - { id: s, title: S, actions: [{ type: show, actor: a }] }\n';
+    const yaml = 'schemaVersion: 7\nmechanism: { id: x, name: X }\nactors:\n  - { id: a, type: protein }\nsteps:\n  - { id: s, title: S, actions: [{ type: show, actor: a }] }\n';
     const parsed = parseMechanism(yaml);
     expect(parsed.actors[0]!.id).toBe('a');
     expect(parseMechanism(JSON.stringify(parsed))).toEqual(parsed);

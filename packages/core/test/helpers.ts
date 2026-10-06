@@ -41,7 +41,7 @@ export const allStates = (mechanism: CompiledMechanism) =>
  * the v4 API and must match the baseline recorded from v3. Timing and subjects are included, the
  * per-action change keys are not (they name storage, which is allowed to change).
  */
-export function semanticProjection(mechanism: CompiledMechanism, options: { assemblies?: boolean; topology?: boolean } = {}) {
+export function semanticProjection(mechanism: CompiledMechanism, options: { assemblies?: boolean; topology?: boolean; joins?: boolean } = {}) {
   return Array.from({ length: mechanism.length }, (_, index) => {
     const snapshot = mechanism.at(index);
     return {
@@ -50,6 +50,8 @@ export function semanticProjection(mechanism: CompiledMechanism, options: { asse
       ...(options.assemblies ? { interactions: snapshot.interactions, occupancy: snapshot.occupancy } : {}),
       // v5 documents author pairing between molecules (RFC 0006).
       ...(options.topology ? { pairings: snapshot.pairings } : {}),
+      // v7 documents author covalent joins between molecules (RFC 0008); the record is absent while there are none.
+      ...(options.joins ? { joins: snapshot.joins ?? {} } : {}),
       actors: Object.fromEntries(Object.values(snapshot.actors).map(actor => [actor.id, {
         present: actor.present,
         visible: actor.visible,
