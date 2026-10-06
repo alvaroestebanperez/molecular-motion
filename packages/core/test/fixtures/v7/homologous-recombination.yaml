@@ -1,0 +1,342 @@
+schemaVersion: 7
+
+mechanism:
+  id: homologous-recombination
+  name: Homologous recombination — synthesis-dependent strand annealing
+  description: >
+    Repair of a double-strand break by homologous recombination, from the break to an intact
+    chromatid. The break is sensed and its 5′ ends are resected; RPA coats the 3′ single-stranded
+    overhangs and BRCA2 loads RAD51, which replaces RPA and forms a filament. The filament engages
+    the sister chromatid, which opens, and the overhang pairs with the complementary sister strand.
+    Its 3′ end is extended using the sister as template, the new strand is released and anneals to
+    the other end of the break, and the remaining gap is filled and sealed. Every state is the
+    consequence of explicit actions (RFC 0004, RFC 0005, RFC 0006). Double Holliday junctions and
+    crossovers are not part of this pathway and are not shown.
+
+compartments: [nucleus]
+
+actors:
+  - id: dna
+    type: dna
+    label: Broken chromatid
+    compartment: nucleus
+    nucleic: { length: 80 }
+    sites:
+      - id: break
+        type: double-strand-break
+        at: 40
+      - id: left-overhang
+        label: 3′ overhang (left end)
+        span: [22, 40]
+      - id: right-overhang
+        label: 3′ overhang (right end)
+        span: [40, 58]
+  - id: sister
+    type: dna
+    label: Sister chromatid
+    compartment: nucleus
+    nucleic: { length: 80 }
+    sites:
+      - id: donor
+        label: Region facing the right overhang
+        span: [40, 58]
+      - id: ahead
+        label: Region ahead of the 3′ end
+        span: [22, 40]
+  - id: mrn
+    type: complex
+    label: MRN
+    color: "#fb923c"
+    compartment: nucleus
+  - id: brca1
+    type: protein
+    label: BRCA1
+    color: "#f472b6"
+    compartment: nucleus
+  - id: exo1
+    type: protein
+    label: EXO1
+    color: "#5aa9a0"
+    compartment: nucleus
+  - id: rpa
+    type: protein
+    label: RPA
+    color: "#e0a03c"
+    compartment: nucleus
+    copies: 6
+    footprint: { length: 6, form: single }
+  - id: brca2
+    type: protein
+    label: BRCA2
+    color: "#6f9fcf"
+    compartment: nucleus
+  - id: rad51
+    type: protein
+    label: RAD51
+    color: "#818cf8"
+    compartment: nucleus
+    copies: 6
+    # `any` puts no form restriction on this footprint, so the filament may stay on the strand while
+    # it pairs. It is not a statement about what RAD51 binds in general (RFC 0006 §7).
+    footprint: { length: 3, form: any }
+    interfaces:
+      - { id: protomer, valence: 2 }
+  - id: pold
+    type: protein
+    label: Pol δ
+    color: "#8fae86"
+    compartment: nucleus
+
+# The two chromatids carry corresponding sequence over their whole length. This declares that their
+# strands may pair; it pairs nothing by itself (RFC 0006 §4).
+alignments:
+  - id: sister
+    between: [dna, sister]
+    range: [0, 80]
+
+steps:
+  - id: break
+    title: Double-strand break
+    summary: Both strands are cut at the same position
+    actions:
+      - type: cleave
+        target: dna.break
+        lesion: double-strand-break
+
+  - id: sensing
+    title: End sensing
+    summary: MRN binds the broken ends
+    actions:
+      - type: bind
+        actor: mrn
+        target: dna.break
+
+  - id: short-range
+    title: Short-range resection
+    summary: MRN, with BRCA1, trims the 5′ ends
+    keyEvents:
+      - BRCA1 joins MRN at the break and favours resection
+      - The 5′ end of each fragment is shortened, exposing short 3′ overhangs
+    actions:
+      - type: recruit
+        actor: brca1
+        target: mrn
+      - type: resect
+        target: dna.break
+        length: 6
+        by: mrn
+
+  - id: long-range
+    title: Long-range resection
+    summary: EXO1 extends the 3′ overhangs
+    keyEvents:
+      - EXO1 continues 5′→3′ from where MRN stopped
+      - Each fragment now ends in a long 3′ single-stranded tail
+    actions:
+      - type: recruit
+        actor: exo1
+        target: dna.break
+      - type: resect
+        target: dna.break
+        length: 12
+        by: exo1
+
+  - id: rpa-coating
+    title: RPA coats the overhangs
+    summary: RPA protects both 3′ single-stranded tails
+    keyEvents:
+      - The resection machinery leaves the ends
+      - Three RPA complexes coat each 3′ overhang side by side, removing secondary structure
+    actions:
+      - parallel:
+          - sequence:
+              - { type: unbind, actor: exo1 }
+              - { type: hide, actor: exo1 }
+          - sequence:
+              - { type: unbind, actor: mrn }
+              - { type: hide, actor: mrn }
+          - sequence:
+              - { type: unbind, actor: brca1 }
+              - { type: hide, actor: brca1 }
+      - type: coat
+        actors: ["rpa#1", "rpa#2", "rpa#3"]
+        target: dna.right-overhang
+      - type: coat
+        actors: ["rpa#4", "rpa#5", "rpa#6"]
+        target: dna.left-overhang
+
+  - id: nucleation
+    title: BRCA2 nucleates RAD51
+    summary: RAD51 replaces RPA at the junction of the right end
+    keyEvents:
+      - BRCA2 brings RAD51 to the single-strand–duplex junction
+      - The RPA complex nearest the junction is displaced
+      - Two RAD51 protomers take its place and bind each other
+    actions:
+      - { type: vacate, actor: "rpa#3" }
+      - { type: hide, actor: "rpa#3" }
+      - type: coat
+        actors: ["rad51#1", "rad51#2"]
+        target: dna
+        span: [52, 58]
+        orientation: reverse
+      - { type: bind, actor: "rad51#2", interface: protomer, target: "rad51#1", targetInterface: protomer }
+      - { type: bind, actor: brca2, target: "rad51#1" }
+
+  - id: filament
+    title: RAD51 filament formation
+    summary: The filament grows towards the break, displacing RPA
+    keyEvents:
+      - RPA is displaced from the rest of the right overhang
+      - Four more RAD51 protomers extend the filament, each bound to its neighbour
+      - The RAD51 filament is ready to search for the matching sequence
+    actions:
+      - parallel:
+          - sequence:
+              - { type: vacate, actor: "rpa#1" }
+              - { type: hide, actor: "rpa#1" }
+          - sequence:
+              - { type: vacate, actor: "rpa#2" }
+              - { type: hide, actor: "rpa#2" }
+      - type: coat
+        actors: ["rad51#3", "rad51#4", "rad51#5", "rad51#6"]
+        target: dna
+        span: [40, 52]
+        orientation: reverse
+      - { type: bind, actor: "rad51#3", interface: protomer, target: "rad51#1", targetInterface: protomer }
+      - { type: bind, actor: "rad51#4", interface: protomer, target: "rad51#3", targetInterface: protomer }
+      - { type: bind, actor: "rad51#5", interface: protomer, target: "rad51#4", targetInterface: protomer }
+      - { type: bind, actor: "rad51#6", interface: protomer, target: "rad51#5", targetInterface: protomer }
+
+  - id: engagement
+    title: Engagement with the sister chromatid
+    summary: The filament aligns with the sister, which opens
+    keyEvents:
+      - BRCA2 leaves the assembled filament
+      - The RAD51 filament also rests on the corresponding region of the sister chromatid
+      - The sister duplex unwinds there; no base pair between the two molecules exists yet
+    actions:
+      - { type: unbind, actor: brca2 }
+      - { type: hide, actor: brca2 }
+      - type: coat
+        actors: ["rad51#1", "rad51#2", "rad51#3", "rad51#4", "rad51#5", "rad51#6"]
+        target: sister
+        span: [40, 58]
+        orientation: reverse
+      - type: unwind
+        target: sister.donor
+
+  - id: invasion
+    title: Strand invasion
+    summary: The 3′ overhang pairs with the complementary sister strand
+    keyEvents:
+      - The right 3′ overhang pairs with the sister strand it corresponds to
+      - The other sister strand is left unpaired in the bubble, displaced
+      - RAD51 is still on the strand that has just paired
+    actions:
+      - type: invade
+        target: dna.right-overhang
+        with: sister
+
+  - id: synthesis
+    title: Synthesis on the sister chromatid
+    summary: The 3′ end is extended using the sister as template
+    keyEvents:
+      - The RAD51 filament disassembles, freeing the 3′ end
+      - The sister unwinds ahead of the 3′ end
+      - Pol δ extends the invading strand, copying the sister across the position of the break
+    actions:
+      - { type: unbind, actor: "rad51#1", interface: protomer }
+      - { type: unbind, actor: "rad51#4", interface: protomer }
+      - { type: unbind, actor: "rad51#6", interface: protomer }
+      - parallel:
+          - sequence:
+              - { type: vacate, actor: "rad51#1", target: dna }
+              - { type: vacate, actor: "rad51#1", target: sister }
+              - { type: hide, actor: "rad51#1" }
+          - sequence:
+              - { type: vacate, actor: "rad51#2", target: dna }
+              - { type: vacate, actor: "rad51#2", target: sister }
+              - { type: hide, actor: "rad51#2" }
+          - sequence:
+              - { type: vacate, actor: "rad51#3", target: dna }
+              - { type: vacate, actor: "rad51#3", target: sister }
+              - { type: hide, actor: "rad51#3" }
+          - sequence:
+              - { type: vacate, actor: "rad51#4", target: dna }
+              - { type: vacate, actor: "rad51#4", target: sister }
+              - { type: hide, actor: "rad51#4" }
+          - sequence:
+              - { type: vacate, actor: "rad51#5", target: dna }
+              - { type: vacate, actor: "rad51#5", target: sister }
+              - { type: hide, actor: "rad51#5" }
+          - sequence:
+              - { type: vacate, actor: "rad51#6", target: dna }
+              - { type: vacate, actor: "rad51#6", target: sister }
+              - { type: hide, actor: "rad51#6" }
+      - type: recruit
+        actor: pold
+        target: sister.ahead
+      - type: unwind
+        target: sister.ahead
+      - type: extend
+        target: dna.break
+        strand: bottom
+        length: 18
+        by: pold
+
+  - id: displacement
+    title: Displacement of the new strand
+    summary: The extended strand leaves the sister, which closes again
+    keyEvents:
+      - Pol δ leaves
+      - The extended strand unpairs from the sister chromatid; it is still unpaired
+      - The sister chromatid re-anneals, unchanged
+    actions:
+      - { type: unbind, actor: pold }
+      - { type: hide, actor: pold }
+      - type: unpair
+        target: dna
+      - type: anneal
+        target: sister.donor
+
+  - id: annealing
+    title: Annealing to the second end
+    summary: The new strand pairs with the other 3′ overhang
+    keyEvents:
+      - RPA leaves the left 3′ overhang
+      - The newly synthesised strand anneals to it, bridging the break
+    actions:
+      - parallel:
+          - sequence:
+              - { type: vacate, actor: "rpa#4" }
+              - { type: hide, actor: "rpa#4" }
+          - sequence:
+              - { type: vacate, actor: "rpa#5" }
+              - { type: hide, actor: "rpa#5" }
+          - sequence:
+              - { type: vacate, actor: "rpa#6" }
+              - { type: hide, actor: "rpa#6" }
+      - type: anneal
+        target: dna.left-overhang
+
+  - id: completion
+    title: Gap filling and ligation
+    summary: The remaining gap is filled and the chromatid is intact
+    keyEvents:
+      - Pol δ extends the left 3′ end, copying the strand that now bridges the break
+      - The remaining nicks are sealed
+      - Both chromatids are intact; the repaired one carries two newly synthesised tracts
+    actions:
+      - type: recruit
+        actor: pold
+        target: dna.right-overhang
+      - type: extend
+        target: dna.break
+        strand: top
+        length: 18
+        by: pold
+      - type: ligate
+        target: dna.break
+      - { type: unbind, actor: pold }
+      - { type: hide, actor: pold }

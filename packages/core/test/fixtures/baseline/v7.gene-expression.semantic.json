@@ -1,0 +1,658 @@
+[
+  {
+    "step": "initiation",
+    "interactions": {},
+    "occupancy": {
+      "pol2@gene": {
+        "id": "pol2@gene",
+        "instance": "pol2",
+        "acid": "gene",
+        "site": "promoter",
+        "span": {
+          "from": 2,
+          "to": 10
+        },
+        "strand": "both"
+      }
+    },
+    "pairings": {
+      "gene.bottom~pre-mrna.top": [
+        {
+          "ends": [
+            {
+              "acid": "gene",
+              "strand": "bottom",
+              "from": 10,
+              "to": 14
+            },
+            {
+              "acid": "pre-mrna",
+              "strand": "top",
+              "from": 0,
+              "to": 4
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "gene": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 10,
+              "to": 46
+            }
+          ]
+        }
+      },
+      "pre-mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [
+            {
+              "strand": "top",
+              "from": 4,
+              "to": 36
+            }
+          ],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 0,
+              "to": 4
+            }
+          ],
+          "open": []
+        }
+      },
+      "mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "pol2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "gene.promoter",
+        "modifications": [],
+        "nucleic": null
+      },
+      "spliceosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ribosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[0].actions[0]",
+        "type": "occupy",
+        "primitive": "occupy",
+        "subject": "pol2",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[0].actions[1]",
+        "type": "unwind",
+        "primitive": "unwind",
+        "subject": "gene.bubble",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[0].actions[2]",
+        "type": "pair",
+        "primitive": "pair",
+        "subject": "pre-mrna",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      }
+    ],
+    "duration": 1800
+  },
+  {
+    "step": "elongation",
+    "interactions": {},
+    "occupancy": {
+      "pol2@gene": {
+        "id": "pol2@gene",
+        "instance": "pol2",
+        "acid": "gene",
+        "site": "promoter",
+        "span": {
+          "from": 2,
+          "to": 10
+        },
+        "strand": "both"
+      }
+    },
+    "pairings": {
+      "gene.bottom~pre-mrna.top": [
+        {
+          "ends": [
+            {
+              "acid": "gene",
+              "strand": "bottom",
+              "from": 10,
+              "to": 46
+            },
+            {
+              "acid": "pre-mrna",
+              "strand": "top",
+              "from": 0,
+              "to": 36
+            }
+          ]
+        }
+      ]
+    },
+    "joins": {},
+    "actors": {
+      "gene": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [
+            {
+              "from": 10,
+              "to": 46
+            }
+          ]
+        }
+      },
+      "pre-mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 0,
+              "to": 36
+            }
+          ],
+          "open": []
+        }
+      },
+      "mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "pol2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "gene.promoter",
+        "modifications": [],
+        "nucleic": null
+      },
+      "spliceosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ribosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[1].actions[0]",
+        "type": "extend",
+        "primitive": "extend",
+        "subject": "pre-mrna.three-prime",
+        "agent": "pol2",
+        "start": 0,
+        "duration": 600
+      }
+    ],
+    "duration": 600
+  },
+  {
+    "step": "release",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {},
+    "joins": {},
+    "actors": {
+      "gene": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "pre-mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 0,
+              "to": 36
+            }
+          ],
+          "open": []
+        }
+      },
+      "mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "pol2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "spliceosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ribosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[2].actions[0]",
+        "type": "unpair",
+        "primitive": "unpair",
+        "subject": "pre-mrna",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[2].actions[1]",
+        "type": "anneal",
+        "primitive": "anneal",
+        "subject": "gene.bubble",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      },
+      {
+        "path": "steps[2].actions[2]",
+        "type": "vacate",
+        "primitive": "vacate",
+        "subject": "pol2",
+        "agent": null,
+        "start": 1200,
+        "duration": 600
+      }
+    ],
+    "duration": 1800
+  },
+  {
+    "step": "splicing",
+    "interactions": {},
+    "occupancy": {},
+    "pairings": {},
+    "joins": {},
+    "actors": {
+      "gene": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "pre-mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 0,
+              "to": 12
+            },
+            {
+              "strand": "top",
+              "from": 24,
+              "to": 36
+            }
+          ],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "pol2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "spliceosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ribosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {},
+    "timeline": [
+      {
+        "path": "steps[3].actions[0]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "pre-mrna.donor",
+        "agent": "spliceosome",
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[3].actions[1]",
+        "type": "excise-interval",
+        "primitive": "excise-interval",
+        "subject": "pre-mrna.intron",
+        "agent": "spliceosome",
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  },
+  {
+    "step": "junction",
+    "interactions": {},
+    "occupancy": {
+      "ribosome@pre-mrna": {
+        "id": "ribosome@pre-mrna",
+        "instance": "ribosome",
+        "acid": "pre-mrna",
+        "site": "junction-upstream",
+        "span": {
+          "from": 8,
+          "to": 28
+        },
+        "strand": "top"
+      }
+    },
+    "pairings": {},
+    "joins": {},
+    "actors": {
+      "gene": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "pre-mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [
+            {
+              "strand": "top",
+              "from": 0,
+              "to": 12
+            },
+            {
+              "strand": "top",
+              "from": 24,
+              "to": 36
+            }
+          ],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "mrna": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": {
+          "missing": [],
+          "nascent": [],
+          "open": [],
+          "excised": [
+            {
+              "from": 12,
+              "to": 24
+            }
+          ]
+        }
+      },
+      "pol2": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "spliceosome": {
+        "present": true,
+        "visible": false,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": null,
+        "modifications": [],
+        "nucleic": null
+      },
+      "ribosome": {
+        "present": true,
+        "visible": true,
+        "compartment": "nucleus",
+        "activity": null,
+        "partner": "pre-mrna.junction-upstream",
+        "modifications": [],
+        "nucleic": null
+      }
+    },
+    "lesions": {
+      "mrna.junction": "single-strand-break"
+    },
+    "timeline": [
+      {
+        "path": "steps[4].actions[0]",
+        "type": "occupy",
+        "primitive": "occupy",
+        "subject": "ribosome",
+        "agent": null,
+        "start": 0,
+        "duration": 600
+      },
+      {
+        "path": "steps[4].actions[1]",
+        "type": "cleave",
+        "primitive": "cleave",
+        "subject": "mrna.junction",
+        "agent": null,
+        "start": 600,
+        "duration": 600
+      }
+    ],
+    "duration": 1200
+  }
+]

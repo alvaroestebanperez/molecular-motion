@@ -1,0 +1,85 @@
+schemaVersion: 7
+mechanism:
+  id: gene-expression
+  name: Transcription initiation and splicing
+  description: A transcript that begins as its first nucleotides, grows on its template, and loses its intron (RFC 0007).
+compartments: [nucleus]
+actors:
+  - id: gene
+    type: dna
+    label: Gene
+    compartment: nucleus
+    nucleic: { length: 60 }
+    sites:
+      - { id: bubble, span: [10, 46] }
+      - { id: promoter, span: [2, 10] }
+  - id: pre-mrna
+    type: rna
+    label: pre-mRNA
+    compartment: nucleus
+    nucleic: { length: 36 }
+    sites:
+      - { id: three-prime, at: 4 }
+      - { id: donor, at: 12 }
+      - { id: acceptor, at: 24 }
+      - { id: intron, span: [12, 24] }
+      - { id: junction-upstream, at: 8 }
+    initial:
+      nucleic:
+        missing: [{ strand: top, from: 4, to: 36 }]
+        nascent: [{ strand: top, from: 0, to: 4 }]
+  - id: mrna
+    type: rna
+    label: mRNA that begins spliced
+    compartment: nucleus
+    nucleic: { length: 36 }
+    sites:
+      - { id: junction, at: 24 }
+    initial:
+      nucleic:
+        excised: [{ from: 12, to: 24 }]
+  - id: pol2
+    type: protein
+    label: RNA polymerase II
+    compartment: nucleus
+    footprint: { length: 8, form: duplex }
+  - id: spliceosome
+    type: protein
+    label: Spliceosome
+    compartment: nucleus
+  - id: ribosome
+    type: protein
+    label: Ribosome
+    compartment: nucleus
+    footprint: { length: 8, form: single }
+alignments:
+  - id: transcript
+    a: { acid: pre-mrna, span: [0, 36] }
+    b: { acid: gene, span: [10, 46] }
+steps:
+  - id: initiation
+    title: The transcript begins as four nucleotides
+    actions:
+      - { type: occupy, actor: pol2, target: gene.promoter }
+      - { type: unwind, target: gene.bubble }
+      - { type: pair, target: pre-mrna, span: [0, 4], with: gene }
+  - id: elongation
+    title: Pol II extends the 3′ end along the template
+    actions:
+      - { type: extend, target: pre-mrna.three-prime, length: 32, by: pol2 }
+  - id: release
+    title: The transcript leaves its template and is completed
+    actions:
+      - { type: unpair, target: pre-mrna }
+      - { type: anneal, target: gene.bubble }
+      - { type: vacate, actor: pol2 }
+  - id: splicing
+    title: The intron is excised and the exons are joined
+    actions:
+      - { type: cleave, target: pre-mrna.donor, by: spliceosome }
+      - { type: excise-interval, target: pre-mrna.intron, by: spliceosome }
+  - id: junction
+    title: A ribosome rests on the exon–exon junction
+    actions:
+      - { type: occupy, actor: ribosome, target: pre-mrna.junction-upstream }
+      - { type: cleave, target: mrna.junction }

@@ -1,0 +1,67 @@
+schemaVersion: 7
+mechanism:
+  id: double-holliday-junction
+  name: Double Holliday junction resolved as a crossover
+  description: A broken chromatid invades its sister, captures the second end and becomes a double Holliday junction, which is resolved by reconnecting different strands at the two junctions (RFC 0008).
+compartments: [nucleus]
+actors:
+  - id: dna
+    type: dna
+    label: Broken chromatid
+    compartment: nucleus
+    nucleic: { length: 80 }
+    sites:
+      - { id: break, at: 40 }
+      - { id: hj-left, at: 22, strand: top }
+      - { id: hj-right, at: 58, strand: bottom }
+  - id: sister
+    type: dna
+    label: Sister chromatid
+    compartment: nucleus
+    nucleic: { length: 80 }
+    sites:
+      - { id: window, span: [22, 58] }
+      - { id: hj-left, at: 22, strand: top }
+      - { id: hj-right, at: 58, strand: bottom }
+alignments:
+  - { id: sister, between: [dna, sister], range: [0, 80] }
+steps:
+  - id: break
+    title: A double-strand break
+    actions:
+      - { type: cleave, target: dna.break, lesion: double-strand-break }
+  - id: resection
+    title: Both 5′ ends are resected
+    actions:
+      - { type: resect, target: dna.break, length: 18 }
+  - id: invasion
+    title: One 3′ overhang invades the sister
+    actions:
+      - { type: unwind, target: sister.window }
+      - { type: invade, target: dna, strand: top, span: [22, 40], with: sister }
+  - id: synthesis
+    title: The invading end is extended on the sister
+    actions:
+      - { type: extend, target: dna.break, strand: top, length: 18 }
+  - id: second-end-capture
+    title: The other overhang anneals to the displaced strand
+    actions:
+      - { type: pair, target: dna, strand: bottom, span: [40, 58], with: sister }
+  - id: second-synthesis
+    title: The captured end is extended
+    actions:
+      - { type: extend, target: dna.break, strand: bottom, length: 18 }
+  - id: ligation
+    title: The nicks are sealed into a double Holliday junction
+    actions:
+      - { type: ligate, target: dna.break }
+  - id: nicking
+    title: A resolvase nicks the left junction
+    actions:
+      - { type: cleave, target: dna.hj-left }
+      - { type: cleave, target: sister.hj-left }
+  - id: resolution
+    title: The junctions are resolved as a crossover
+    actions:
+      - { type: reconnect-strands, target: dna.hj-left, with: sister.hj-left }
+      - { type: reconnect-strands, target: dna.hj-right, with: sister.hj-right }

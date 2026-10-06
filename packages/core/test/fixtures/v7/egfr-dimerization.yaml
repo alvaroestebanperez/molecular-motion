@@ -1,0 +1,98 @@
+schemaVersion: 7
+
+mechanism:
+  id: egfr-dimerization
+  name: EGFR activation by ligand-induced dimerization
+  description: >
+    Two EGF receptor monomers each bind one EGF ligand, dimerize through their extracellular
+    dimerization arms, and phosphorylate each other in trans on their C-terminal tails. GRB2 then
+    docks on a phosphotyrosine through its SH2 domain, linking the receptor to downstream signalling.
+    Every receptor and ligand is an individual copy, so the figure shows who binds whom.
+  references: [reactome-egfr]
+
+references:
+  - id: reactome-egfr
+    citation: Signaling by EGFR
+    reactome: R-HSA-177929
+
+compartments: [extracellular, membrane, cytoplasm]
+
+actors:
+  - id: egf
+    type: molecule
+    label: EGF
+    color: "#e0a03c"
+    compartment: extracellular
+    copies: 2
+  - id: egfr
+    type: protein
+    label: EGFR
+    color: "#5aa9a0"
+    compartment: membrane
+    copies: 2
+    initial: { activity: inactive }
+    interfaces:
+      - { id: ligand }
+      - { id: dimer }
+    sites:
+      - id: y1068
+        label: Tyr1068
+  - id: grb2
+    type: protein
+    label: GRB2
+    color: "#8b78d0"
+    compartment: cytoplasm
+    interfaces:
+      - { id: sh2 }
+
+steps:
+  - id: monomers
+    title: Inactive monomers
+    summary: Two EGFR monomers sit in the membrane
+    actions:
+      - parallel:
+          - { type: show, actor: "egfr#1" }
+          - { type: show, actor: "egfr#2" }
+
+  - id: ligand
+    title: Ligand binding
+    summary: Each receptor binds one EGF
+    keyEvents:
+      - EGF binds the extracellular domain of each receptor
+      - Ligand binding exposes the dimerization arm
+    actions:
+      - parallel:
+          - { type: bind, actor: "egf#1", target: "egfr#1", targetInterface: ligand }
+          - { type: bind, actor: "egf#2", target: "egfr#2", targetInterface: ligand }
+
+  - id: dimer
+    title: Dimerization
+    summary: The two liganded receptors form a dimer
+    keyEvents:
+      - The receptors bind each other through their dimerization interfaces
+      - One ligand per receptor; the dimer is symmetric at the dimerization interface
+    actions:
+      - { type: bind, actor: "egfr#2", interface: dimer, target: "egfr#1", targetInterface: dimer }
+
+  - id: autophosphorylation
+    title: Trans-autophosphorylation
+    summary: Each kinase phosphorylates its partner
+    keyEvents:
+      - Dimerization activates both kinase domains
+      - Each receptor phosphorylates Tyr1068 on the other receptor's tail
+    actions:
+      - parallel:
+          - { type: activate, actor: "egfr#1", by: "egfr#2" }
+          - { type: activate, actor: "egfr#2", by: "egfr#1" }
+      - parallel:
+          - { type: phosphorylate, actor: "egfr#1", site: y1068, by: "egfr#2" }
+          - { type: phosphorylate, actor: "egfr#2", site: y1068, by: "egfr#1" }
+
+  - id: adaptor
+    title: GRB2 recruitment
+    summary: GRB2 docks on phosphorylated Tyr1068
+    keyEvents:
+      - The SH2 domain of GRB2 recognises phosphorylated Tyr1068
+      - GRB2 couples the active receptor to downstream RAS–MAPK signalling (not shown)
+    actions:
+      - { type: bind, actor: grb2, interface: sh2, target: "egfr#1.y1068" }
