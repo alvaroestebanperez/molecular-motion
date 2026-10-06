@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@molecular-motion/core": "^0.1.0",
-    "@molecular-motion/react": "^0.1.0",
-    "@molecular-motion/svg": "^0.1.0",
+    "@molecular-motion/core": "*",
+    "@molecular-motion/react": "*",
+    "@molecular-motion/svg": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

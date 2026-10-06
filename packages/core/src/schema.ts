@@ -4,6 +4,9 @@ import { BASE_FIELDS, type ActionRegistry, type FieldSpec } from './registry';
 
 type JsonSchema = Record<string, unknown>;
 
+/** Where the JSON Schema of every version is served: `<base>/v6.json`. The demo site publishes them there. */
+export const SCHEMA_BASE_URL = 'https://molecular-motion.alvaroesteban.dev/schema';
+
 const ID = '^[a-z][a-z0-9-]*$';
 /** An actor id, or one copy of it (`rad51#3`, RFC 0005). */
 const INSTANCE = '[a-z][a-z0-9-]*(#[1-9][0-9]*)?';
@@ -44,7 +47,7 @@ export function toJsonSchema(registry: ActionRegistry = builtinRegistry): JsonSc
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://molecular-motion.dev/schema/v6.json',
+    $id: `${SCHEMA_BASE_URL}/v6.json`,
     title: 'Molecular Motion mechanism',
     type: 'object',
     required: ['schemaVersion', 'mechanism', 'actors', 'steps'],

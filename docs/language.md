@@ -37,6 +37,17 @@ steps:
 
 A document is validated when it is parsed, and compiled once: every step is folded into an immutable snapshot of the state after it. Both report errors with the path of what is wrong, such as `steps[1].actions[0]: no strand break to ligate at "dna.nick"`.
 
+## Editor support
+
+The JSON Schema of the language is published at `https://molecular-motion.alvaroesteban.dev/schema/v6.json`, and is also in the core package as `schema.json`. An editor with a YAML language server completes and checks a document that names it in its first line:
+
+```yaml
+# yaml-language-server: $schema=https://molecular-motion.alvaroesteban.dev/schema/v6.json
+schemaVersion: 6
+```
+
+The schema of each earlier version is at the same address with its number, `v1.json` to `v5.json`.
+
 ## Top level
 
 | Field | Required | What it is |

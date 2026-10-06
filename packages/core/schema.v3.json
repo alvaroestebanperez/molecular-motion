@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://molecular-motion.dev/schema/v3.json",
+  "$id": "https://molecular-motion.alvaroesteban.dev/schema/v3.json",
   "title": "Molecular Motion mechanism",
   "type": "object",
   "required": [
