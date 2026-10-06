@@ -19,6 +19,7 @@ Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a min
   - A step that adds or removes a join cross-fades between the two drawings. `describeScene` says which strand continues as which.
   - A scene carries `joins`, and the markup a `joins` layer, only when there are any. `nucleicLayerMarkup` also returns `joins`.
   - Not done: a colour per molecule of origin, any layout of the products, and routing of links that cross or crowd.
+- **Fixed: a ligated strand was still drawn with a free end where newly made nucleotides stop.** The 3′ end of a `nascent` stretch is drawn as a free end only while the break that owns that nick is unsealed: a point site with a break on that strand, at the end or at the start of the run of new nucleotides that reaches it. After `ligate` the strand is drawn continuous, and one drawn beside a pairing partner eases back to its own row. `nascent` itself is unchanged and is still drawn as new. Of the documents in this repository only the double Holliday junction is drawn differently, from its ligation on.
 - The JSON Schemas are published at `https://molecular-motion.alvaroesteban.dev/schema/v<n>.json`, and every schema names that address as its `$id`. The previous `$id` pointed to a domain that served nothing. `SCHEMA_BASE_URL` is exported from core.
 
 ## 0.2.0
