@@ -62,6 +62,29 @@ describe('drawing a frame in place (ADR 0001 §5)', () => {
     applyGeometryFrame(svg, frame('engagement'), 'p');
     expect(layer(svg, 'pairings')!.children).toHaveLength(0);
   });
+
+  it('creates the joins layer where a clean render has it, and ends a transition exactly as a clean render (ADR 0004 §6)', () => {
+    const dhj = compileMechanism(parseMechanism(readFileSync('packages/core/test/fixtures/v7/double-holliday-junction.yaml', 'utf8')));
+    const [before, after] = [dhj.length - 2, dhj.length - 1].map(index => buildSvgScene(dhj.at(index)));
+    const page = document.createElement('div');
+    patchSvg(page, renderSvg(before!, { idPrefix: 'p' }));
+    const drawn = page.firstElementChild!;
+    expect(layer(drawn, 'joins')).toBeUndefined();
+    applyGeometryFrame(drawn, interpolateGeometry(geometryFrame(before!), geometryFrame(after!), .5), 'p');
+    const order = Array.from(drawn.children).map(child => child.getAttribute('data-layer')).filter(Boolean);
+    expect(order.slice(order.indexOf('acids'), order.indexOf('acids') + 3)).toEqual(['acids', 'pairings', 'joins']);
+    // Midway every link is there, half faded in; at the end the frame is the clean render of the step.
+    const links = Array.from(layer(drawn, 'joins')!.children);
+    expect(links.map(link => link.getAttribute('opacity'))).toEqual(['0.5', '0.5', '0.5', '0.5']);
+    applyGeometryFrame(drawn, geometryFrame(after!), 'p');
+    expect(Array.from(layer(drawn, 'joins')!.children)).toEqual(links);
+    const clean = document.createElement('div');
+    patchSvg(clean, renderSvg(after!, { idPrefix: 'p' }));
+    expect(nucleic(drawn)).toBe(nucleic(clean.firstElementChild!));
+    // And back: the links are gone, and the step before is drawn as it was.
+    applyGeometryFrame(drawn, geometryFrame(before!), 'p');
+    expect(layer(drawn, 'joins')!.children).toHaveLength(0);
+  });
 });
 
 describe('a transition and its interruption (ADR 0001 §3.1)', () => {

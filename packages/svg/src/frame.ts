@@ -1,6 +1,6 @@
 import type { StrandId } from '@molecular-motion/core';
 import { coordinateMap, type ExcisedStretch } from './coordinate-map';
-import { helixPhase, markAway, type SceneNucleicAcid, type SceneRange, type SceneStrandRange, type SceneStrandSpan, type SvgScene } from './scene';
+import { helixPhase, markAway, markJoined, type SceneJoin, type SceneNucleicAcid, type SceneRange, type SceneStrandRange, type SceneStrandSpan, type SvgScene } from './scene';
 
 /**
  * Animation of nucleic geometry between steps (ADR 0001). Everything here reads two geometries and a
@@ -16,13 +16,18 @@ export interface FramePairing { key: string; segments: FramePairingSegment[] }
  * and so is any instant of a transition, which makes it a valid origin for the next one. Ephemeral:
  * never stored, never part of the schema, the state or `SvgScene`. Boundaries may be fractional.
  */
-export interface GeometryFrame { width: number; nucleicAcids: SceneNucleicAcid[]; pairings: FramePairing[] }
+export interface GeometryFrame {
+  width: number; nucleicAcids: SceneNucleicAcid[]; pairings: FramePairing[];
+  /** Joins between molecules, each with how far it has faded in (ADR 0004 §6); absent when there are none. */
+  joins?: SceneJoin[];
+}
 
 /** A settled step seen as a frame. */
-export const geometryFrame = (scene: Pick<SvgScene, 'width' | 'nucleicAcids' | 'pairings'>): GeometryFrame => ({
+export const geometryFrame = (scene: Pick<SvgScene, 'width' | 'nucleicAcids' | 'pairings' | 'joins'>): GeometryFrame => ({
   width: scene.width,
   nucleicAcids: scene.nucleicAcids,
   pairings: scene.pairings.map(({ key, segments }) => ({ key, segments: segments.map(({ traveller, host }) => ({ traveller, host, travel: 1 })) })),
+  ...(scene.joins?.length && { joins: scene.joins }),
 });
 
 interface Interval { from: number; to: number }
@@ -178,7 +183,7 @@ function tweenAcid(before: SceneNucleicAcid, after: SceneNucleicAcid, width: num
     return low && high ? 'ends' : low ? 'from' : high ? 'to' : 'middle';
   };
   const open = tween([0, length, ...excised.flatMap(range => [range.from, range.to]), ...[...before.open ?? [], ...after.open ?? []].flatMap(range => [range.from, range.to])], wasOpen, willOpen, openAnchor, t).get('open') ?? [];
-  const { missing: _missing, nascent: _nascent, open: _open, away: _away, excised: _excised, ...rest } = after;
+  const { missing: _missing, nascent: _nascent, open: _open, away: _away, excised: _excised, joined: _joined, ...rest } = after;
   // Sites follow the map of this instant. One that only the origin had lies on material that is going, and is not drawn.
   const sites = map ? after.sites.map(site => site.at ? { ...site, x: site.at.from === site.at.to ? map.place(site.at.from) : (map.place(site.at.from) + map.place(site.at.to)) / 2 } : site) : after.sites;
   return {
@@ -238,6 +243,17 @@ export function interpolateGeometry(from: GeometryFrame, to: GeometryFrame, t: n
     return before ? tweenAcid(before, after, to.width, t) : { ...after };
   });
   const pairings = tweenPairings(from.pairings, to.pairings, t);
+  // A join appears and disappears by cross-fade (ADR 0004 §6): one number per directed join, and nothing moves.
+  // A transition shows a change of covalent connectivity; it does not imply a path by which it happened.
+  const shareOf = (join: SceneJoin | undefined) => join ? join.share ?? 1 : 0;
+  const keys = [...new Set([...to.joins ?? [], ...from.joins ?? []].map(join => join.key))];
+  const joins = keys.flatMap((key): SceneJoin[] => {
+    const [was, will] = [from.joins?.find(join => join.key === key), to.joins?.find(join => join.key === key)];
+    const share = lerp(shareOf(was), shareOf(will), t);
+    const { share: _share, ...join } = (will ?? was)!;
+    return share > NEAR ? [{ ...join, ...(share < 1 - NEAR && { share }) }] : [];
+  });
+  if (joins.length) markJoined(nucleicAcids, joins, to.width);
   markAway(nucleicAcids, pairings.flatMap(pairing => pairing.segments.map(segment => segment.traveller)), to.width);
-  return { width: to.width, nucleicAcids, pairings };
+  return { width: to.width, nucleicAcids, pairings, ...(joins.length && { joins }) };
 }

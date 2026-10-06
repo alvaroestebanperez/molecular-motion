@@ -1,8 +1,8 @@
 import { renderRepeatedMarker } from './repeated-marker';
 import type { LesionType } from '@molecular-motion/core';
 import {
-  areaLabels, actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixPhase, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
-  type SceneActor, type SceneConnection, type SceneMembrane, type SceneNucleicAcid, type SceneRegion, type SvgScene,
+  areaLabels, actorRepeatedMarker, actorChainGeometry, actorChainReach, actorParticles, chainBase, chainGeometry, hashString, helixPhase, helixY, HELIX, MOLECULE_ACTOR_SCALE, moleculeAtoms, moleculeTopology, calloutText, CHAIN_CALLOUT_PLACES, freeStrandEnds, JOIN, joinGeometry, labelBox, labelGeometry, pairingGeometry, relaxedAt, strandIndex, strandMissingAt,
+  type SceneActor, type SceneConnection, type SceneJoin, type SceneMembrane, type SceneNucleicAcid, type SceneRegion, type SvgScene,
 } from './scene';
 import { geometryFrame, type FramePairing, type GeometryFrame } from './frame';
 import { coordinateMapOf } from './coordinate-map';
@@ -30,6 +30,8 @@ const escape = (value: string) => value.replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]!));
 const round = (value: number) => Math.round(value * 10) / 10;
+/** Opacity of a cross-fade (ADR 0004 §6): finer than a coordinate, so the two halves always sum to one. */
+const fade = (value: number) => Math.round(value * 100) / 100;
 
 /** Text shown next to a lesion. Lesion types are schema vocabulary, so the renderer may name them. */
 export const LESION_LABELS: Record<LesionType, string> = {
@@ -54,7 +56,7 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
   const defs = `<defs>${colors.map((color, index) => sphereGradient(`${prefix}-g${index}`, color) + haloGradient(`${prefix}-halo-${index}`, color)).join('')}`
     + `<radialGradient id="${prefix}-alert"><stop offset="0" stop-color="var(--mm-alert)" stop-opacity=".55"/><stop offset="1" stop-color="var(--mm-alert)" stop-opacity="0"/></radialGradient>`
     + `<filter id="${prefix}-blur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>`;
-  const { acids, pairings } = nucleicLayerMarkup(geometryFrame(scene), prefix, { junctionMarks: !compact });
+  const { acids, pairings, joins } = nucleicLayerMarkup(geometryFrame(scene), prefix, { junctionMarks: !compact });
   const footprints = scene.footprints.map(mark => `<rect class="mm-footprint" data-key="footprint:${escape(mark.id)}" x="${round(mark.x)}" y="${round(mark.y)}" width="${round(mark.width)}" height="${round(mark.height)}" rx="7" style="--mm-actor:${escape(mark.color)}" aria-hidden="true"/>`).join('');
   const connections = scene.connections.map(bindingConnection).join('');
   const actorMarkup = actors.map(actor => actorGroup(actor, `${prefix}-g${colors.indexOf(actor.color)}`, `${prefix}-halo-${colors.indexOf(actor.color)}`, prefix, options.selectedActor === actor.id, compact || options.interactive === false, options.groupIdenticalCopies === true)).join('');
@@ -77,6 +79,9 @@ export function renderSvg(scene: SvgScene, options: RenderOptions = {}): string 
     + `<g class="mm-layer" data-layer="acids">${acids}</g>`
     // Only documents with pairings get this layer, so every other document renders exactly as before.
     + (pairings ? `<g class="mm-layer" data-layer="pairings">${pairings}</g>` : '')
+    // Links of covalent joins (ADR 0004 §5.10): a layer of the composition, above the strands they attach to.
+    // Only documents with joins get it, so every other document renders exactly as before.
+    + (joins ? `<g class="mm-layer" data-layer="joins">${joins}</g>` : '')
     + `<g class="mm-layer" data-layer="connections">${connections}</g>`
     + `<g class="mm-layer" data-layer="actors">${actorMarkup}</g>`
     + `<g class="mm-layer" data-layer="labels">${labels}</g></svg>`;
@@ -165,6 +170,10 @@ export function describeScene(scene: SvgScene): string {
   const span = (item: { acid: string; strand: string; from: number; to: number }) => `${labels.get(item.acid) ?? item.acid} ${item.strand} strand ${item.from}–${item.to}`;
   const paired = scene.pairings.flatMap(pairing => pairing.segments.map(segment =>
     [`${span(segment.traveller)} paired with ${span(segment.host)}`, ...segment.unpaired.map(item => `${span(item)} unpaired`)].join('; ')));
+  // A join in words, from material identity alone (ADR 0004 §5.8): which strand of which molecule continues as which. No products, no named outcome.
+  const joined = (scene.joins ?? []).map(({ from, to, broken }) =>
+    `${labels.get(from.acid) ?? from.acid} ${from.strand} strand ${broken ? 'was joined to' : 'continues as'} ${labels.get(to.acid) ?? to.acid} ${to.strand} strand at ${from.at}`
+    + `${to.at === from.at ? '' : ` (${to.at} on ${labels.get(to.acid) ?? to.acid})`}${broken ? ', and that bond is broken' : ''}`);
   // One sentence per molecule species and molecule it also rests on.
   const held = new Map<string, { label: string; acid: string; from: number; to: number; count: number }>();
   for (const mark of scene.footprints) {
@@ -174,7 +183,7 @@ export function describeScene(scene: SvgScene): string {
   const resting = [...held.values()].map(item => `${item.label}${item.count > 1 ? ` ×${item.count}` : ''} also on ${labels.get(item.acid) ?? item.acid} ${item.from}–${item.to}`);
   return [
     parts.length && `Shown: ${parts.join('; ')}.`, resting.length && `Occupancy: ${resting.join('; ')}.`, lesions.length && `Lesions: ${lesions.join('; ')}.`,
-    strands.length && `Strands: ${strands.join('. ')}.`, paired.length && `Pairing: ${paired.join('. ')}.`,
+    strands.length && `Strands: ${strands.join('. ')}.`, paired.length && `Pairing: ${paired.join('. ')}.`, joined.length && `Joins: ${joined.join('. ')}.`,
   ].filter(Boolean).join(' ');
 }
 
@@ -184,27 +193,64 @@ export function describeScene(scene: SvgScene): string {
  */
 function pairedStrands(frame: GeometryFrame, pairing: FramePairing): string {
   const line = (points: { x: number; y: number }[]) => `M${points.map(point => `${round(point.x)} ${round(point.y)}`).join('L')}`;
-  const parts = pairing.segments.flatMap(segment => pairingGeometry(frame, segment, segment.travel) ?? []);
-  const strands = parts.map(part => line(part.points)).join('');
+  const strands: string[] = [];
+  // While a join fades in or out (ADR 0004 §6), the end of a displaced stretch is drawn both ways at
+  // complementary opacity: continued by the link, and by the ramp to its own row that the link replaces.
+  const fading: Array<{ opacity: number; d: string }> = [];
+  const parts = pairing.segments.flatMap(segment => {
+    const part = pairingGeometry(frame, segment, segment.travel);
+    if (!part) return [];
+    const ends = frame.nucleicAcids.find(acid => acid.id === segment.traveller.acid)?.away
+      ?.find(range => range.strand === segment.traveller.strand && range.from === segment.traveller.from && range.to === segment.traveller.to)?.joined;
+    const shares = [0, 1].map(index => ends?.[index] && ends[index]!.share < 1 ? ends[index]!.share : undefined);
+    if (shares[0] === undefined && shares[1] === undefined) { strands.push(line(part.points)); return [part]; }
+    const ramped = pairingGeometry(frame, segment, segment.travel, 'own-row')!;
+    const last = part.points.length - 1;
+    const [head, tail] = [shares[0] === undefined ? 0 : part.rampPoints, shares[1] === undefined ? last : last - part.rampPoints];
+    if (tail > head) strands.push(line(part.points.slice(head, tail + 1)));
+    for (const [share, from, to] of [[shares[0], 0, head], [shares[1], tail, last]] as const) {
+      if (share === undefined || to <= from) continue;
+      fading.push({ opacity: share, d: line(part.points.slice(from, to + 1)) }, { opacity: 1 - share, d: line(ramped.points.slice(from, to + 1)) });
+    }
+    return [part];
+  });
   const rungs = parts.flatMap(part => part.rungs.map(line)).join('');
   const nascent = parts.flatMap(part => part.nascent.map(line)).join('');
   const ends = parts.flatMap(part => part.ends).map(end => `<text class="mm-dna__polarity" x="${round(end.x)}" y="${round(end.y + 4)}">${end.label}</text>`).join('');
+  const tube = (d: string) => `<g class="mm-dna__front"><path class="mm-dna__tube" d="${d}"/><path class="mm-dna__shine" d="${d}"/></g>`;
   return `<g class="mm-dna mm-pairing" data-key="pairing:${escape(pairing.key)}" aria-hidden="true">`
     + `<path class="mm-dna__rungs" d="${rungs}"/>`
-    + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${strands}"/><path class="mm-dna__shine" d="${strands}"/></g>`
+    + tube(strands.join(''))
+    + fading.map(({ opacity, d }) => `<g class="mm-dna__fading" opacity="${fade(opacity)}">${tube(d)}</g>`).join('')
     + (nascent ? `<path class="mm-dna__nascent mm-dna__nascent--front" d="${nascent}"/>` : '')
     + ends + '</g>';
+}
+
+/**
+ * The link that draws a covalent join (ADR 0004 §5.1): a strand, from the drawn end of one stretch to the
+ * drawn start of the next. One keyed group per directed join. A join whose bond is broken has no link:
+ * its two ends are drawn where their own material is (§5.6).
+ */
+function joinLink(frame: GeometryFrame, join: SceneJoin): string {
+  if (join.broken) return '';
+  const geometry = joinGeometry(frame, join);
+  if (!geometry) return '';
+  const { from, to, controls: [first, second] } = geometry;
+  const d = `M${round(from.x)} ${round(from.y)}C${round(first.x)} ${round(first.y)} ${round(second.x)} ${round(second.y)} ${round(to.x)} ${round(to.y)}`;
+  return `<g class="mm-dna mm-join" data-key="join:${escape(join.key)}" aria-hidden="true"${join.share === undefined ? '' : ` opacity="${fade(join.share)}"`}>`
+    + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${d}"/><path class="mm-dna__shine" d="${d}"/></g></g>`;
 }
 
 /**
  * Content of the two nucleic layers for a frame: a settled step (`geometryFrame(scene)`) or an instant
  * of a transition (ADR 0001). The viewer's animator redraws only these, on the elements already there.
  */
-export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm', options: { junctionMarks?: boolean } = {}): { acids: string; pairings: string } {
+export function nucleicLayerMarkup(frame: GeometryFrame, idPrefix = 'mm', options: { junctionMarks?: boolean } = {}): { acids: string; pairings: string; joins: string } {
   const prefix = escape(idPrefix);
   return {
     acids: frame.nucleicAcids.map(acid => `<g class="mm-dna" data-key="acid:${escape(acid.id)}" aria-hidden="true">${helix(acid, frame.width, prefix, options.junctionMarks ?? true)}</g>`).join(''),
     pairings: frame.pairings.map(pairing => pairedStrands(frame, pairing)).join(''),
+    joins: (frame.joins ?? []).map(join => joinLink(frame, join)).join(''),
   };
 }
 
@@ -224,6 +270,10 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
   const closing = (acid.excised ?? []).filter(stretch => (stretch.share ?? 0) > 0 && stretch.x1 > stretch.x0);
   const closingAt = (x: number) => closing.length ? closing.findIndex(stretch => x > stretch.x0 && x < stretch.x1) : -1;
   const fading = closing.map(() => ({ back: [] as string[], front: [] as string[], rungs: [] as string[], nascentBack: [] as string[], nascentFront: [] as string[] }));
+  // Boundaries a join claims (ADR 0004 §5.4): on that strand the row's backbone is not drawn through. Each
+  // stretch stops an inset short, and a link takes over from there.
+  const joined = acid.joined ?? [];
+  const joinedAt = (strand: 0 | 1, x: number, reach: number = JOIN.inset) => joined.some(item => strandIndex(item.strand) === strand && Math.abs(item.x - x) < reach);
   const theta = (x: number) => k * (x - phaseX);
   const strandY = (strand: 0 | 1, x: number) => helixY(acid, strand, x, width);
   const strandState = Boolean(acid.missing || acid.open);
@@ -245,7 +295,9 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
   const freeEnds = freeStrandEnds(acid, width);
   const gaps: [0 | 1, number, number][] = freeEnds.map(([strand, x]) => [strand, x - FREE_END, x + FREE_END]);
   for (const site of acid.sites) {
-    const strands = (site.lesionStrands ?? ['top']).map(strandIndex).filter(strand => site.lesion === 'double-strand-break' ? !bridges(strand, site.x) : !touched(strand, site.x));
+    // At a joined boundary the backbone already stops either side, and a break there is of the link (§5.6).
+    const strands = (site.lesionStrands ?? ['top']).map(strandIndex).filter(strand => !joinedAt(strand, site.x, .5))
+      .filter(strand => site.lesion === 'double-strand-break' ? !bridges(strand, site.x) : !touched(strand, site.x));
     if (site.lesion === 'single-strand-break') for (const strand of strands) gaps.push([strand, site.x - 12, site.x + 12]);
     if (site.lesion === 'nick') for (const strand of strands) gaps.push([strand, site.x - 3, site.x + 3]);
     if (site.lesion === 'double-strand-break') for (const strand of strands) gaps.push([strand, site.x - 15, site.x + 15]);
@@ -256,6 +308,7 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
   for (const range of [...acid.missing ?? [], ...acid.away ?? []]) gaps.push([strandIndex(range.strand), range.x0 <= firstX ? -Infinity : range.x0, range.x1 >= lastX ? Infinity : range.x1]);
   const beyond: [0 | 1, number, number][] = extent ? ([0, 1] as const).flatMap((strand): [0 | 1, number, number][] => [[strand, -Infinity, extent.x0], [strand, extent.x1, Infinity]]) : [];
   gaps.push(...beyond);
+  for (const item of joined) gaps.push([strandIndex(item.strand), item.x - JOIN.inset, item.x + JOIN.inset]);
   // Polarity is labelled where it tells the story: the molecule's ends, resected ends and the two sides
   // of a DSB. A nick or SSB keeps its strand continuous for labelling, so no 5′/3′ crowds the lesion.
   const polarityCuts: [0 | 1, number, number][] = [
@@ -263,12 +316,21 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
     ...freeEnds.map(([strand, x]): [0 | 1, number, number] => [strand, x - FREE_END, x + FREE_END]),
     ...[...acid.missing ?? [], ...acid.away ?? []].map((range): [0 | 1, number, number] => [strandIndex(range.strand), range.x0, range.x1]),
     ...beyond,
+    ...joined.map((item): [0 | 1, number, number] => [strandIndex(item.strand), item.x - JOIN.inset, item.x + JOIN.inset]),
   ];
   // A strand that leaves for another molecule does not end there, so those edges carry no label.
-  const continuing = (acid.away ?? []).flatMap((range): [0 | 1, number][] => [
-    ...(range.continues[0] ? [[strandIndex(range.strand), range.x0] as [0 | 1, number]] : []),
-    ...(range.continues[1] ? [[strandIndex(range.strand), range.x1] as [0 | 1, number]] : []),
-  ]);
+  // Nor does a strand that a link continues. Its end is one only while that bond is broken, and then the
+  // label is the one covalent polarity gives it (ADR 0004 §5.7): `exposed` is per side of the boundary.
+  const continuing = [
+    ...(acid.away ?? []).flatMap((range): [0 | 1, number][] => [
+      ...(range.continues[0] || range.joined?.[0] ? [[strandIndex(range.strand), range.x0] as [0 | 1, number]] : []),
+      ...(range.continues[1] || range.joined?.[1] ? [[strandIndex(range.strand), range.x1] as [0 | 1, number]] : []),
+    ]),
+    ...joined.flatMap((item): [0 | 1, number][] => [
+      ...(item.exposed[0] ? [] : [[strandIndex(item.strand), item.x - JOIN.inset] as [0 | 1, number]]),
+      ...(item.exposed[1] ? [] : [[strandIndex(item.strand), item.x + JOIN.inset] as [0 | 1, number]]),
+    ]),
+  ];
   const inGap = (strand: 0 | 1, x: number) => gaps.some(([s, from, to]) => s === strand && x > from && x < to);
   // Base pairs need both strands, paired: none across a gap in either strand or inside a bubble.
   const unpaired = (x: number) => (strandState || acid.away) && (strandMissingAt(acid, 0, x) || strandMissingAt(acid, 1, x) || (acid.open ?? []).some(range => x > range.x0 && x < range.x1));
@@ -301,7 +363,7 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
   for (let x = phaseX - Math.ceil((phaseX + 20) / spacing) * spacing; x <= width + 20; x += spacing) {
     const y0 = strandY(0, x);
     const y1 = strandY(1, x);
-    if (Math.abs(y0 - y1) < 5 || unpaired(x) || outside(x)) continue;
+    if (Math.abs(y0 - y1) < 5 || unpaired(x) || outside(x) || joinedAt(0, x) || joinedAt(1, x)) continue;
     const lesion = lesionSites.get(Math.round(x));
     if (lesion === 'abasic-site' || lesion === 'single-strand-break' || lesion === 'double-strand-break') continue;
     const path = `M${round(x)} ${round(y0)}L${round(x)} ${round(y1)}`;
@@ -349,6 +411,17 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
   // derived from `excised` alone, styled inline so no stylesheet changes, and unlike any lesion or actor.
   // A break at the junction is drawn as a break and replaces it.
   const isBreak = (lesion: LesionType | undefined) => lesion === 'single-strand-break' || lesion === 'double-strand-break' || lesion === 'nick';
+  // While a join fades (ADR 0004 §6) the continuation it replaces is still drawn through the boundary, at the
+  // complementary opacity. Nothing moves: a transition shows a change of connectivity, not a path.
+  const continuations = joined.filter(item => item.share !== undefined).map(item => {
+    const strand = strandIndex(item.strand);
+    const [from, to] = [item.x - JOIN.inset, item.x + JOIN.inset];
+    if (strandMissingAt(acid, strand, from - .5) || strandMissingAt(acid, strand, to + .5) || outside(from) || outside(to)) return '';
+    const points: string[] = [];
+    for (let x = from; ; x = Math.min(x + 3, to)) { points.push(`${round(x)} ${round(strandY(strand, x))}`); if (x >= to) break; }
+    const d = `M${points.join('L')}`;
+    return `<g class="mm-dna__continuation" opacity="${fade(1 - item.share!)}"><g class="mm-dna__front"><path class="mm-dna__tube" d="${d}"/><path class="mm-dna__shine" d="${d}"/></g></g>`;
+  }).join('');
   const junctions = junctionMarks ? (acid.excised ?? []).flatMap(stretch => {
     const x = (stretch.x0 + stretch.x1) / 2;
     if (acid.sites.some(site => isBreak(site.lesion) && site.x >= stretch.x0 - .5 && site.x <= stretch.x1 + .5)) return [];
@@ -360,7 +433,7 @@ function helix(acid: SceneNucleicAcid, width: number, prefix: string, junctionMa
     + `<path class="mm-dna__rungs" d="${rungs.join('')}"/>`
     + (damaged.length ? `<path class="mm-dna__rungs mm-dna__rungs--damaged" d="${damaged.join('')}"/>` : '')
     + `<g class="mm-dna__front"><path class="mm-dna__tube" d="${segments.front.join('')}"/><path class="mm-dna__shine" d="${segments.front.join('')}"/></g>`
-    + nascentPath('front') + closingMarkup + junctions + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts, continuing) : '');
+    + nascentPath('front') + closingMarkup + continuations + junctions + markers + (acid.polarity ? polarityLabels(acid, width, polarityCuts, continuing) : '');
 }
 
 /**

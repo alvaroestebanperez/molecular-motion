@@ -1,0 +1,56 @@
+[
+  {
+    "step": "break",
+    "full": "f8328cf767c39761135582cd92dfb0b208c71b472d50f2e99600b7d5f55e53ff",
+    "compact": "26617a36f54273c88504729835da252ef08d971af07347f45a2c16172138b719",
+    "ghosts": "f8328cf767c39761135582cd92dfb0b208c71b472d50f2e99600b7d5f55e53ff"
+  },
+  {
+    "step": "resection",
+    "full": "312aac1c6ffa2835c81424cde2d5f24c34f29912f89b0bd3a460ed4872a299ae",
+    "compact": "35adbdc323d46e00e5311d1f79f38fd4ae2ebcde8e0e15665f0e9e18ff196c9f",
+    "ghosts": "312aac1c6ffa2835c81424cde2d5f24c34f29912f89b0bd3a460ed4872a299ae"
+  },
+  {
+    "step": "invasion",
+    "full": "7fb31117f26f25310d8f1d99781f2735246de3406c4d8ea21baaebe64b45d465",
+    "compact": "d0149d28f4f92e0304005086372225a64a5436eb64a9bdf36c0a39695d7b79f2",
+    "ghosts": "7fb31117f26f25310d8f1d99781f2735246de3406c4d8ea21baaebe64b45d465"
+  },
+  {
+    "step": "synthesis",
+    "full": "46c7f5f4528db51123f078778bb1a1469b82012db3add1d103f1621bcb7fb19a",
+    "compact": "21fb41410e4252cc77dcd8ad0485137aa6212087ca648c3f2f82a10c09b857ac",
+    "ghosts": "46c7f5f4528db51123f078778bb1a1469b82012db3add1d103f1621bcb7fb19a"
+  },
+  {
+    "step": "second-end-capture",
+    "full": "b75b374a3d85d6c0f28d536db0e1b86dff7ce2230fa63d1d773fce78faea0958",
+    "compact": "f739c3b8f5d3a9bfed6ec688994a1e693de339864ac8d9af30934bfcc3606394",
+    "ghosts": "b75b374a3d85d6c0f28d536db0e1b86dff7ce2230fa63d1d773fce78faea0958"
+  },
+  {
+    "step": "second-synthesis",
+    "full": "5e235218e7662fccb96e757021828f162ef7f1295f0af5a9fcc18dc50f40d5f0",
+    "compact": "8f0687b5074ecca0eb1f8472c2f144b01e357dae485ed99350e43f11ba64796c",
+    "ghosts": "5e235218e7662fccb96e757021828f162ef7f1295f0af5a9fcc18dc50f40d5f0"
+  },
+  {
+    "step": "ligation",
+    "full": "bd24eed3b771ba256156d1bdca990631bf4502ab1381e4c94dbed8b60342e73e",
+    "compact": "a3a6cfae193076f4c40a84d654d9ae3b7fd325b93fa85b601e74a7b1d3982504",
+    "ghosts": "bd24eed3b771ba256156d1bdca990631bf4502ab1381e4c94dbed8b60342e73e"
+  },
+  {
+    "step": "nicking",
+    "full": "076ad76f71e2db14ecaacbbc2460c0dc4f499ed9a63dbcca366daaa5bbba5dd1",
+    "compact": "1f6fc2496ee7dfb14a796e10008b81bd5798e932b7a116ff22f71fae4252cfa9",
+    "ghosts": "076ad76f71e2db14ecaacbbc2460c0dc4f499ed9a63dbcca366daaa5bbba5dd1"
+  },
+  {
+    "step": "resolution",
+    "full": "c63e021ff1e8f36d4f3c0442871d22bfde4b30c2fa6799457020c1baa49bc09d",
+    "compact": "face71fc16c914657722142c236c7823f74571378f6ec131ba4202a6c78725b0",
+    "ghosts": "c63e021ff1e8f36d4f3c0442871d22bfde4b30c2fa6799457020c1baa49bc09d"
+  }
+]

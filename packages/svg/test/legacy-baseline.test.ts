@@ -23,8 +23,8 @@ const FIXTURES = {
 } as const;
 const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
 const DOCUMENTS: Record<keyof typeof FIXTURES, readonly string[]> = { v2: MECHANISMS, v3: MECHANISMS, v4: [...MECHANISMS, 'egfr-dimerization'], v5: [...MECHANISMS, 'egfr-dimerization'], v6: [...MECHANISMS, 'egfr-dimerization', 'gene-expression'],
-  // The v7 document that reconnects strands is not here: joined strands have no agreed drawing yet (RFC 0008 §14).
-  v7: [...MECHANISMS, 'egfr-dimerization', 'gene-expression'],
+  // The v7 document that reconnects strands locks the drawing of joins (ADR 0004).
+  v7: [...MECHANISMS, 'egfr-dimerization', 'gene-expression', 'double-holliday-junction'],
 };
 const golden = (version: string, name: string) => new URL(`./fixtures/baseline/${version}.${name}.svg-sha256.json`, import.meta.url);
 const sha256 = (markup: string) => createHash('sha256').update(markup).digest('hex');
