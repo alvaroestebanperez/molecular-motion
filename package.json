@@ -17,6 +17,7 @@
     "schema": "UPDATE_SCHEMA=1 vitest run packages/core/test/schema.test.ts",
     "reference": "UPDATE_REFERENCE=1 vitest run packages/core/test/reference.test.ts",
     "check:browser": "node scripts/browser-check.mjs",
+    "check:browser:joins": "node scripts/browser-smoke-joins.mjs",
     "check:pack": "node scripts/pack-check.mjs"
   },
   "devDependencies": {
