@@ -147,7 +147,7 @@ Whether a bond is intact is separate: a bond is broken while a point site that n
 
 Derived from the successor:
 
-- **covalent strand**: a maximal chain of successors, written 5′→3′ as stretches, each of one molecule;
+- **covalent strand**: a maximal chain of successors, written 5′→3′ as stretches, each of one molecule. A chain may close on itself: two molecules related by more than one alignment can be reconnected into a strand with no ends. A circle is derived and reported as one; it is not invalid, since no invariant forbids it;
 - **product**: a set of nucleotides held together by covalent bonds and base pairing. Never stored, with no identity of its own (§2).
 
 ### 4.3 What v7 writes
@@ -239,6 +239,8 @@ A primitive. `target` and `with` are point sites (`at`) on two different molecul
 
 It is atomic: after it, the two joins of §4.3 exist and both bonds are sealed. A break lesion on either site is cleared, because the bond it interrupted no longer exists; the bonds that replace it are the joins.
 
+**It applies whole or not at all.** A site holds one lesion for the whole site (RFC 0004). If a site carries a break that also cuts the other strand, a `double-strand-break` or any break on a site of `strand: both`, sealing one strand would leave a state that one lesion cannot say: sealed here, still cut there. The action then fails and changes nothing; it does not clear the lesion in part. The author seals or re-declares the break first. This is the principle of §6.4 applied to a lesion.
+
 An author who wants to narrate the chemistry writes `cleave` on each site in an earlier step, then `reconnect-strands` with `by:` the enzyme that seals. That is the order of canonical resolution: a resolvase introduces two symmetrical nicks, and the nicked duplexes that result are ligated (§5.3). Without the `cleave` it still stands alone, as a recombinase cuts and joins in one reaction.
 
 ### 5.1 What it expresses
@@ -286,23 +288,57 @@ The first draft called the action `exchange-strands`. The literature on tyrosine
 
 ## 6. Effects on the rest of the model
 
-### 6.1 Sites at a join
+### 6.1 Sites, bonds and the ends a cut leaves
 
 A point site names one bond: the one in which the nucleotide **before its coordinate, on its own molecule and strand** takes part. That nucleotide is the source of a bond on `top` and the destination of one on `bottom`, and at any boundary it takes part in exactly one.
 
 After the reconnection of §4.4 case 1, `dna.hj-left` (top, at 22) names `dna.top[21] → sister.top[22]`, and `sister.hj-left` names `sister.top[21] → dna.top[22]`. After case 2, `dna.hj-right` (bottom, at 58) names `sister.bottom[58] → dna.bottom[57]`. Each new bond is named by exactly one of the two sites.
 
-- `cleave` at such a site breaks that bond, and `ligate` reseals it, under their existing rules.
+**`cleave` cuts that bond, and the cut leaves two physical ends**: a 3′ end, the bond's source, and a 5′ end, its destination. Which nucleotides they are comes from the topology of §4.2 and from nothing else. The molecule of the site says which bond is meant; it does not say that both ends are on that molecule.
+
+| Site at 22 on `dna` | Bond cut | 3′ end | 5′ end |
+|---|---|---|---|
+| `top`, no join | `dna.top[21] → dna.top[22]` | `dna.top[21]` | `dna.top[22]` |
+| `top`, joined to `sister` | `dna.top[21] → sister.top[22]` | `dna.top[21]` | **`sister.top[22]`** |
+| `bottom`, no join | `dna.bottom[22] → dna.bottom[21]` | `dna.bottom[22]` | `dna.bottom[21]` |
+| `bottom`, joined to `sister` | `sister.bottom[22] → dna.bottom[21]` | **`sister.bottom[22]`** | `dna.bottom[21]` |
+
+A join puts one of the two ends on the other molecule: the 5′ end on `top`, the 3′ end on `bottom`. That follows from the definition of a join; nothing is special about either strand.
+
+- `ligate` reseals the bond its site names, under its existing rule: both ends present, on whichever molecule each is.
 - Break state stays per site, as in RFC 0007 D15. Nothing is aliased.
 - Read as a **base**, a site still denotes its own nucleotide. A reconnection removes nothing, so no base reading is affected.
 
-### 6.2 Strand-range actions stay inside one molecule
+### 6.2 Strand-range actions
 
-`resect`, `extend`, `unwind`, `anneal` and `excise-interval` read and write strand ranges of **one** molecule, by coordinate. **None of them follows a join into another molecule.**
+**`resect` acts on a cut, so it follows the bond.** It requires a break on its site. It removes nucleotides 5′→3′ starting at the 5′ end that cut left, the destination of the bond the site names, **in the molecule that end is in**. It does not assume that the site's molecule is the material to remove.
 
-- `resect` that would remove nucleotides past a join on the strand it is resecting fails: *the strand continues in another molecule*. The author resects up to the join, then names a site of the other molecule to go on.
-- `extend` fills a gap of its own molecule. A 3′ end whose strand continues, through a join, into a gap of the other molecule is extended by naming a site of that molecule; the 3′-terminal nucleotide is then found covalently, as RFC 0007 does at a junction.
+Resecting 4 nucleotides from each site of the table above:
+
+| Site at 22 on `dna` | 5′ end | Removed |
+|---|---|---|
+| `top`, no join | `dna.top[22]` | `dna.top [22, 26)` |
+| `top`, joined to `sister` | `sister.top[22]` | **`sister.top [22, 26)`**; nothing of `dna` |
+| `bottom`, no join | `dna.bottom[21]` | `dna.bottom [18, 22)` |
+| `bottom`, joined to `sister` | `dna.bottom[21]` | `dna.bottom [18, 22)`; nothing of `sister` |
+
+The other bond of a reciprocal pair is named by the other molecule's site, and behaves the same way from there: `resect sister.hj-left` on `top` removes `dna.top [22, 26)`. A break of both strands at a join is resected strand by strand, each in the molecule its 5′ end is in.
+
+Without a join this is exactly what `resect` did before: the 5′ end of a cut is then always on the site's molecule. RFC 0007's junction is the same rule already, since the 5′ end across an excised interval is found through the adjacency and not by coordinate. No join is treated specially: the rule is the one above, and a join is one of the things §4.2 reads.
+
+**Once the material is resolved, resection stays in that molecule.** It may reach a join or start at one, and it does not cross one: if the nucleotides to remove would run past a join on that strand, the action fails before removing anything, *the strand continues in another molecule*. To go on, the author cuts the bond at that join and resects from the site that names it.
+
+Material identity is untouched by all of this (X1). `resect dna.hj-left` on a joined `top` strand writes the `missing` range of `sister`, at the sister's own coordinates. No nucleotide changes molecule, no fragment or product is introduced, and the join is still there.
+
+**A consequence, left as it is.** After such a resection the join remains while one of its four nucleotides is missing. The covalent strand simply ends there. But the reconnection cannot be undone, because undoing seals two bonds and one has an end missing (§8), and so `degrade` and `excise-interval` beside it stay refused. `extend` restores the nucleotides, after which the bond can be ligated and the reconnection undone. Nothing restores them implicitly.
+
+The other strand-range actions:
+
+- `extend` does not act on a cut. Its site locates a gap on the site's own molecule, and it fills that gap; the 3′ end it grows from is the gap's covalent predecessor, found through §4.2, on another molecule if a join puts it there. It does not fill past a join.
+- `unwind` and `anneal` read one molecule by coordinate, as now.
 - `excise-interval` fails if a join lies inside the interval or at its boundaries.
+
+No strand-range action writes two molecules' ranges *for one strand*, and none crosses a join (X6).
 
 ### 6.3 Pairing and occupancy
 
@@ -362,7 +398,7 @@ Nothing checks that the ends are held next to each other. In both biological cas
 - **X3.** A boundary of a strand is the `from` of at most one join and the `to` of at most one, so `covalentSuccessor` and `covalentPredecessor` are functions: a nucleotide has at most one covalent neighbour on each side.
 - **X4.** Joins are stored normalised: keyed by strand pair, sorted by coordinate.
 - **X5.** In v7 every join has its reciprocal. No state has one without the other.
-- **X6.** No strand-range action reads or writes another molecule's ranges because of a join (§6.2).
+- **X6.** No strand-range action crosses a join. `resect` writes, for each strand it resects, the ranges of the one molecule its 5′ end is in, which the topology decides and need not be the site's (§6.2).
 - **X7.** Pairing, occupancy, sites and alignments are not rewritten by a reconnection.
 - **X8.** A molecule that has a join is present. Nothing requires joined molecules to be in one compartment.
 - **X9.** A v6 document produces exactly the snapshots it produced before.
@@ -381,7 +417,8 @@ Nothing checks that the ends are held next to each other. In both biological cas
 | a site is `strand: both`, or names none, and the action gives no `strand` | name the strand: one strand is reconnected at a time |
 | a nucleotide next to the point is `missing` or `excised` | nothing to join there |
 | the strand already has a join there with a third molecule | already joined to … |
-| `resect` would pass a join | the strand continues in another molecule |
+| `resect` would pass a join, in the molecule its 5′ end is in | the strand continues in another molecule; nothing is removed |
+| a site carries a break that also cuts the other strand | carries a …, which also cuts the other strand; one strand is reconnected at a time |
 | `excise-interval` over or beside a join | undo the reconnection first |
 | `degrade` of a molecule that has a join | covalently joined to …; undo the reconnection first |
 
