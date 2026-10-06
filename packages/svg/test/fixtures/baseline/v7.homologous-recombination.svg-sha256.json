@@ -1,0 +1,80 @@
+[
+  {
+    "step": "break",
+    "full": "5b8e8515f5d5011318b30e01bd2fd29fa0698d496ce5e87675d2ea7906e94602",
+    "compact": "a6524b904048b5a93b6e76b47f91eb9ce80ee6fc3885b609a21e970732e44132",
+    "ghosts": "46e11a9b18684a03fbaec7ab1f67ba7ec20b2cb80c91b7e1d0670141910db659"
+  },
+  {
+    "step": "sensing",
+    "full": "d5208b07005b8d5cd4c7ed2804e402192ec1ee0ed5d95b8822548647942c3ca7",
+    "compact": "300b0c7aec3fca6ad93b619ce791eda0433b8ac74270edf83db3c7cc9c6f3154",
+    "ghosts": "0da18e976a3a27d65363fcbb3aa71e3efb96323df17b15d02737c4cb20ee23f2"
+  },
+  {
+    "step": "short-range",
+    "full": "be8efd4bc6272337eba1c69d69be4a918a5447b5e62498d34298d78cedc90a05",
+    "compact": "fded8cf24be2256371b58d2393f52e65a66c6028ef3940b2f72c41132ee8b6f5",
+    "ghosts": "f56d2372563c321f9c945edee8cd73c05d5024d1c151935ce3673af73c6e4e10"
+  },
+  {
+    "step": "long-range",
+    "full": "73765e09221f157fcb3f1e27c6fbc650bddbb20c2a86a57a10e968f32df69c08",
+    "compact": "656f4d605226a99bff0de9d8957a1e68824a0229affbdaa52b561bd133aa2b2b",
+    "ghosts": "8e0d1b83f76f1a3bd7dc4cdc9dc43ec7040fcd95c3c39a27c25f65c5d0d34a84"
+  },
+  {
+    "step": "rpa-coating",
+    "full": "a5f366240fc9c89343cbe34ab32498a0d2ff900fa1b71f1d0407c21dd74b0a2d",
+    "compact": "3e2a102192e6f5cf52bdae11b28bbb067121028894a55b080899afe6815e6b71",
+    "ghosts": "29bffb7bbf142ef2ff16d9a4512694db679ba7eea54a92a6eb97acf3169ed5a5"
+  },
+  {
+    "step": "nucleation",
+    "full": "8bdb60f494ac6a9201bb508b2e99135db0f2ef7d0e672e070115a63412c5d846",
+    "compact": "270043417847f038a3359b48661913da6b83feb1e33685037d8b63440e948c3e",
+    "ghosts": "bb2cf26da891c1841a54779b8c5e7a15cb820d946afde8465058c89f17b71a7e"
+  },
+  {
+    "step": "filament",
+    "full": "4e498961e498dabac9a9454124b02c8bd84c413a939c425a3e906a85b68d3c50",
+    "compact": "8f146752e10777b60600d13082f26a02d05b3587a7681b3dd1667c0cb43fbbc7",
+    "ghosts": "4e442e1920d316ccf18d983ef7282611e52bfc94bd4fcdf112aa3121dd108c9e"
+  },
+  {
+    "step": "engagement",
+    "full": "7c2e5fa7fe61ada8a9e5c04838b10e71d240395ce790008c1ce6f5b31c5c0c86",
+    "compact": "f8864e1b78e30c4a760c5c2a113de4cfddf82ae85984372e34b43e221dcde304",
+    "ghosts": "ec1d7645f13892405731dc39f86f594183c1d2301671fcba4414fff3f76319a7"
+  },
+  {
+    "step": "invasion",
+    "full": "6da7ea3c577547fde4d7a825c27422de0ab61e2293a6ff779030c03fc1051153",
+    "compact": "14fe5cf05451bbfc4abe791d588d0de52f533e55a527d159f08c86bbb2e2acfa",
+    "ghosts": "596f3a23324415e3a18f258a721629718337c2e22416217298c9c455ab977b7f"
+  },
+  {
+    "step": "synthesis",
+    "full": "d26a7a1adaf2cb275394c3b3be16ad8b1f208ff982ea8fa8c0510c550e28f9be",
+    "compact": "0dfeb4f565fe94121643fad70fb2cad0d58c91aad210df70069954e8a56cf6b9",
+    "ghosts": "d26a7a1adaf2cb275394c3b3be16ad8b1f208ff982ea8fa8c0510c550e28f9be"
+  },
+  {
+    "step": "displacement",
+    "full": "08ba9f85f2b78d439907260c573ae8e82685ae367bffd5a19018e76b4f8e620e",
+    "compact": "f71668efa209162f9475cd6d517b483134ad08c903cd7ea7fbb03bec3c7ab48d",
+    "ghosts": "08ba9f85f2b78d439907260c573ae8e82685ae367bffd5a19018e76b4f8e620e"
+  },
+  {
+    "step": "annealing",
+    "full": "c32c76d2b37b07875ad014f8a9982886dd161fade905163b21acda1f3f12c4ce",
+    "compact": "cdc2a8c368b469dc2c976dc3220581f7b2566ef2b465a34860a46e10dd959023",
+    "ghosts": "c32c76d2b37b07875ad014f8a9982886dd161fade905163b21acda1f3f12c4ce"
+  },
+  {
+    "step": "completion",
+    "full": "0b53641503a4223d0a05af51817dd4ae8e9fefd1c7f5e65062ec6632d0e7a365",
+    "compact": "3456c2b6f43d41ed1a686cf6ef6f3f19d3c28c7676712c30cb261abaa0ff171b",
+    "ghosts": "0b53641503a4223d0a05af51817dd4ae8e9fefd1c7f5e65062ec6632d0e7a365"
+  }
+]

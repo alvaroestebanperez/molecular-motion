@@ -8,7 +8,7 @@ import { firstAppearances, upcomingActors } from '../../react/src/player';
 import { buildSvgScene, renderSvg } from '../src';
 
 /**
- * Legacy render baseline (RFC 0004 §8, RFC 0005 §8, RFC 0006 §12, RFC 0007 §11). Frozen copies of the documents as they were at
+ * Legacy render baseline (RFC 0004 §8, RFC 0005 §8, RFC 0006 §12, RFC 0007 §11, RFC 0008 §11). Frozen copies of the documents as they were at
  * each schema version must render byte-identically through every later schema change. Each step is
  * locked three ways: full viewer, compact thumbnail, and the viewer with upcoming actors as ghosts.
  * UPDATE_GOLDEN=1 regenerates; do that only when a visual change is intended and reviewed.
@@ -19,9 +19,13 @@ const FIXTURES = {
   v4: (name: string) => new URL(`../../core/test/fixtures/v4/${name}.yaml`, import.meta.url),
   v5: (name: string) => new URL(`../../core/test/fixtures/v5/${name}.yaml`, import.meta.url),
   v6: (name: string) => new URL(`../../core/test/fixtures/v6/${name}.yaml`, import.meta.url),
+  v7: (name: string) => new URL(`../../core/test/fixtures/v7/${name}.yaml`, import.meta.url),
 } as const;
 const MECHANISMS = ['parp1-ssb-repair', 'homologous-recombination'] as const;
-const DOCUMENTS: Record<keyof typeof FIXTURES, readonly string[]> = { v2: MECHANISMS, v3: MECHANISMS, v4: [...MECHANISMS, 'egfr-dimerization'], v5: [...MECHANISMS, 'egfr-dimerization'], v6: [...MECHANISMS, 'egfr-dimerization', 'gene-expression'] };
+const DOCUMENTS: Record<keyof typeof FIXTURES, readonly string[]> = { v2: MECHANISMS, v3: MECHANISMS, v4: [...MECHANISMS, 'egfr-dimerization'], v5: [...MECHANISMS, 'egfr-dimerization'], v6: [...MECHANISMS, 'egfr-dimerization', 'gene-expression'],
+  // The v7 document that reconnects strands is not here: joined strands have no agreed drawing yet (RFC 0008 §14).
+  v7: [...MECHANISMS, 'egfr-dimerization', 'gene-expression'],
+};
 const golden = (version: string, name: string) => new URL(`./fixtures/baseline/${version}.${name}.svg-sha256.json`, import.meta.url);
 const sha256 = (markup: string) => createHash('sha256').update(markup).digest('hex');
 
@@ -48,7 +52,7 @@ describe.each(Object.keys(FIXTURES) as (keyof typeof FIXTURES)[])('legacy render
   });
 
   // RFC 0007 I9: documents older than v6 cannot author an excision, so the state they are drawn from never names one.
-  it.runIf(version !== 'v6').each(DOCUMENTS[version])('%s is drawn from snapshots with no excised list', name => {
+  it.runIf(version !== 'v6' && version !== 'v7').each(DOCUMENTS[version])('%s is drawn from snapshots with no excised list', name => {
     const mechanism = compileMechanism(parseMechanism(readFileSync(FIXTURES[version](name), 'utf8')));
     for (let index = 0; index < mechanism.length; index += 1) expect(JSON.stringify(mechanism.at(index).actors)).not.toContain('excised');
   });
