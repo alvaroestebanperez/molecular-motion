@@ -31,7 +31,7 @@ npm install
 npm run dev
 ```
 
-The repository includes six mechanisms to exercise different parts of the language:
+The repository includes seven mechanisms to exercise different parts of the language:
 
 - [PARP1-mediated single-strand break repair](examples/parp1-ssb-repair.yaml)
 - [Homologous recombination: from the break to an intact chromatid by strand invasion, synthesis on the sister chromatid and annealing (SDSA)](examples/homologous-recombination.yaml)
@@ -39,6 +39,7 @@ The repository includes six mechanisms to exercise different parts of the langua
 - [p53–MDM2 negative feedback](examples/p53-mdm2-feedback.yaml)
 - [cGAS–STING sensing of cytosolic DNA](examples/cgas-sting.yaml)
 - [Gene expression: a transcript that begins as its first nucleotides, and splicing by excision](examples/gene-expression.yaml)
+- [Double Holliday junction: second-end capture, and resolution as a crossover by reconnecting strands between two molecules](examples/double-holliday-junction.yaml)
 
 ## Install
 

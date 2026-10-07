@@ -12,7 +12,7 @@ import { firstAppearances, upcomingActors } from '../src/player';
  * of B produces. It holds for every pair of steps of every shipped example, rendered the way the viewer
  * renders them (upcoming actors as ghosts), in both canvas sizes, and along chains of steps.
  */
-const EXAMPLES = ['parp1-ssb-repair', 'homologous-recombination', 'egfr-dimerization'] as const;
+const EXAMPLES = ['parp1-ssb-repair', 'homologous-recombination', 'egfr-dimerization', 'double-holliday-junction'] as const;
 const SIZES = { wide: {}, narrow: { width: 640, height: 620 } } as const;
 
 /**
