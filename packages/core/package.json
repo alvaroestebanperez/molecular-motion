@@ -1,6 +1,6 @@
 {
   "name": "@molecular-motion/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Framework-agnostic compiler and state engine for declarative molecular mechanisms.",
   "homepage": "https://molecular-motion.alvaroesteban.dev/",
   "repository": {

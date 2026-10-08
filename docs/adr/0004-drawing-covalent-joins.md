@@ -9,7 +9,7 @@
 
 Since RFC 0008 a valid v7 document can contain joins: covalent bonds between strands of two molecules. The renderer ignores them. A probe on `main` rendered six kinds of state with and without their joins, and the markup was identical every time. Resolving a double Holliday junction as a crossover and as a non-crossover gives the same figure, although they are opposite outcomes.
 
-That is why schema v7 is not published: a document can change its molecular topology and the figure cannot show it.
+That is why schema v7 was not published until this ADR was implemented: a document could change its molecular topology and the figure could not show it. Both were released together in 0.3.0.
 
 ## 2. What the probe found
 
