@@ -104,6 +104,7 @@ A travelling stretch has one extra number: how far it has moved from its own mol
 - **Pairing disappears:** 1 → 0, towards where the destination draws that strand on its own molecule.
 - **Pairing grows or shrinks:** the shared stretch keeps its value and a front (§4.1) moves its end, starting from the shared stretch. Base pairs are drawn where the strand has arrived.
 - **From an interrupted frame** the number simply continues from its current value: a strand caught at 0.4 goes on to 1, or back to 0.
+- **An end that returns to its own row, or leaves it** (added after ADR 0004). A stretch that stays beside its partner in both steps may end there in one and go on along its own row in the other: sealing a nick does this. Each end has a second number of the same kind, how much of its ramp to the row is there (0 → 1 or 1 → 0), and every point again moves on a straight line between its two settled places. It is read from the two geometries only, and exists only in frames. Base pairs are discrete: one is drawn only where the strand lies fully beside its partner, so those under a forming ramp go at the start and come back at the end. An end that a join claims is left to the cross-fade of ADR 0004 §6.
 - Because every point moves linearly with the actors' easing and duration, **an occupant riding the strand stays on it** through its ordinary CSS transition. No coupling code is needed.
 
 ## 5. Identity
