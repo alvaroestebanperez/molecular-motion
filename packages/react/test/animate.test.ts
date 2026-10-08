@@ -158,6 +158,58 @@ describe('a transition and its interruption (ADR 0001 §3.1)', () => {
     expect(second.frame()).toEqual(frame('invasion'));
   });
 
+  it('a strand end returning to its row is drawn on the way, can be interrupted, and ends as a clean render', () => {
+    const dhj = compileMechanism(parseMechanism(readFileSync('packages/core/test/fixtures/v7/double-holliday-junction.yaml', 'utf8')));
+    const [open, sealed] = ['second-synthesis', 'ligation'].map(step => buildSvgScene(dhj.at(step)));
+    const [from, to] = [geometryFrame(open!), geometryFrame(sealed!)];
+    const clean = (scene: typeof open) => { const page = document.createElement('div'); patchSvg(page, renderSvg(scene!, { idPrefix: 'p' })); return page.firstElementChild!; };
+    const page = document.createElement('div');
+    patchSvg(page, renderSvg(open!, { idPrefix: 'p' }));
+    const drawn = page.firstElementChild!;
+    const strand = () => drawn.querySelector('[data-key="pairing:dna.top~sister.bottom"] .mm-dna__tube')!;
+    const [node, start] = [strand(), strand().getAttribute('d')];
+    patchSvg(page, renderSvg(sealed!, { idPrefix: 'p' }), { keep: NUCLEIC_LAYERS });
+
+    const first = animateGeometry(drawn, from, to, 'p', linear, () => {});
+    tick(4);
+    const shown = first.frame();
+    const visible = nucleic(drawn);
+    // Part of the way: neither step's drawing, on the same element.
+    expect(strand()).toBe(node);
+    expect(strand().getAttribute('d')).not.toBe(start);
+    expect(visible).not.toBe(nucleic(clean(open)));
+    expect(visible).not.toBe(nucleic(clean(sealed)));
+    first.cancel();
+
+    // Interrupted back towards where it came from: it starts on the frame that was visible.
+    const back = animateGeometry(drawn, shown, from, 'p', linear, () => {});
+    vi.advanceTimersToNextFrame();
+    expect(back.frame()).toBe(shown);
+    expect(nucleic(drawn)).toBe(visible);
+    back.cancel();
+
+    // And forwards again to the end: what is left is a clean render of the step.
+    const done = vi.fn();
+    animateGeometry(drawn, shown, to, 'p', linear, done);
+    tick(12);
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(strand()).toBe(node);
+    patchSvg(page, renderSvg(sealed!, { idPrefix: 'p' }));
+    vi.advanceTimersByTime(1000);
+    expect(structure(drawn)).toBe(structure(clean(sealed)));
+  });
+
+  it('with nothing to animate with (reduced motion), the step is patched in as a clean render at once', () => {
+    const dhj = compileMechanism(parseMechanism(readFileSync('packages/core/test/fixtures/v7/double-holliday-junction.yaml', 'utf8')));
+    const [open, sealed] = ['second-synthesis', 'ligation'].map(step => renderSvg(buildSvgScene(dhj.at(step)), { idPrefix: 'p' }));
+    const page = document.createElement('div');
+    patchSvg(page, open!);
+    patchSvg(page, sealed!);
+    const clean = document.createElement('div');
+    patchSvg(clean, sealed!);
+    expect(nucleic(page.firstElementChild!)).toBe(nucleic(clean.firstElementChild!));
+  });
+
   it('a cancelled transition draws nothing more', () => {
     const done = vi.fn();
     const animation = animateGeometry(svg, frame('invasion'), frame('synthesis'), 'p', linear, done);

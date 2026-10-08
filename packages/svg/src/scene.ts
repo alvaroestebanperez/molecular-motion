@@ -59,7 +59,15 @@ export interface SceneNucleicAcid {
    * Stretches of this molecule's strands drawn beside another molecule's strand instead (RFC 0006 §10).
    * `continues` says, for the lower and the higher end, whether the strand goes on along this molecule.
    */
-  away?: Array<SceneStrandRange & { continues: [boolean, boolean]; joined?: [JoinedEnd | undefined, JoinedEnd | undefined] }>;
+  away?: Array<SceneStrandRange & {
+    continues: [boolean, boolean]; joined?: [JoinedEnd | undefined, JoinedEnd | undefined];
+    /**
+     * Only in a frame between two steps (ADR 0001): how far each end has come back to its own row, from 0,
+     * an end beside the partner, to 1, the whole ramp of an end that `continues`. Absent in a settled step,
+     * where `continues` says it all.
+     */
+    returns?: [number | undefined, number | undefined];
+  }>;
   /**
    * Boundaries of this molecule's strands that a join claims (RFC 0008), present only when there are any.
    * The row's backbone is not drawn through one: a link continues the strand instead (ADR 0004 §5.4).
@@ -465,6 +473,13 @@ export function pairingGeometry(
   // that end, towards a nucleotide it is no longer bonded to (ADR 0004 §5.3). A link takes it from there.
   const joined = ramps === 'continuation' ? stretch?.joined : undefined;
   const continues = { from: (stretch?.continues[0] ?? false) && !joined?.[0], to: (stretch?.continues[1] ?? false) && !joined?.[1] };
+  // How much of each end's ramp to its own row is there: all of it or none in a settled step, and a share
+  // in between while an end is on its way from one to the other (`returns`). The points are linear in it,
+  // so an end moves in a straight line between its two settled places, as a travelling stretch does.
+  const back = {
+    from: joined?.[0] ? 0 : stretch?.returns?.[0] ?? (continues.from ? 1 : 0),
+    to: joined?.[1] ? 0 : stretch?.returns?.[1] ?? (continues.to ? 1 : 0),
+  };
   // Beside the partner the strand keeps one level: it does not follow the partner's own easing at the
   // edges of its bubble, so a free end stays straight and clearly inside.
   const [hostFrom, hostTo] = [otherX(host.from), otherX(host.to)];
@@ -473,8 +488,8 @@ export function pairingGeometry(
   // `travel` is how far the stretch has come from its own molecule's line (0) to its place here (1).
   // A settled step is always 1; frames of a transition pass through the values in between (ADR 0001 §4.3).
   const weight = (p: number) => travel * Math.min(
-    continues.from ? smooth(ownReach(traveller.from, p) / ramp) : 1,
-    continues.to ? smooth(ownReach(p, traveller.to) / ramp) : 1,
+    1 - back.from * (1 - smooth(ownReach(traveller.from, p) / ramp)),
+    1 - back.to * (1 - smooth(ownReach(p, traveller.to) / ramp)),
   );
   const partnerAt = (p: number): Point => {
     const q = mirrored ? host.to - (p - traveller.from) : host.from + (p - traveller.from);
