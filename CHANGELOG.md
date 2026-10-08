@@ -4,7 +4,11 @@ The three packages, `@molecular-motion/core`, `@molecular-motion/svg` and `@mole
 
 Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a minor release; documents written for an earlier one keep loading, migrated automatically.
 
-## Unreleased
+## 0.3.0
+
+**`schemaVersion: 7`: two molecules can exchange strands, and the viewer draws it.** `reconnect-strands` makes one strand of each of two molecules continue as the other, so a double Holliday junction can be resolved as a crossover or a non-crossover, and each covalent bond between two molecules is drawn as a link.
+
+Nothing breaks: documents with `schemaVersion` 1 to 6 are migrated automatically and render as before, with one correction to the drawing of a ligated strand (below).
 
 - **`schemaVersion: 7`: covalent continuity between molecules** ([RFC 0008](docs/rfcs/0008-covalent-continuity.md)), in `@molecular-motion/core` only. Documents with `schemaVersion` 1 to 6 are migrated automatically, and produce the snapshots they produced before.
   - New primitive `reconnect-strands`: at two point sites that an alignment puts opposite each other, one strand of each of two molecules continues as the other. It clears a break at either site, and applied again at the same sites it undoes itself. With it a double Holliday junction can be resolved as a crossover or as a non-crossover.

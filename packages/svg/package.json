@@ -1,6 +1,6 @@
 {
   "name": "@molecular-motion/svg",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Accessible SVG scene builder for Molecular Motion.",
   "keywords": [
     "biology",
@@ -35,7 +35,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@molecular-motion/core": "^0.2.0"
+    "@molecular-motion/core": "^0.3.0"
   },
   "license": "MIT",
   "engines": {
