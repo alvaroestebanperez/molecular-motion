@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { compileMechanism, type ActionNode, type MechanismDefinition } from '@molecular-motion/core';
 import { parseMechanism } from '@molecular-motion/core/yaml';
-import { buildSvgScene, describeScene, geometryFrame, interpolateGeometry, nucleicLayerMarkup, pairingGeometry, renderSvg, type SvgScene } from '../src';
+import { buildSvgScene, describeScene, exportSvg, geometryFrame, interpolateGeometry, nucleicLayerMarkup, pairingGeometry, renderSvg, type SvgScene } from '../src';
 import { coordinateMapOf } from '../src/coordinate-map';
 import { JOIN, joinGeometry } from '../src/scene';
 
@@ -293,6 +293,34 @@ describe('transitions (ADR 0004 §6)', () => {
   it('moves nothing: every molecule is where its own material is throughout', () => {
     const [before, after] = steps('F4b').slice(-2).map(geometryFrame);
     for (const t of [0, .3, .6, 1]) expect(interpolateGeometry(before!, after!, t).nucleicAcids.map(acid => acid.y)).toEqual(after!.nucleicAcids.map(acid => acid.y));
+  });
+});
+
+describe('the public double Holliday junction example', () => {
+  const example = readFileSync(new URL('../../../examples/double-holliday-junction.yaml', import.meta.url), 'utf8');
+
+  it('reconnects strands, and draws a link for each join from the step that makes them', () => {
+    expect(example).toContain('type: reconnect-strands');
+    const mechanism = compileMechanism(parseMechanism(example));
+    const drawn = Array.from({ length: mechanism.length }, (_, index) => links(renderSvg(buildSvgScene(mechanism.at(index)))).length);
+    expect(drawn.slice(0, -1).every(count => count === 0)).toBe(true);
+    expect(drawn.at(-1)).toBe(4);
+    // Different strands at the two junctions: a crossover.
+    const strands = (buildSvgScene(mechanism.at(mechanism.length - 1)).joins ?? []).map(join => `${join.from.strand}@${join.from.at}`);
+    expect([...new Set(strands)].sort()).toEqual(['bottom@58', 'top@22']);
+  });
+
+  it('is drawn in both themes and at a phone size, with every link inside the canvas', () => {
+    const mechanism = compileMechanism(parseMechanism(example));
+    const snapshot = mechanism.at(mechanism.length - 1);
+    for (const size of [{}, { width: 520, height: 600 }]) {
+      const scene = buildSvgScene(snapshot, size);
+      for (const join of scene.joins!) {
+        const { from, to } = joinGeometry(scene, join)!;
+        for (const point of [from, to]) { expect(point.x).toBeGreaterThan(0); expect(point.x).toBeLessThan(scene.width); expect(point.y).toBeGreaterThan(0); expect(point.y).toBeLessThan(scene.height); }
+      }
+      for (const theme of ['light', 'dark'] as const) expect(links(exportSvg(scene, { theme }))).toHaveLength(4);
+    }
   });
 });
 
