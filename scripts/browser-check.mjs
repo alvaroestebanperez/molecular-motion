@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 const PORT = 5197;
 const DEBUG_PORT = 9341;
-const EXAMPLES = ['homologous-recombination', 'parp1-ssb-repair', 'egfr-dimerization'];
+const EXAMPLES = ['homologous-recombination', 'parp1-ssb-repair', 'egfr-dimerization', 'double-holliday-junction'];
 const CHROME = process.env.CHROME_PATH ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(existsSync);
 if (!CHROME) { console.error('Chrome not found; set CHROME_PATH'); process.exit(2); }
 
@@ -81,12 +81,17 @@ try {
         for (const [key, end] of after) {
           const start = before.get(key);
           if (!start || start.d === end.d) continue;
-          out.push({ step, key, handoff: pairedBefore !== pairingKeys(), kept: start.path === end.path && start.path.isConnected, start: start.length, end: end.length,
+          // Base pairs are discrete marks: each is one subpath. A change that only adds or removes whole ones has no shape in between.
+          const marks = d => new Set((d ?? '').split(/(?=M)/).filter(Boolean));
+          const [was, will] = [marks(start.d), marks(end.d)];
+          const [fewer, more] = was.size <= will.size ? [was, will] : [will, was];
+          const discrete = key.includes('mm-dna__rungs') && [...fewer].every(mark => more.has(mark));
+          out.push({ step, key, discrete, handoff: pairedBefore !== pairingKeys(), kept: start.path === end.path && start.path.isConnected, start: start.length, end: end.length,
             mid: samples.map(sample => sample.get(key)?.length ?? null), moving: samples.map(sample => { const d = sample.get(key)?.d; return d !== undefined && d !== start.d && d !== end.d; }) });
         }
       }
       return out;`);
-    for (const { step, key, handoff, kept, start, end, mid, moving } of strands) {
+    for (const { step, key, discrete, handoff, kept, start, end, mid, moving } of strands) {
       strandsChecked += 1;
       const paired = key.startsWith('pairing:');
       // What must show an intermediate shape: a strand paired across molecules, a nascent tract, and any
@@ -94,7 +99,9 @@ try {
       // and exempt: the fixed gap of a lesion at a site, and a backbone handing a stretch over to the
       // pairing layer or taking it back (the stretch itself is checked there).
       const backbone = key.includes('mm-dna__tube') || key.endsWith(' back');
-      const mustMove = paired || key.includes('mm-dna__nascent') || (backbone && Math.abs(end - start) > 60 && !handoff);
+      // A set of base pairs that only gains or loses whole marks is discrete too: the strands they join
+      // are checked on their own paths, and those must still move.
+      const mustMove = !discrete && (paired || key.includes('mm-dna__nascent') || (backbone && Math.abs(end - start) > 60 && !handoff));
       const steady = (length, index) => length !== null && (end > start ? length >= (index ? mid[index - 1] : start) - 3 : length <= (index ? mid[index - 1] : start) + 3);
       const problems = [
         !kept && 'its <path> was replaced',

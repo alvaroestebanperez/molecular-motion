@@ -230,6 +230,33 @@ function tweenPairings(before: readonly FramePairing[], after: readonly FramePai
   });
 }
 
+type Away = NonNullable<SceneNucleicAcid['away']>[number];
+/** How far an end of a stretch drawn beside a partner has come back to its own row: all the way where it continues there, not at all where it ends. */
+const returned = (range: Away | undefined, end: 0 | 1) => range && (range.returns?.[end] ?? (range.continues[end] ? 1 : 0));
+
+/**
+ * An end of a stretch drawn beside a partner that goes on along its own row in one frame and ends beside
+ * the partner in the other moves between the two places (ADR 0001 §4.3), from where the origin frame has
+ * it. Read from the two geometries alone: what made the strand continuous, or cut it, is not asked. An
+ * end that a join claims in any of the frames is left to the cross-fade of ADR 0004 §6.
+ */
+function returnEnds(acids: SceneNucleicAcid[], before: readonly SceneNucleicAcid[], after: readonly SceneNucleicAcid[], t: number): void {
+  for (const acid of acids) {
+    const [was, will] = [before.find(item => item.id === acid.id)?.away ?? [], after.find(item => item.id === acid.id)?.away ?? []];
+    for (const range of acid.away ?? []) {
+      const same = (other: Away) => other.strand === range.strand && Math.min(other.to, range.to) - Math.max(other.from, range.from) > NEAR;
+      const [origin, target] = [was.find(same), will.find(same)];
+      if (!origin || !target) continue;
+      const share = ([0, 1] as const).map(end => {
+        if (range.joined?.[end] || origin.joined?.[end] || target.joined?.[end]) return undefined;
+        const value = lerp(returned(origin, end)!, returned(target, end)!, t);
+        return value === (range.continues[end] ? 1 : 0) ? undefined : value;
+      }) as [number | undefined, number | undefined];
+      if (share[0] !== undefined || share[1] !== undefined) range.returns = share;
+    }
+  }
+}
+
 /**
  * The geometry at `t` between two frames (ADR 0001 §3.1). `t = 0` is `from` and `t = 1` is `to`, value
  * for value, so a transition can start from any frame, including one caught in mid-transition, without
@@ -255,5 +282,6 @@ export function interpolateGeometry(from: GeometryFrame, to: GeometryFrame, t: n
   });
   if (joins.length) markJoined(nucleicAcids, joins, to.width);
   markAway(nucleicAcids, pairings.flatMap(pairing => pairing.segments.map(segment => segment.traveller)), to.width);
+  returnEnds(nucleicAcids, from.nucleicAcids, to.nucleicAcids, t);
   return { width: to.width, nucleicAcids, pairings, ...(joins.length && { joins }) };
 }
