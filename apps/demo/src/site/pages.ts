@@ -100,7 +100,7 @@ export const EXAMPLE_PAGES: ExamplePage[] = [
     related: [
       { href: '/examples/protein-dna-interaction/', label: 'Protein–DNA interactions in homologous recombination', note: 'Repair of a double-strand break: RPA and RAD51 on single-stranded DNA.' },
       { href: '/app/#/mechanisms/double-holliday-junction', label: 'Double Holliday junction', note: 'Second-end capture, and resolution as a crossover.' },
-      { href: '/app/#/mechanisms/homologous-recombination', label: 'Homologous recombination in the viewer', note: 'Every step, with thumbnails and SVG or PNG export.' },
+      { href: '/examples/gene-expression/', label: 'Gene expression', note: 'DNA as a template: transcription and splicing.' },
     ],
   },
   {
@@ -125,16 +125,88 @@ export const EXAMPLE_PAGES: ExamplePage[] = [
     related: [
       { href: '/examples/dna-repair/', label: 'DNA repair: base excision repair and PARP1', note: 'A single-strand break, detected and signalled by PARP1.' },
       { href: '/app/#/mechanisms/double-holliday-junction', label: 'Double Holliday junction', note: 'The other outcome of strand invasion: a crossover.' },
-      { href: '/app/#/mechanisms/cgas-sting', label: 'cGAS–STING sensing of cytosolic DNA', note: 'A protein that assembles on double-stranded DNA in the cytosol.' },
+      { href: '/examples/cell-signaling/', label: 'Cell signalling: cGAS–STING', note: 'A protein that assembles on double-stranded DNA in the cytosol.' },
+    ],
+  },
+  {
+    slug: 'gene-expression',
+    mechanism: 'gene-expression',
+    poster: 'elongation',
+    title: 'Transcription and Splicing Visualization | Molecular Motion',
+    description: 'Animated SVG visualization of gene expression: transcription by RNA polymerase II, splicing of an intron and the mRNA in the cytoplasm, written in YAML.',
+    heading: 'Visualizing Gene Expression: Transcription and Splicing',
+    name: 'Gene expression',
+    lede: 'A gene is transcribed into RNA, the intron is spliced out, and the mRNA reaches a ribosome in the cytoplasm. The transcript grows nucleotide by nucleotide on its template, and loses its intron without being redrawn as a new molecule.',
+    biology: [
+      '<strong>Transcription</strong> copies one strand of a gene into RNA. RNA polymerase II binds at the promoter, the two strands of the DNA separate, and the polymerase adds nucleotides to the 3′ end of the transcript, each one paired with the template strand. When it has finished, the pre-mRNA leaves the template and the DNA closes again.',
+      'In eukaryotes the transcript is then <strong>spliced</strong>. The spliceosome assembles on the pre-mRNA, cuts it at the 5′ splice site, removes the intron and joins the two exons. The mRNA is exported to the cytoplasm, where ribosomes translate it. This example stops when a ribosome sits on the mRNA: capping, polyadenylation and the peptide are not modelled.',
+    ],
+    representation: [
+      'The gene is a <code>dna</code> actor and the transcript an <code>rna</code> actor, each with its own coordinates. An <strong>alignment</strong> declares which nucleotides of the transcript correspond to which of the gene, so <code>pair</code> can only pair them where they match.',
+      'The transcript does not appear whole. Its <code>initial</code> state declares that only the first four nucleotides exist, and <code>extend</code> grows it from its 3′ end by 32 more, along the template. <code>unwind</code> and <code>anneal</code> open and close the gene, and RNA polymerase II <code>occupy</code>s the promoter with a footprint of eight base pairs.',
+      'Splicing is <code>excise-interval</code>: the intron is removed and its two flanks become covalent neighbours on the same molecule. Coordinates are never renumbered, so the splice sites and the alignment keep their meaning afterwards. <code>translocate</code> moves the mRNA from the nucleus to the cytoplasm, which the figure draws as two bands.',
+    ],
+    excerpt: { actors: ['pre-mrna', 'pol2'], steps: ['elongation', 'splicing'] },
+    related: [
+      { href: '/examples/protein-dna-interaction/', label: 'Protein–DNA interactions', note: 'Proteins placed on DNA by coordinate, with a footprint.' },
+      { href: '/examples/cell-signaling/', label: 'Cell signalling: cGAS–STING', note: 'A signal that ends with a transcription factor entering the nucleus.' },
+      { href: '/app/#/mechanisms/p53-mdm2-feedback', label: 'p53–MDM2 negative feedback', note: 'A transcription factor that induces its own inhibitor.' },
+    ],
+  },
+  {
+    slug: 'membrane-receptor',
+    mechanism: 'egfr-dimerization',
+    poster: 'autophosphorylation',
+    title: 'Membrane Receptor Signalling Visualization | Molecular Motion',
+    description: 'Animated SVG visualization of a membrane receptor: EGFR binds EGF, dimerizes in the lipid bilayer, is phosphorylated in trans and recruits GRB2.',
+    heading: 'Visualizing Membrane Receptor Signalling',
+    name: 'Membrane receptor signalling',
+    lede: 'A receptor in a lipid bilayer binds its ligand outside the cell, dimerizes, and is phosphorylated inside it. The example is the activation of the EGF receptor, with every receptor and ligand drawn as an individual copy.',
+    biology: [
+      'The <strong>EGF receptor</strong> (EGFR) is a receptor tyrosine kinase that spans the plasma membrane. Each monomer binds one molecule of EGF on its extracellular domain, which exposes a dimerization arm, and two liganded receptors form a dimer.',
+      'Dimerization activates the kinase domains inside the cell, and the receptors phosphorylate tyrosines on each other’s C-terminal tails. A phosphorylated tyrosine, here Tyr1068, is a docking site: the adaptor <strong>GRB2</strong> binds it through its SH2 domain and links the receptor to RAS–MAPK signalling, which this example does not show.',
+    ],
+    representation: [
+      'The document declares three compartments: <code>extracellular</code>, <code>membrane</code> and <code>cytoplasm</code>. A compartment of kind membrane is drawn as a lipid bilayer across the figure, and a protein whose compartment is that membrane is drawn spanning it, with a domain on each side. Nothing in the file says how to draw a receptor.',
+      'EGF stays outside and GRB2 inside because of the compartment each one is declared in: a partner docks on the side of the bilayer its own compartment lies on. <code>copies: 2</code> gives two receptors and two ligands, addressed as <code>egfr#1</code> and <code>egfr#2</code>, so the figure shows who binds whom.',
+      'Each contact uses a named <strong>interface</strong>: the ligand pocket, the dimerization interface, the SH2 domain of GRB2. <code>phosphorylate</code> puts a phosphate on the site <code>y1068</code> of one receptor, <code>by</code> the other, and GRB2 then binds that site, so the tag and the adaptor are drawn at the same place on the cytoplasmic side.',
+    ],
+    excerpt: { actors: ['egfr'], steps: ['dimer', 'autophosphorylation'] },
+    related: [
+      { href: '/examples/cell-signaling/', label: 'Cell signalling: cGAS–STING', note: 'A membrane protein that signals from the ER and the Golgi.' },
+      { href: '/examples/gene-expression/', label: 'Gene expression', note: 'Transcription and splicing, across the nucleus and the cytoplasm.' },
+      { href: '/app/#/visual-language', label: 'Visual language', note: 'The catalog of membranes, receptors and modifications.' },
+    ],
+  },
+  {
+    slug: 'cell-signaling',
+    mechanism: 'cgas-sting',
+    poster: 'tbk1',
+    title: 'Cell Signalling Visualization: cGAS–STING | Molecular Motion',
+    description: 'Animated SVG visualization of a cell signalling pathway: cGAS senses cytosolic DNA, cGAMP activates STING, and IRF3 is phosphorylated and enters the nucleus.',
+    heading: 'Visualizing Cell Signalling: the cGAS–STING Pathway',
+    name: 'Cell signalling',
+    lede: 'A signal followed from its trigger to the nucleus: DNA in the cytosol, a second messenger, a membrane protein that changes compartment, a kinase and a transcription factor. The example is the cGAS–STING pathway of innate immunity.',
+    biology: [
+      'DNA does not belong in the cytosol, and its presence there signals infection or damage. The enzyme <strong>cGAS</strong> binds double-stranded DNA, assembles on it and synthesizes the second messenger 2′3′-cGAMP.',
+      'cGAMP binds dimers of <strong>STING</strong> in the membrane of the endoplasmic reticulum. STING oligomerizes and moves to the Golgi, where its C-terminal tail recruits the kinase TBK1. TBK1 phosphorylates the transcription factor IRF3, which dimerizes and enters the nucleus, where it induces type I interferon genes. That last step is not shown.',
+    ],
+    representation: [
+      'The pathway crosses four compartments, declared in the document: the cytoplasm, the ER membrane, the Golgi membrane and the nucleus. Every actor is drawn in the band of its compartment, and <code>translocate</code> moves it to another. With <code>includeBound</code>, the IRF3 dimer enters the nucleus as one.',
+      'cGAS has a <strong>footprint</strong> of 18 base pairs of duplex DNA, so the two copies <code>occupy</code> adjacent stretches of the same molecule. cGAMP does not exist at the start: <code>synthesize</code> creates each copy, by the cGAS that made it. It is a <code>molecule</code> actor with its own glyph.',
+      'A figure has one bilayer. When STING is moved from the ER membrane to the Golgi membrane, the bilayer is relabelled: it is a change of context, not a journey, and vesicular transport is not drawn. The document also takes the DNA and cGAS out of the figure half way, to make room for what follows.',
+    ],
+    excerpt: { actors: ['sting'], steps: ['cgamp', 'trafficking'] },
+    related: [
+      { href: '/examples/membrane-receptor/', label: 'Membrane receptor signalling: EGFR', note: 'Ligand binding, dimerization and trans-phosphorylation at the plasma membrane.' },
+      { href: '/examples/protein-dna-interaction/', label: 'Protein–DNA interactions', note: 'Proteins that coat single-stranded DNA during repair.' },
+      { href: '/app/#/mechanisms/p53-mdm2-feedback', label: 'p53–MDM2 negative feedback', note: 'A stress response and its own brake.' },
     ],
   },
 ];
 
 /** The mechanisms that have no page of their own yet. They are listed, and open in the viewer. */
 export const VIEWER_ONLY: { mechanism: string; name: string; note: string }[] = [
-  { mechanism: 'gene-expression', name: 'Gene expression', note: 'Transcription by RNA polymerase II, splicing of the intron, and the mRNA at a ribosome in the cytoplasm.' },
-  { mechanism: 'egfr-dimerization', name: 'Membrane receptor signalling', note: 'EGFR binds its ligand, dimerizes in the membrane and is phosphorylated in trans.' },
-  { mechanism: 'cgas-sting', name: 'Cell signalling across compartments', note: 'cGAS–STING: from cytosolic DNA to IRF3 entering the nucleus.' },
   { mechanism: 'p53-mdm2-feedback', name: 'A negative feedback loop', note: 'p53 turnover, the stress response and induction of its inhibitor MDM2.' },
   { mechanism: 'double-holliday-junction', name: 'Double Holliday junction', note: 'Second-end capture and resolution as a crossover by reconnecting strands.' },
 ];
@@ -151,9 +223,9 @@ export const CAPABILITIES: { title: string; text: string }[] = [
 export const USE_CASES: { title: string; text: string; href?: string }[] = [
   { title: 'DNA repair visualization', text: 'Base excision repair, single-strand break repair and homologous recombination, lesion by lesion.', href: '/examples/dna-repair/' },
   { title: 'Protein–DNA interactions', text: 'Proteins that bind a site or coat a stretch of DNA, placed by coordinate.', href: '/examples/protein-dna-interaction/' },
-  { title: 'Transcription and gene expression', text: 'A transcript that grows on its template, loses its intron and meets a ribosome in the cytoplasm.', href: '/app/#/mechanisms/gene-expression' },
-  { title: 'Membrane receptor signalling', text: 'Ligand binding, dimerization and trans-phosphorylation of a receptor in the membrane.', href: '/app/#/mechanisms/egfr-dimerization' },
-  { title: 'Cell signalling', text: 'A signal followed across the cytosol, the ER, the Golgi and the nucleus.', href: '/app/#/mechanisms/cgas-sting' },
+  { title: 'Transcription and gene expression', text: 'A transcript that grows on its template, loses its intron and meets a ribosome in the cytoplasm.', href: '/examples/gene-expression/' },
+  { title: 'Membrane receptor signalling', text: 'Ligand binding, dimerization and trans-phosphorylation of a receptor in the membrane.', href: '/examples/membrane-receptor/' },
+  { title: 'Cell signalling', text: 'A signal followed across the cytosol, the ER, the Golgi and the nucleus.', href: '/examples/cell-signaling/' },
   { title: 'Teaching molecular biology', text: 'Lectures, courses and textbooks online where a student steps through a mechanism at their own pace.' },
   { title: 'Scientific figures in SVG', text: 'Consistent, editable figures for a review, a thesis or a poster, kept in version control with the text.' },
 ];

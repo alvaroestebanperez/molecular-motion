@@ -53,9 +53,9 @@ The repository includes seven mechanisms to exercise different parts of the lang
 
 - **DNA repair visualization**: base excision repair and PARP1 at a single-strand break ([explained](https://molecular-motion.alvaroesteban.dev/examples/dna-repair/), [YAML](examples/parp1-ssb-repair.yaml)), homologous recombination, and a double Holliday junction resolved as a crossover.
 - **Protein–DNA interactions**: proteins placed on DNA by coordinate, with a footprint, such as RPA and RAD51 coating single-stranded DNA ([explained](https://molecular-motion.alvaroesteban.dev/examples/protein-dna-interaction/), [YAML](examples/homologous-recombination.yaml)).
-- **Transcription and gene expression**: a transcript that grows on its template and is spliced ([YAML](examples/gene-expression.yaml)).
-- **Membrane receptor signalling**: ligand binding, dimerization and trans-phosphorylation of EGFR in a lipid bilayer ([YAML](examples/egfr-dimerization.yaml)).
-- **Cell signalling across compartments**: cGAS–STING, from cytosolic DNA to the nucleus ([YAML](examples/cgas-sting.yaml)), and the p53–MDM2 feedback loop ([YAML](examples/p53-mdm2-feedback.yaml)).
+- **Transcription and gene expression**: a transcript that grows on its template and is spliced ([explained](https://molecular-motion.alvaroesteban.dev/examples/gene-expression/), [YAML](examples/gene-expression.yaml)).
+- **Membrane receptor signalling**: ligand binding, dimerization and trans-phosphorylation of EGFR in a lipid bilayer ([explained](https://molecular-motion.alvaroesteban.dev/examples/membrane-receptor/), [YAML](examples/egfr-dimerization.yaml)).
+- **Cell signalling across compartments**: cGAS–STING, from cytosolic DNA to the nucleus ([explained](https://molecular-motion.alvaroesteban.dev/examples/cell-signaling/), [YAML](examples/cgas-sting.yaml)), and the p53–MDM2 feedback loop ([YAML](examples/p53-mdm2-feedback.yaml)).
 - **Molecular biology teaching**: interactive figures a student steps through at their own pace, with keyboard navigation and reduced-motion support.
 - **Scientific SVG figures**: any step exported as a standalone SVG or PNG for a review, a thesis, a slide or a poster.
 
