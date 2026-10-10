@@ -1,7 +1,25 @@
 {
   "name": "@molecular-motion/core",
   "version": "0.3.0",
-  "description": "Framework-agnostic compiler and state engine for declarative molecular mechanisms.",
+  "description": "Compiler and state engine of Molecular Motion, a TypeScript library for interactive and animated molecular biology visualizations in SVG. Mechanisms of proteins, DNA and RNA are written in YAML or JSON.",
+  "keywords": [
+    "biology",
+    "visualization",
+    "molecular-biology",
+    "molecular-visualization",
+    "biological-visualization",
+    "scientific-visualization",
+    "interactive-visualization",
+    "cell-biology",
+    "bioinformatics",
+    "svg",
+    "dna",
+    "rna",
+    "protein",
+    "typescript",
+    "yaml",
+    "declarative"
+  ],
   "homepage": "https://molecular-motion.alvaroesteban.dev/",
   "repository": {
     "type": "git",
@@ -35,13 +53,6 @@
   "dependencies": {
     "yaml": "^2.8.0"
   },
-  "keywords": [
-    "biology",
-    "molecular-biology",
-    "visualization",
-    "svg",
-    "yaml"
-  ],
   "license": "MIT",
   "engines": {
     "node": ">=20"

@@ -4,6 +4,13 @@ The three packages, `@molecular-motion/core`, `@molecular-motion/svg` and `@mole
 
 Before `1.0` the schema is not stable. A new `schemaVersion` may arrive in a minor release; documents written for an earlier one keep loading, migrated automatically.
 
+## Unreleased
+
+No change to the code of the packages.
+
+- The `description` and `keywords` of the three packages, and the first paragraph of their READMEs, say what the library is: a TypeScript library for interactive and animated molecular biology visualizations with SVG.
+- The website has pages that can be read without JavaScript: a landing at `/`, and examples at `/examples/`, with `sitemap.xml`, `robots.txt`, canonical URLs and structured data. The viewer and the playground moved to `/app/`; links to `/#/…` are sent on to `/app/#/…`.
+
 ## 0.3.0
 
 **`schemaVersion: 7`: two molecules can exchange strands, and the viewer draws it.** `reconnect-strands` makes one strand of each of two molecules continue as the other, so a double Holliday junction can be resolved as a crossover or a non-crossover, and each covalent bond between two molecules is drawn as a link.

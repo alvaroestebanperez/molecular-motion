@@ -151,11 +151,12 @@ function MechanismSearch() {
 
 function Header({ route, theme, onTheme }: { route: Route; theme: Theme; onTheme: (theme: Theme) => void }) {
   return <header className="site-header">
-    <a className="brand" href="#/mechanisms"><Logo /><span>Molecular Motion</span></a>
+    <a className="brand" href="/"><Logo /><span>Molecular Motion</span></a>
     <nav aria-label="Main">
       <a href="#/mechanisms" aria-current={route.page === 'mechanism' ? 'page' : undefined}>Mechanisms</a>
       <a href="#/visual-language" aria-current={route.page === 'visual-language' ? 'page' : undefined}>Visual language</a>
       <a href="#/playground" aria-current={route.page === 'playground' ? 'page' : undefined}>Playground</a>
+      <a href="/examples/">Examples</a>
       <a href={`${REPOSITORY}#readme`} target="_blank" rel="noreferrer">Documentation</a>
     </nav>
     <div className="site-header__tools">
