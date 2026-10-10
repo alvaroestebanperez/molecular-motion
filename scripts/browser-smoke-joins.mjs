@@ -92,7 +92,7 @@ try {
   for (const [name, [width, height, mobile]] of Object.entries({ '1440x900': [1440, 900, false], '390x844': [390, 844, true] })) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
     await motion(false);
-    await send('Page.navigate', { url: `http://localhost:${PORT}/#/playground` });
+    await send('Page.navigate', { url: `http://localhost:${PORT}/app/#/playground` });
     await sleep(500); await send('Page.reload'); await sleep(1500);
     const loaded = await evaluate(`
       const editor = document.querySelector('.playground textarea');

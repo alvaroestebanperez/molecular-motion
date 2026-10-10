@@ -1,6 +1,6 @@
 # @molecular-motion/svg
 
-Scene builder and accessible SVG renderer for [Molecular Motion](https://github.com/alvaroestebanperez/molecular-motion). It lays out a compiled step and serialises it to SVG. It runs without a browser.
+SVG renderer of [Molecular Motion](https://molecular-motion.alvaroesteban.dev/), an open-source TypeScript library for creating interactive and animated molecular biology visualizations. It lays out a compiled step of a mechanism (proteins, DNA, RNA, membranes and their interactions) and serialises it to accessible SVG. It runs without a browser.
 
 ```bash
 npm install @molecular-motion/core @molecular-motion/svg

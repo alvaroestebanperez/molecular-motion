@@ -1,6 +1,6 @@
 # @molecular-motion/core
 
-Framework-agnostic compiler and state engine for [Molecular Motion](https://github.com/alvaroestebanperez/molecular-motion): it parses and validates a mechanism written in YAML or JSON and folds its steps into immutable, seekable snapshots. No DOM, no rendering.
+Compiler and state engine of [Molecular Motion](https://molecular-motion.alvaroesteban.dev/), an open-source TypeScript library for creating interactive and animated molecular biology visualizations with SVG. It parses and validates a mechanism written in YAML or JSON and folds its steps into immutable, seekable snapshots. No DOM, no rendering.
 
 ```bash
 npm install @molecular-motion/core

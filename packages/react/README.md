@@ -1,6 +1,6 @@
 # @molecular-motion/react
 
-React player for [Molecular Motion](https://github.com/alvaroestebanperez/molecular-motion): an animated, keyboard-accessible figure of a molecular mechanism written in YAML or JSON.
+React player of [Molecular Motion](https://molecular-motion.alvaroesteban.dev/), an open-source TypeScript library for creating interactive and animated molecular biology visualizations with SVG: an animated, keyboard-accessible figure of a molecular mechanism, such as DNA repair or receptor signalling, written in YAML or JSON.
 
 ```bash
 npm install @molecular-motion/core @molecular-motion/react

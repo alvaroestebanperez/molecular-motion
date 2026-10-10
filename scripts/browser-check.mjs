@@ -40,7 +40,7 @@ try {
   let strandsChecked = 0;
   let polishChecked = 0;
   for (const example of EXAMPLES) {
-    await send('Page.navigate', { url: `http://localhost:${PORT}/#/mechanisms/${example}` });
+    await send('Page.navigate', { url: `http://localhost:${PORT}/app/#/mechanisms/${example}` });
     await sleep(600); await send('Page.reload'); await sleep(1500);
     // Walk every step. Whenever an upcoming (ghost) actor becomes present, sample it in mid-transition.
     const results = await evaluate(`
@@ -132,7 +132,7 @@ try {
   const open = async (example, [width, height, mobile], reduced = false) => {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: mobile ? 2 : 1, mobile });
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: reduced ? 'reduce' : 'no-preference' }] });
-    await send('Page.navigate', { url: `http://localhost:${PORT}/#/mechanisms/${example}` });
+    await send('Page.navigate', { url: `http://localhost:${PORT}/app/#/mechanisms/${example}` });
     await sleep(500); await send('Page.reload'); await sleep(1500);
   };
   const VIEWPORTS = { '1440×900': [1440, 900, false], '390×844': [390, 844, true] };

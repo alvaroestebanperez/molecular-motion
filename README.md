@@ -2,25 +2,33 @@
 
 # Molecular Motion
 
-**A declarative engine for building interactive molecular biology mechanisms on the web.**
+**An open-source TypeScript library for creating interactive and animated molecular biology visualizations with SVG.**
 
 [![CI](https://github.com/alvaroestebanperez/molecular-motion/actions/workflows/ci.yml/badge.svg)](https://github.com/alvaroestebanperez/molecular-motion/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22d3ee.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Status: experimental](https://img.shields.io/badge/status-experimental-f59e0b.svg)](#roadmap)
 
-[Demo](https://molecular-motion.alvaroesteban.dev/) · [Visual language](https://molecular-motion.alvaroesteban.dev/#/visual-language) · [YAML examples](examples/) · [Contributing](CONTRIBUTING.md)
+[Website](https://molecular-motion.alvaroesteban.dev/) · [Examples](https://molecular-motion.alvaroesteban.dev/examples/) · [Viewer](https://molecular-motion.alvaroesteban.dev/app/) · [Playground](https://molecular-motion.alvaroesteban.dev/app/#/playground) · [Documentation](docs/language.md) · [npm](https://www.npmjs.com/package/@molecular-motion/core)
 
 </div>
 
-Molecular Motion turns a YAML or JSON description of **actors, molecular sites, steps, and biological actions** into an animated, navigable SVG. Researchers and educators describe the mechanism; the engine handles layout, state, rendering, controls, and accessibility.
+Molecular Motion turns a short YAML or JSON description of a molecular mechanism (the molecules that take part, their sites, and what happens step by step) into an animated, navigable SVG figure for the web. It draws **proteins, DNA, RNA, small molecules, complexes, membranes and cell compartments** from reusable SVG primitives, and represents the **molecular interactions** between them: binding, recruitment, activation, inhibition, phosphorylation and other modifications, cleavage, ligation, synthesis, degradation and translocation.
+
+It is for scientists, educators and developers who need to explain a biological mechanism, such as DNA repair, transcription and splicing, receptor signalling or a protein–DNA interaction, on a website, in a course or in a paper, without drawing every frame by hand. The mechanism is data: it is validated, versioned and reviewed like code, and the engine handles layout, state, animation, playback controls, accessibility, and export to standalone SVG or PNG. It runs in any JavaScript or TypeScript project, with a React player for interactive figures and a renderer that also works in Node.
+
+Molecular Motion shows what molecules *do* in a mechanism. It is not a 3D structure viewer and not a simulation.
+
+<p align="center">
+  <a href="https://molecular-motion.alvaroesteban.dev/examples/dna-repair/"><img src="docs/assets/parp1-ssb-repair.svg" alt="PARP1 bound to a single-strand break in a DNA double helix, with a branched poly(ADP-ribose) chain growing on it: one step of the DNA repair example, drawn by Molecular Motion." width="820"></a>
+</p>
 
 > [!IMPORTANT]
 > Molecular Motion is an early MVP. Its schema will evolve before the first stable release and its visualizations are explanatory models—not clinical decision tools.
 
 ## Demo
 
-The [demo](https://molecular-motion.alvaroesteban.dev/) opens on the mechanism viewer: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [visual language](https://molecular-motion.alvaroesteban.dev/#/visual-language) documents the reusable programmatic primitives for proteins, molecules, nucleic acids, lesions, modifications, membranes, compartments and molecular events. The [playground](https://molecular-motion.alvaroesteban.dev/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
+The [viewer](https://molecular-motion.alvaroesteban.dev/app/) opens on a mechanism: a step timeline, the animated figure with playback controls, the explanation, key events and references for each step, and thumbnails of the whole story. The [visual language](https://molecular-motion.alvaroesteban.dev/app/#/visual-language) documents the reusable programmatic primitives for proteins, molecules, nucleic acids, lesions, modifications, membranes, compartments and molecular events. The [playground](https://molecular-motion.alvaroesteban.dev/app/#/playground) places an editable YAML document next to the generated mechanism; change an actor, target, or action and the preview updates immediately.
 
 Run it locally:
 
@@ -40,6 +48,16 @@ The repository includes seven mechanisms to exercise different parts of the lang
 - [cGAS–STING sensing of cytosolic DNA](examples/cgas-sting.yaml)
 - [Gene expression: a transcript that begins as its first nucleotides, and splicing by excision](examples/gene-expression.yaml)
 - [Double Holliday junction: second-end capture, and resolution as a crossover by reconnecting strands between two molecules](examples/double-holliday-junction.yaml)
+
+## Use cases
+
+- **DNA repair visualization**: base excision repair and PARP1 at a single-strand break ([explained](https://molecular-motion.alvaroesteban.dev/examples/dna-repair/), [YAML](examples/parp1-ssb-repair.yaml)), homologous recombination, and a double Holliday junction resolved as a crossover.
+- **Protein–DNA interactions**: proteins placed on DNA by coordinate, with a footprint, such as RPA and RAD51 coating single-stranded DNA ([explained](https://molecular-motion.alvaroesteban.dev/examples/protein-dna-interaction/), [YAML](examples/homologous-recombination.yaml)).
+- **Transcription and gene expression**: a transcript that grows on its template and is spliced ([YAML](examples/gene-expression.yaml)).
+- **Membrane receptor signalling**: ligand binding, dimerization and trans-phosphorylation of EGFR in a lipid bilayer ([YAML](examples/egfr-dimerization.yaml)).
+- **Cell signalling across compartments**: cGAS–STING, from cytosolic DNA to the nucleus ([YAML](examples/cgas-sting.yaml)), and the p53–MDM2 feedback loop ([YAML](examples/p53-mdm2-feedback.yaml)).
+- **Molecular biology teaching**: interactive figures a student steps through at their own pace, with keyboard navigation and reduced-motion support.
+- **Scientific SVG figures**: any step exported as a standalone SVG or PNG for a review, a thesis, a slide or a poster.
 
 ## Install
 
@@ -265,6 +283,15 @@ const figure = exportSvg(buildSvgScene(mechanism.at('filament')), { theme: 'auto
 - `styles: false` leaves the stylesheet out of the figure. The page includes `exportCss` once.
 
 For the seven steps of the gene-expression example this takes the inlined SVG from 576 KB (two themes, a stylesheet in each) to about 208 KB. `theme: 'auto'` is for inlined figures: a file opened on its own, or used as an image, has no page to follow and is drawn light.
+
+## Documentation
+
+- [The language](docs/language.md): every part of a mechanism document.
+- [Actions](docs/actions.md): every action a step can contain, generated from the compiler.
+- [Protein appearances](docs/protein-appearances.md), [modification profiles](docs/modification-visual-profiles.md) and [membranes in scenes](docs/membrane-scenes.md): how the renderer draws them.
+- [RFCs](docs/rfcs/) and [ADRs](docs/adr/): the design decisions behind the language and the drawing.
+- [Examples on the website](https://molecular-motion.alvaroesteban.dev/examples/), and the [visual language](https://molecular-motion.alvaroesteban.dev/app/#/visual-language) catalog.
+- [Discoverability benchmark](DISCOVERABILITY_BENCHMARK.md): how the project's visibility in search is measured.
 
 ## Architecture
 

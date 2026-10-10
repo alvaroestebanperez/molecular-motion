@@ -1,13 +1,24 @@
 {
   "name": "@molecular-motion/svg",
   "version": "0.3.0",
-  "description": "Accessible SVG scene builder for Molecular Motion.",
+  "description": "SVG renderer of Molecular Motion: draws proteins, DNA, RNA, membranes and molecular interactions as accessible SVG diagrams of a biological mechanism, with or without a browser.",
   "keywords": [
     "biology",
-    "molecular-biology",
     "visualization",
+    "molecular-biology",
+    "molecular-visualization",
+    "biological-visualization",
+    "scientific-visualization",
+    "interactive-visualization",
+    "cell-biology",
+    "bioinformatics",
     "svg",
-    "diagram"
+    "dna",
+    "rna",
+    "protein",
+    "typescript",
+    "diagram",
+    "figure"
   ],
   "homepage": "https://molecular-motion.alvaroesteban.dev/",
   "repository": {
