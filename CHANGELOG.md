@@ -10,6 +10,7 @@ No change to the code of the packages.
 
 - The `description` and `keywords` of the three packages, and the first paragraph of their READMEs, say what the library is: a TypeScript library for interactive and animated molecular biology visualizations with SVG.
 - The website has pages that can be read without JavaScript: a landing at `/`, and examples at `/examples/`, with `sitemap.xml`, `robots.txt`, canonical URLs and structured data. The viewer and the playground moved to `/app/`; links to `/#/…` are sent on to `/app/#/…`.
+- Three more examples have a page on the website: gene expression (transcription and splicing), membrane receptor signalling (EGFR) and cell signalling (cGAS–STING).
 
 ## 0.3.0
 
